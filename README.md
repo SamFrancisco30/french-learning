@@ -207,9 +207,34 @@ backend/
   scripts/ingest.py       CLI: add / list / show / search / config
 frontend/src/
   api.ts  types.ts        typed client
+  router.ts               ~30-line hash router (#/listening/lesson/2/unit/5)
+  skills.ts               the five-skill registry + honest build status
   useClipPlayer.ts        audio hook; converts original-video ↔ clip time
-  components/             Library, UnitDrill, Exercises
+  useTextSelection.ts     DOM selection → passage character offsets
+  pages/                  ListeningPage, ReadingPage, SkillStatusPage
+  components/             Library, UnitDrill, Exercises, Lookup
+  index.css               silver-white theme, fully tokenized
 ```
+
+### Skill pages
+
+One route per skill, driven by `skills.ts`. The nav dot reflects real state — green
+ready, amber partly built, grey not started — and the status pages list what already
+exists versus what is genuinely missing rather than showing a "coming soon" splash.
+
+| skill | route | state |
+|-------|-------|-------|
+| Listening 听力 | `#/listening` | complete |
+| Dictation 听写 | `#/dictation` | 60% — cloze already covers 听音频填词; 整句听写 missing |
+| Reading 阅读 | `#/reading` | **working** — paste any text, select a word; no new backend needed |
+| Writing 写作 | `#/writing` | not started — needs rubric grading |
+| Speaking 口语 | `#/speaking` | not started — needs mic capture + forced alignment |
+
+Reading works on unseen text because `/api/lookup` takes arbitrary text with no
+`unit_id`. Nothing is underlined up front there (no precomputed annotations), so
+expression detection leans on the lemma-matched lexicon accumulated from ingested
+lessons — it improves as the library grows. Run `scripts/ingest.py annotate` after
+adding lessons.
 
 ### One coordinate-system gotcha
 

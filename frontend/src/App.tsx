@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react'
 import { api } from './api'
-import { LessonLibrary, LessonView } from './components/Library'
-import { UnitDrill } from './components/UnitDrill'
-import type { Language, LessonSummary } from './types'
-
-type View =
-  | { name: 'library' }
-  | { name: 'lesson'; lesson: LessonSummary }
-  | { name: 'unit'; lesson: LessonSummary; unitId: number }
+import { ListeningPage } from './pages/ListeningPage'
+import { ReadingPage } from './pages/ReadingPage'
+import { SkillStatusPage } from './pages/SkillStatusPage'
+import { useHashRoute } from './router'
+import { SKILLS, skillFromPath } from './skills'
+import type { Language } from './types'
 
 // Anonymous, device-local identity. Replace with real auth when accounts land.
 function learnerKey(): string {
@@ -19,7 +17,7 @@ function learnerKey(): string {
 }
 
 export default function App() {
-  const [view, setView] = useState<View>({ name: 'library' })
+  const { segments, navigate } = useHashRoute()
   const [languages, setLanguages] = useState<Language[]>([])
   const [language, setLanguage] = useState('fr')
   const [key] = useState(learnerKey)
@@ -28,59 +26,75 @@ export default function App() {
     api.languages().then(setLanguages).catch(() => undefined)
   }, [])
 
+  const skill = skillFromPath(segments)
   const active = languages.find((l) => l.code === language)
 
   return (
     <div className="shell">
-      <div className="topbar">
-        <h1>Écoute</h1>
-        <span className="tagline">
-          listening comprehension from authentic media
-          {active ? ` · ${active.name_native}` : ''}
-        </span>
-        {languages.length > 1 && (
-          <div className="rates" style={{ marginLeft: 'auto' }}>
-            {languages.map((l) => (
+      <header className="masthead">
+        <div className="masthead-inner">
+          <div className="brand">
+            <h1>Écoute</h1>
+            <span className="tagline">
+              {active ? active.name_native : 'Français'} · from authentic media
+            </span>
+          </div>
+
+          {languages.length > 1 && (
+            <div className="langnav">
+              {languages.map((l) => (
+                <button
+                  key={l.code}
+                  className={`rate-btn ${l.code === language ? 'on' : ''}`}
+                  onClick={() => {
+                    setLanguage(l.code)
+                    navigate(`/${skill.key}`)
+                  }}
+                  title={l.name_en}
+                >
+                  {l.code}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <nav className="skillnav" aria-label="Skills">
+            {SKILLS.map((s) => (
               <button
-                key={l.code}
-                className={`rate-btn ${l.code === language ? 'on' : ''}`}
-                onClick={() => {
-                  setLanguage(l.code)
-                  setView({ name: 'library' })
-                }}
-                title={l.name_en}
+                key={s.key}
+                className={`skilltab ${s.key === skill.key ? 'on' : ''}`}
+                onClick={() => navigate(s.route)}
+                aria-current={s.key === skill.key ? 'page' : undefined}
+                title={
+                  s.status === 'live'
+                    ? `${s.label} — ready`
+                    : s.status === 'partial'
+                      ? `${s.label} — partly built`
+                      : `${s.label} — not built yet`
+                }
               >
-                {l.code}
+                <span className={`dot ${s.status}`} />
+                {s.label}
+                <span className="native">{s.native}</span>
               </button>
             ))}
-          </div>
-        )}
-      </div>
+          </nav>
+        </div>
+      </header>
 
-      {view.name === 'library' && (
-        <LessonLibrary
+      {skill.key === 'listening' && (
+        <ListeningPage
+          segments={segments}
+          navigate={navigate}
           language={language}
           learnerKey={key}
-          onOpen={(lesson) => setView({ name: 'lesson', lesson })}
         />
       )}
 
-      {view.name === 'lesson' && (
-        <LessonView
-          lessonId={view.lesson.id}
-          onBack={() => setView({ name: 'library' })}
-          onOpenUnit={(unitId) => setView({ name: 'unit', lesson: view.lesson, unitId })}
-        />
-      )}
+      {skill.key === 'reading' && <ReadingPage language={language} learnerKey={key} />}
 
-      {view.name === 'unit' && (
-        <UnitDrill
-          unitId={view.unitId}
-          lessonTitle={view.lesson.title}
-          language={view.lesson.language}
-          learnerKey={key}
-          onExit={() => setView({ name: 'lesson', lesson: view.lesson })}
-        />
+      {(skill.key === 'writing' || skill.key === 'speaking' || skill.key === 'dictation') && (
+        <SkillStatusPage skill={skill} onGoListening={() => navigate('/listening')} />
       )}
     </div>
   )

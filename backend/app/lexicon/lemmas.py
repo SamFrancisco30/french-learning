@@ -117,31 +117,76 @@ def selection_lemmas(
     return hit, all_lemmas
 
 
-def all_lemmas_within_window(
+def lemma_proximity(
     required: set[str],
     all_lemmas: list[tuple[str, int, int]],
     selection_start: int,
     selection_end: int,
     *,
     window: int = LEXICON_WINDOW_TOKENS,
-) -> bool:
-    """True if every lemma in `required` appears near the selection.
+) -> int | None:
+    """How far the selected token sits from the expression's other content lemmas.
 
-    This is the precision gate on lexicon matching: bag-of-lemmas alone fires on any
-    sentence that happens to contain the same words far apart.
+    Returns the largest token distance from the selection to the *nearest* occurrence of
+    each other required lemma, or None if any of them is absent or beyond `window`.
+    Smaller is a better match.
+
+    A boolean "are they all nearby?" gate is not enough, because one sentence can contain
+    two different expressions sharing a word. In "avait mis le feu à une poubelle près du
+    feu rouge", both `mettre le feu` and `feu rouge` have every lemma nearby, so a boolean
+    gate admits both and the caller has no basis to choose. Measuring distance separates
+    them: from the first `feu`, `mettre` is one token away while `rouge` is four, so the
+    verb idiom wins — which is the correct reading.
     """
     if not required:
-        return False
-    idx_of_selection = next(
+        return None
+    sel_idx = next(
         (i for i, (_, s, e) in enumerate(all_lemmas) if selection_start < e and s < selection_end),
         None,
     )
-    if idx_of_selection is None:
-        return False
-    lo = max(0, idx_of_selection - window)
-    hi = min(len(all_lemmas), idx_of_selection + window + 1)
-    nearby = {lem for lem, _, _ in all_lemmas[lo:hi]}
-    return required.issubset(nearby)
+    if sel_idx is None:
+        return None
+
+    sel_lemma = all_lemmas[sel_idx][0]
+    worst = 0
+    for lemma in required:
+        if lemma == sel_lemma:
+            continue
+        nearest = min(
+            (abs(i - sel_idx) for i, (lem, _, _) in enumerate(all_lemmas) if lem == lemma),
+            default=None,
+        )
+        if nearest is None or nearest > window:
+            return None
+        worst = max(worst, nearest)
+    return worst
+
+
+def locate_lemmas_near(
+    required: set[str],
+    all_lemmas: list[tuple[str, int, int]],
+    selection_start: int,
+    selection_end: int,
+) -> list[list[int]]:
+    """Spans of the tokens realising `required`, choosing the occurrence nearest the
+    selection so a discontinuous expression highlights the right words."""
+    sel_idx = next(
+        (i for i, (_, s, e) in enumerate(all_lemmas) if selection_start < e and s < selection_end),
+        None,
+    )
+    if sel_idx is None:
+        return []
+    spans: list[list[int]] = []
+    for lemma in required:
+        best = min(
+            (i for i, (lem, _, _) in enumerate(all_lemmas) if lem == lemma),
+            key=lambda i: abs(i - sel_idx),
+            default=None,
+        )
+        if best is not None:
+            _, s, e = all_lemmas[best]
+            spans.append([s, e])
+    return sorted(spans)
 
 
 def locate_lemmas(

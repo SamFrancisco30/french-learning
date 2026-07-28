@@ -28,8 +28,8 @@ from ..llm.openai_client import LLMError, StructuredLLM
 from ..models import Expression, ListeningUnit
 from .anchor import find_span, sentence_around, sentence_bounds, snap_to_words
 from .lemmas import (
-    all_lemmas_within_window,
-    locate_lemmas,
+    lemma_proximity,
+    locate_lemmas_near,
     selection_lemmas,
     spacy_available,
 )
@@ -198,29 +198,45 @@ def resolve_selection(
                 .order_by(Expression.confidence.desc())
                 .limit(500)
             ).all()
+            # Score every plausible candidate, then keep the closest. One sentence can
+            # contain two expressions sharing the selected word ("mis le feu ... feu
+            # rouge"), so admitting the first match that passes a gate picks arbitrarily.
+            scored: list[tuple[int, int, Expression, list[list[int]]]] = []
             seen_keys: set[str] = set()
             for expr in candidates:
                 required = {l for l in expr.lemma_key.split("|") if l}
                 if not required or expr.lemma_key in seen_keys:
                     continue
-                # The selected word must itself be part of the expression...
+                # The selected word must itself be part of the expression.
                 if not required.intersection(hit_lemmas):
                     continue
-                # ...and every other content lemma must be nearby (the precision gate).
-                if not all_lemmas_within_window(required, all_lemmas, start, end):
+                distance = lemma_proximity(required, all_lemmas, start, end)
+                if distance is None:
                     continue
                 seen_keys.add(expr.lemma_key)
+                scored.append(
+                    (
+                        distance,
+                        -len(required),  # tie-break toward the more specific expression
+                        expr,
+                        locate_lemmas_near(required, all_lemmas, start, end),
+                    )
+                )
+
+            scored.sort(key=lambda t: (t[0], t[1]))
+            for distance, _, expr, spans in scored[:MAX_INFERRED]:
+                # Confidence decays with distance: an adjacent match is far more likely to
+                # be the intended reading than one four tokens away.
+                decay = INFERRED_CONFIDENCE_PENALTY / (1.0 + 0.25 * distance)
                 expressions.append(
                     _expression_payload(
                         expr,
                         source="inferred",
-                        confidence=round(expr.confidence * INFERRED_CONFIDENCE_PENALTY, 3),
-                        spans=locate_lemmas(required, all_lemmas),
+                        confidence=round(expr.confidence * decay, 3),
+                        spans=spans,
                     )
                 )
                 inferred_used = True
-                if len(expressions) >= MAX_INFERRED:
-                    break
 
     # --- 3. live gloss (cached) -------------------------------------------
     word: dict[str, Any]
