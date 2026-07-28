@@ -1,0 +1,40 @@
+# --- secrets ---
+.env
+.env.*
+!.env.example
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# --- data / generated media (never commit downloaded audio) ---
+backend/data/
+!backend/data/.gitkeep
+*.wav
+*.m4a
+*.mp3
+*.webm
+*.opus
+
+# --- node ---
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# --- db ---
+*.sqlite
+*.sqlite3
+*.db
+
+# --- os / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,41 @@
+[project]
+name = "polyglot-backend"
+version = "0.1.0"
+description = "Multi-language learning platform — listening skill pipeline (YouTube -> ASR -> exercises)"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sqlalchemy>=2.0",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "python-dotenv>=1.0",
+    "yt-dlp>=2025.1.15",
+    "openai>=1.59",
+    "wordfreq>=3.1",
+    "typer>=0.15",
+    "rich>=13.9",
+    "httpx>=0.28",
+]
+
+[project.optional-dependencies]
+# Local ASR (production default). Heavy: pulls ctranslate2 + model weights.
+local-asr = ["faster-whisper>=1.1.0"]
+# Lemmatization, so an inflected expression ("a mis le feu") can be recognised from the
+# stored lexicon in text that was never ingested. Without it the lookup falls back to
+# headwords, which handles nouns and compounds but not verb inflection.
+# After installing, fetch the model: python -m spacy download fr_core_news_sm
+# NOTE: spacy pulls typer but not click; click must be explicit or `import spacy` fails.
+nlp = ["spacy>=3.8", "click>=8.1"]
+dev = ["pytest>=8.3", "ruff>=0.8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
