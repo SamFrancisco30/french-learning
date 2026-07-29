@@ -1,0 +1,2249 @@
+{
+  "_comment": [
+    "French sentence-level constructions whose meaning is not recoverable word-by-word.",
+    "Gap steps may forbid tokens with '!': *<=5!pas|plus keeps restrictive ne...que from",
+    "firing on a plain negation followed by a complementizer que.",
+    "This is the hand-seeded core; the curated inventory extends it."
+  ],
+  "constructions": [
+    {
+      "key": "il_ny_a_pas_que",
+      "schema_form": "il n'y a pas que X",
+      "name_en": "not only X",
+      "meaning_en": "X is not the only thing — there is more to it than X.",
+      "why_opaque": "Word-by-word this reads 'there is not that X', which sounds like a denial that X exists. It means the opposite: X does exist, it just isn't the whole story.",
+      "literal_trap": "there isn't any X",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "il",
+        "n'|ne",
+        "y",
+        "a",
+        "pas",
+        "que|qu'"
+      ],
+      "required_markers": [
+        "n'|ne",
+        "pas",
+        "que|qu'"
+      ],
+      "example_fr": "Il n'y a pas que l'argent qui compte.",
+      "example_en": "Money isn't the only thing that matters.",
+      "register": "neutral"
+    },
+    {
+      "key": "ne_que",
+      "schema_form": "ne ... que ...",
+      "name_en": "restrictive ne...que (only)",
+      "meaning_en": "Restricts to whatever follows 'que': only, nothing but.",
+      "why_opaque": "'ne' normally signals negation and 'que' normally means 'that', so the pair looks like a negated clause. Together they mean 'only' — a restriction, not a negation.",
+      "literal_trap": "a negation plus 'that'",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "ne|n'",
+        "*<=5!pas|plus|jamais|point|guère|rien|aucun|aucune|personne",
+        "que|qu'",
+        "!POS:VERB|AUX@<=2"
+      ],
+      "required_markers": [
+        "ne|n'",
+        "que|qu'"
+      ],
+      "example_fr": "Je n'ai que dix euros.",
+      "example_en": "I only have ten euros.",
+      "register": "neutral"
+    },
+    {
+      "key": "ne_pas_que",
+      "schema_form": "ne ... pas que ...",
+      "name_en": "not only",
+      "meaning_en": "Denies the restriction: not only X, but other things too.",
+      "why_opaque": "It negates the ne...que restriction, so adding 'pas' turns 'only X' into 'not only X' — the opposite of what adding a negative word usually does.",
+      "literal_trap": "does not have X at all",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "ne|n'",
+        "*<=3",
+        "pas",
+        "que|qu'",
+        "!POS:VERB|AUX@<=2"
+      ],
+      "required_markers": [
+        "ne|n'",
+        "pas",
+        "que|qu'"
+      ],
+      "example_fr": "Elle ne parle pas que du travail.",
+      "example_en": "She doesn't only talk about work.",
+      "register": "neutral"
+    },
+    {
+      "key": "non_seulement_mais",
+      "schema_form": "non seulement ... mais (aussi/encore) ...",
+      "name_en": "not only ... but also",
+      "meaning_en": "Adds a second, often stronger element to the first.",
+      "why_opaque": "The two halves sit far apart, so a learner reading linearly finishes the first clause before realising a paired 'mais' is coming.",
+      "literal_trap": "",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "non",
+        "seulement",
+        "*<=14",
+        "mais"
+      ],
+      "required_markers": [
+        "non",
+        "seulement",
+        "mais"
+      ],
+      "example_fr": "Non seulement il est venu, mais il a aidé.",
+      "example_en": "Not only did he come, he helped.",
+      "register": "neutral"
+    },
+    {
+      "key": "plus_plus",
+      "schema_form": "plus ... plus ...",
+      "name_en": "the more ... the more ...",
+      "meaning_en": "Two things increasing together.",
+      "why_opaque": "French has no equivalent of English 'the' here, so the correlation is carried purely by repeating 'plus'. A learner reads the second 'plus' as a separate comparison.",
+      "literal_trap": "more ... more",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "plus",
+        "*<=9",
+        "@,",
+        "plus"
+      ],
+      "required_markers": [
+        "plus"
+      ],
+      "example_fr": "Plus on attend, plus c'est difficile.",
+      "example_en": "The longer you wait, the harder it gets.",
+      "register": "neutral"
+    },
+    {
+      "key": "moins_moins",
+      "schema_form": "moins ... moins ...",
+      "name_en": "the less ... the less ...",
+      "meaning_en": "Two things decreasing together.",
+      "why_opaque": "Same missing 'the' as plus...plus — the correlation lives in the repetition alone.",
+      "literal_trap": "less ... less",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "moins",
+        "*<=9",
+        "@,",
+        "moins"
+      ],
+      "required_markers": [
+        "moins"
+      ],
+      "example_fr": "Moins je dors, moins je me concentre.",
+      "example_en": "The less I sleep, the less I concentrate.",
+      "register": "neutral"
+    },
+    {
+      "key": "cest_que_cleft",
+      "schema_form": "c'est ... que ...",
+      "name_en": "cleft for emphasis (object or adverbial)",
+      "meaning_en": "Puts the spotlight on whatever sits between 'c'est' and 'que'.",
+      "why_opaque": "Word-by-word it becomes 'it is X that ...', which sounds clumsy in English. French uses it routinely just to stress X, where English would use word order or intonation.",
+      "literal_trap": "it is X that ...",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "c'|ce",
+        "est",
+        "!POS:ADJ@<=1",
+        "*<=6!qui",
+        "que|qu'"
+      ],
+      "required_markers": [
+        "c'|ce",
+        "est",
+        "que|qu'"
+      ],
+      "example_fr": "C'est demain que ça commence.",
+      "example_en": "It starts tomorrow.",
+      "register": "neutral"
+    },
+    {
+      "key": "avoir_beau",
+      "schema_form": "avoir beau + infinitive",
+      "name_en": "however much / in vain",
+      "meaning_en": "However much one does the action, it makes no difference.",
+      "why_opaque": "'beau' means beautiful, and nothing in the words carries concession or futility. It means roughly 'no matter how much', which is unguessable from 'to have beautiful'.",
+      "literal_trap": "to have a beautiful ...",
+      "cefr": "C1",
+      "pattern_tokens": [
+        "ai|as|a|avons|avez|ont|avais|avait|avions|aviez|avaient|aura|auras|aurons|aurez|auront",
+        "beau",
+        "POS:INF"
+      ],
+      "required_markers": [
+        "beau"
+      ],
+      "example_fr": "Il a beau insister, je ne changerai pas d'avis.",
+      "example_en": "However much he insists, I won't change my mind.",
+      "register": "neutral"
+    },
+    {
+      "key": "venir_de_inf",
+      "schema_form": "venir de + infinitive",
+      "name_en": "to have just done something",
+      "meaning_en": "The action finished a moment ago.",
+      "why_opaque": "Word-by-word it is 'to come from doing', suggesting movement or origin. It is actually a tense — the immediate past — with no English equivalent beyond 'to have just'.",
+      "literal_trap": "to come from doing",
+      "cefr": "A2",
+      "pattern_tokens": [
+        "viens|vient|venons|venez|viennent|venais|venait|venions|veniez|venaient",
+        "de|d'",
+        "POS:INF"
+      ],
+      "required_markers": [
+        "viens|vient|venons|venez|viennent|venais|venait",
+        "de|d'"
+      ],
+      "example_fr": "Je viens de finir.",
+      "example_en": "I've just finished.",
+      "register": "neutral"
+    },
+    {
+      "key": "etre_en_train_de",
+      "schema_form": "être en train de + infinitive",
+      "name_en": "to be in the middle of doing",
+      "meaning_en": "The action is in progress right now.",
+      "why_opaque": "'train' means train, and 'en train de' looks like a phrase of place or manner. It is French's way of marking the progressive, which the language has no tense for.",
+      "literal_trap": "to be in the train of",
+      "cefr": "A2",
+      "pattern_tokens": [
+        "suis|es|est|sommes|êtes|sont|étais|était|étions|étiez|étaient",
+        "en",
+        "train",
+        "de|d'"
+      ],
+      "required_markers": [
+        "en",
+        "train",
+        "de|d'"
+      ],
+      "example_fr": "Elle est en train de lire.",
+      "example_en": "She's reading right now.",
+      "register": "neutral"
+    },
+    {
+      "key": "faire_causative",
+      "schema_form": "faire + infinitive",
+      "name_en": "causative faire (have or make something done)",
+      "meaning_en": "Causing someone else to do the action, or having it done.",
+      "why_opaque": "Reads as 'to do to do'. The subject does not perform the second verb — someone else does — and nothing in the words signals that.",
+      "literal_trap": "to do X oneself",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "fais|fait|faisons|faites|font|faisait|faisaient|ferai|fera|ferons|feront|ferait",
+        "POS:INF"
+      ],
+      "required_markers": [
+        "fais|fait|faisons|faites|font|faisait|ferai|fera|ferait"
+      ],
+      "example_fr": "J'ai fait réparer la voiture.",
+      "example_en": "I had the car repaired.",
+      "register": "neutral"
+    },
+    {
+      "key": "il_sagit_de",
+      "schema_form": "il s'agit de ...",
+      "name_en": "it is a matter of / it's about",
+      "meaning_en": "Introduces what the topic or issue actually is.",
+      "why_opaque": "Impersonal and subjectless: 'il' refers to nothing, and 'agir' normally means to act. A learner looks for who is acting and finds nobody.",
+      "literal_trap": "he acts about",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "il",
+        "s'|se",
+        "agit",
+        "de|d'|du|des"
+      ],
+      "required_markers": [
+        "agit",
+        "de|d'|du|des"
+      ],
+      "example_fr": "Il s'agit d'une erreur.",
+      "example_en": "It's a mistake.",
+      "register": "formal"
+    },
+    {
+      "key": "quitte_a",
+      "schema_form": "quitte à + infinitive",
+      "name_en": "even if it means",
+      "meaning_en": "Accepting a cost or risk in order to do something.",
+      "why_opaque": "'quitte' looks like the verb 'to leave'. Nothing in the words conveys 'even at the cost of', which is what it means.",
+      "literal_trap": "leaves to",
+      "cefr": "C1",
+      "pattern_tokens": [
+        "quitte",
+        "à|a",
+        "POS:INF"
+      ],
+      "required_markers": [
+        "quitte",
+        "à|a"
+      ],
+      "example_fr": "J'y vais, quitte à arriver en retard.",
+      "example_en": "I'm going, even if it means arriving late.",
+      "register": "neutral"
+    },
+    {
+      "key": "ne_ni_ni",
+      "schema_form": "ne ... ni ... ni ...",
+      "name_en": "neither ... nor",
+      "meaning_en": "Rejects both alternatives.",
+      "why_opaque": "'ne' carries the negation while 'ni' does the coordinating, so unlike English there is no single 'neither' word to latch onto.",
+      "literal_trap": "",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "ne|n'",
+        "*<=4",
+        "ni",
+        "*<=8",
+        "ni"
+      ],
+      "required_markers": [
+        "ne|n'",
+        "ni"
+      ],
+      "example_fr": "Il ne boit ni café ni thé.",
+      "example_en": "He drinks neither coffee nor tea.",
+      "register": "neutral"
+    },
+    {
+      "key": "si_cest_que",
+      "schema_form": "si ..., c'est que ...",
+      "name_en": "if ..., it's because ...",
+      "meaning_en": "Gives the reason for the situation in the first clause.",
+      "why_opaque": "'si' sets up a condition, so a learner expects a consequence. Instead an explanation follows — the clause order reverses the logic English would use.",
+      "literal_trap": "if ..., it is that ...",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "si|s'",
+        "*<=12",
+        "c'|ce",
+        "est",
+        "que|qu'"
+      ],
+      "required_markers": [
+        "si|s'",
+        "est",
+        "que|qu'"
+      ],
+      "example_fr": "S'il est parti, c'est qu'il était fatigué.",
+      "example_en": "If he left, it's because he was tired.",
+      "register": "neutral"
+    },
+    {
+      "key": "dautant_plus_que",
+      "schema_form": "d'autant plus ... que ...",
+      "name_en": "all the more ... because",
+      "meaning_en": "Intensifies a quality and gives the reason for the intensification.",
+      "why_opaque": "Four common words that together mean 'all the more so given that'. No individual word carries the causal link.",
+      "literal_trap": "as much more that",
+      "cefr": "C1",
+      "pattern_tokens": [
+        "d'|de",
+        "autant",
+        "plus",
+        "*<=6",
+        "que|qu'"
+      ],
+      "required_markers": [
+        "autant",
+        "plus",
+        "que|qu'"
+      ],
+      "example_fr": "C'est d'autant plus surprenant qu'il avait promis.",
+      "example_en": "It's all the more surprising given that he'd promised.",
+      "register": "formal"
+    },
+    {
+      "key": "il_ny_a_que",
+      "schema_form": "il n'y a que X (qui/que/à/pour ...)",
+      "name_en": "il n'y a que X (only X)",
+      "meaning_en": "X is the only one / the only thing; X alone.",
+      "why_opaque": "The existential frame plus ne...que gives an exclusive-identification meaning ('X and nobody else'), which no single word supplies.",
+      "literal_trap": "'There is nothing that X' — the negation is misattributed to the existence of X instead of to everything other than X.",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "il",
+        "n'|ne",
+        "y",
+        "a",
+        "que|qu'"
+      ],
+      "example_fr": "Il n'y a que toi qui puisses l'aider.",
+      "example_en": "You're the only one who can help him.",
+      "required_markers": [
+        "il",
+        "n'|ne",
+        "y",
+        "a",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "ne_guere",
+      "schema_form": "ne ... guère",
+      "name_en": "ne...guère (hardly)",
+      "meaning_en": "hardly, scarcely, not much — a weakened, understated negation.",
+      "why_opaque": "'guère' has no independent meaning a learner can look up usefully; the pair means 'barely', which is neither full negation nor affirmation.",
+      "literal_trap": "Treating it as a plain 'not', losing the understatement, or guessing it means 'not at all' (too strong).",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "ne|n'",
+        "*<=4",
+        "guère"
+      ],
+      "example_fr": "Ça ne m'étonne guère.",
+      "example_en": "That hardly surprises me.",
+      "required_markers": [
+        "ne|n'",
+        "guère"
+      ],
+      "register": "formal"
+    },
+    {
+      "key": "ne_aucun",
+      "schema_form": "ne ... aucun / aucune ...",
+      "name_en": "ne...aucun (not a single)",
+      "meaning_en": "no X at all, not a single X — again with no 'pas'.",
+      "why_opaque": "'aucun' alone is a bare quantifier; the negative force comes from the ne...aucun frame, and 'pas' is banned inside it.",
+      "literal_trap": "Adding 'pas', or reading 'aucun' as 'any' and so getting 'he didn't make any effort?' as a question or a positive 'some'.",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "ne|n'",
+        "*<=4",
+        "aucun|aucune|aucuns|aucunes"
+      ],
+      "example_fr": "Il n'a fait aucun effort.",
+      "example_en": "He made no effort whatsoever.",
+      "required_markers": [
+        "ne|n'",
+        "aucun|aucune|aucuns|aucunes"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "rien_que",
+      "schema_form": "rien que + NP / de + infinitive",
+      "name_en": "rien que (just, merely, the mere)",
+      "meaning_en": "just / merely / the mere fact of — minimising: even this small thing is enough.",
+      "why_opaque": "'rien' means 'nothing' and 'que' 'that', yet together they mean 'just', a positive minimiser rather than a negation.",
+      "literal_trap": "'nothing that I think about it' — the negative 'rien' is read literally and the sentence collapses.",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "rien",
+        "que|qu'",
+        "le|la|l'|les|un|une|du|de|d'|des|ce|cette|ces|mon|ma|mes|ton|ta|tes|son|sa|ses|toi|moi|lui|elle|eux|nous|vous|pour|en|à|au|aux|deux|trois|une"
+      ],
+      "example_fr": "Rien que d'y penser, j'ai froid.",
+      "example_en": "Just thinking about it makes me cold.",
+      "required_markers": [
+        "rien",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "a_moins_que",
+      "schema_form": "à moins que (ne) + subjunctive",
+      "name_en": "à moins que (unless)",
+      "meaning_en": "unless — states the one condition that would cancel the main clause.",
+      "why_opaque": "'at less that' gives no clue; and the 'ne' that often follows is expletive, carrying no negation at all.",
+      "literal_trap": "Reading the expletive 'ne' as a real negative: 'unless it doesn't rain' instead of 'unless it rains'.",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "à",
+        "moins",
+        "que|qu'"
+      ],
+      "example_fr": "Nous partirons demain, à moins qu'il ne pleuve.",
+      "example_en": "We'll leave tomorrow, unless it rains.",
+      "required_markers": [
+        "à",
+        "moins",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "a_moins_de_inf",
+      "schema_form": "à moins de + infinitive",
+      "name_en": "à moins de + inf (unless one does)",
+      "meaning_en": "unless you/one does X — same exception meaning, with a shared subject and an infinitive.",
+      "why_opaque": "'at less of doing' is meaningless literally; the exceptive meaning is purely constructional.",
+      "literal_trap": "Reading 'moins' as a quantity ('less than leaving now'), producing a comparative that is not there.",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "à",
+        "moins",
+        "de|d'",
+        "POS:INF"
+      ],
+      "example_fr": "À moins de partir maintenant, tu vas rater ton train.",
+      "example_en": "Unless you leave now, you'll miss your train.",
+      "required_markers": [
+        "à",
+        "moins",
+        "de|d'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "si_ce_nest",
+      "schema_form": "si ce n'est X",
+      "name_en": "si ce n'est (except, if not)",
+      "meaning_en": "except X, other than X, if not X — an exceptive after a negative or a superlative.",
+      "why_opaque": "It looks like a conditional clause 'if it is not', but it functions as the preposition 'except'.",
+      "literal_trap": "'if it is not him' — parsed as a real if-clause, which leaves the sentence with no coherent condition.",
+      "cefr": "C1",
+      "pattern_tokens": [
+        "si",
+        "ce",
+        "n'|ne",
+        "est",
+        "que|qu'|le|la|l'|les|un|une|du|de|d'|des|ce|cette|ces|son|sa|ses|leur|pour|à|par|toi|moi|lui|elle|eux|vous|nous"
+      ],
+      "example_fr": "Personne ne le sait, si ce n'est lui.",
+      "example_en": "Nobody knows, except him.",
+      "required_markers": [
+        "si",
+        "ce",
+        "n'|ne",
+        "est"
+      ],
+      "register": "formal"
+    },
+    {
+      "key": "ne_serait_ce_que",
+      "schema_form": "ne serait-ce que ...",
+      "name_en": "ne serait-ce que (if only, even just)",
+      "meaning_en": "if only, even just, if nothing else — concedes a minimal version of something.",
+      "why_opaque": "A frozen conditional-with-inversion whose parts ('would it not be that') give no access to the concessive 'even just'.",
+      "literal_trap": "'wouldn't it be that five minutes' — read as a question or a negation instead of a minimising concession.",
+      "cefr": "C1",
+      "pattern_tokens": [
+        "ne|n'",
+        "serait",
+        "ce",
+        "que|qu'"
+      ],
+      "example_fr": "Passe me voir, ne serait-ce que cinq minutes.",
+      "example_en": "Come and see me, if only for five minutes.",
+      "required_markers": [
+        "ne|n'",
+        "serait-ce|serait",
+        "que|qu'"
+      ],
+      "register": "formal"
+    },
+    {
+      "key": "ne_pas_etre_sans_inf",
+      "schema_form": "ne pas être sans + infinitive",
+      "name_en": "n'être pas sans + inf (litotes)",
+      "meaning_en": "to be well aware / to be by no means without — a double negative used as strong affirmation.",
+      "why_opaque": "Two negatives ('not' + 'without') cancel into a polite emphatic positive, a rhetorical effect invisible in the words.",
+      "literal_trap": "'You are not without knowing' read as 'you don't know', i.e. the exact opposite of 'you are surely aware'.",
+      "cefr": "C2",
+      "pattern_tokens": [
+        "n'|ne",
+        "est|es|suis|sommes|êtes|sont|était|étais|étaient|serait|va|vont|allait|irait",
+        "pas",
+        "sans",
+        "POS:INF"
+      ],
+      "example_fr": "Vous n'êtes pas sans savoir que la situation est grave.",
+      "example_en": "You are of course aware that the situation is serious.",
+      "required_markers": [
+        "n'|ne",
+        "pas",
+        "sans"
+      ],
+      "register": "formal"
+    },
+    {
+      "key": "sans_que",
+      "schema_form": "sans que + subjunctive",
+      "name_en": "sans que (without ...ing)",
+      "meaning_en": "without X happening — negates the subordinate event while keeping a positive main clause.",
+      "why_opaque": "French packs the negation into the connector, where English uses a gerund; and an expletive 'ne' may appear inside without adding negation.",
+      "literal_trap": "Adding a second negation in the subordinate clause, or reading the expletive 'ne' as real: 'without me not noticing'.",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "sans",
+        "que|qu'"
+      ],
+      "example_fr": "Il est parti sans que je m'en aperçoive.",
+      "example_en": "He left without my noticing.",
+      "required_markers": [
+        "sans",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "ce_nest_pas_que",
+      "schema_form": "ce n'est pas que + subjunctive/indicative, ... mais ...",
+      "name_en": "ce n'est pas que (it's not that)",
+      "meaning_en": "it's not that X (I'm not denying X is imaginable) — pre-empts a wrong inference before giving the real reason.",
+      "why_opaque": "A cleft frame used metalinguistically: it negates a possible explanation rather than a fact, and typically takes the subjunctive.",
+      "literal_trap": "'It is not that I don't want' read as a flat statement about wanting, losing the 'that's not the reason' function.",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "ce|c'",
+        "n'|ne",
+        "est",
+        "pas",
+        "que|qu'"
+      ],
+      "example_fr": "Ce n'est pas que je ne veuille pas, mais je n'ai pas le temps.",
+      "example_en": "It's not that I don't want to — I just don't have the time.",
+      "required_markers": [
+        "ce|c'",
+        "n'|ne",
+        "est",
+        "pas",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "nempeche_que",
+      "schema_form": "(il) n'empêche que ...",
+      "name_en": "n'empêche que (still, all the same)",
+      "meaning_en": "still, all the same, the fact remains that — concedes the previous point but maintains one's own.",
+      "why_opaque": "Literally 'it doesn't prevent that', but it works as a one-word concessive adverb like 'still'; the negation is not about prevention at all.",
+      "literal_trap": "'It doesn't prevent that he is right' — learners hunt for what is being prevented and lose the discourse function.",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "n'|ne",
+        "empêche",
+        "que|qu'"
+      ],
+      "example_fr": "N'empêche qu'il a raison.",
+      "example_en": "Still, he's right.",
+      "required_markers": [
+        "n'|ne",
+        "empêche",
+        "que|qu'"
+      ],
+      "register": "colloquial"
+    },
+    {
+      "key": "il_nen_reste_pas_moins_que",
+      "schema_form": "il n'en reste pas moins que ...",
+      "name_en": "il n'en reste pas moins que (the fact remains)",
+      "meaning_en": "the fact nevertheless remains that X — concedes the preceding argument while insisting on X.",
+      "why_opaque": "A frozen chain of negation, pronoun 'en' and 'moins' whose parts ('there remains of it not less that') decode to nothing usable.",
+      "literal_trap": "'There remains no less of it than...' — treated as a quantity statement rather than a concessive connector.",
+      "cefr": "C1",
+      "pattern_tokens": [
+        "il",
+        "n'|ne",
+        "en",
+        "reste",
+        "pas",
+        "moins",
+        "que|qu'"
+      ],
+      "example_fr": "Il n'en reste pas moins que le problème persiste.",
+      "example_en": "The fact remains that the problem persists.",
+      "required_markers": [
+        "il",
+        "n'|ne",
+        "en",
+        "reste",
+        "pas",
+        "moins",
+        "que|qu'"
+      ],
+      "register": "formal"
+    },
+    {
+      "key": "pas_plus_que",
+      "schema_form": "..., pas plus que X",
+      "name_en": "pas plus que (any more than)",
+      "meaning_en": "and neither does X / any more than X does — extends a negation to a second element.",
+      "why_opaque": "Surface-identical to the comparative 'more than', but with 'pas' adjacent it becomes a negative additive, not a comparison of degree.",
+      "literal_trap": "'not more than you' read as a quantity comparison ('I knew less than you') instead of 'you didn't know either'.",
+      "cefr": "C1",
+      "pattern_tokens": [
+        "pas",
+        "plus",
+        "que|qu'",
+        "moi|toi|lui|elle|nous|vous|eux|le|la|l'|les|ça|cela"
+      ],
+      "example_fr": "Je ne le savais pas, pas plus que toi.",
+      "example_en": "I didn't know — and neither did you.",
+      "required_markers": [
+        "pas",
+        "plus",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "rien_de_moins_que",
+      "schema_form": "rien de moins que ...",
+      "name_en": "rien de moins que (nothing short of)",
+      "meaning_en": "nothing short of X, no less than X — a strong emphatic upgrade.",
+      "why_opaque": "A negation plus a comparative that together produce emphasis rather than a smaller quantity.",
+      "literal_trap": "'nothing less than a scandal' read as downplaying ('it's less than a scandal') rather than intensifying.",
+      "cefr": "C1",
+      "pattern_tokens": [
+        "rien",
+        "de|d'",
+        "moins",
+        "que|qu'"
+      ],
+      "example_fr": "C'est rien de moins qu'un scandale.",
+      "example_en": "It's nothing short of a scandal.",
+      "required_markers": [
+        "rien",
+        "de|d'",
+        "moins",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "rien_de_tel_que",
+      "schema_form": "(il n'y a) rien de tel que X",
+      "name_en": "rien de tel que (there's nothing like)",
+      "meaning_en": "there's nothing like X — a superlative recommendation of X.",
+      "why_opaque": "A negative existential used to praise: 'nothing of such kind as X' means X is the best.",
+      "literal_trap": "'nothing like a good coffee' read as 'this is not like a good coffee', i.e. as criticism of X.",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "rien",
+        "de|d'",
+        "tel|telle|tels|telles",
+        "que|qu'"
+      ],
+      "example_fr": "Rien de tel qu'un bon café le matin.",
+      "example_en": "There's nothing like a good coffee in the morning.",
+      "required_markers": [
+        "rien",
+        "de|d'",
+        "tel|telle|tels|telles",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "tant_sen_faut",
+      "schema_form": "loin s'en faut / tant s'en faut",
+      "name_en": "tant s'en faut (far from it)",
+      "meaning_en": "far from it, nothing like it — appended to reinforce a preceding negation.",
+      "why_opaque": "An impersonal frozen expression built on 'falloir'; none of the four words points to 'far from it'.",
+      "literal_trap": "Trying to parse 'it is needed of it so much' and abandoning the sentence, or reading it as 'almost'.",
+      "cefr": "C2",
+      "pattern_tokens": [
+        "loin|tant",
+        "s'",
+        "en",
+        "faut"
+      ],
+      "example_fr": "Ce n'est pas terminé, loin s'en faut.",
+      "example_en": "It's not finished — far from it.",
+      "required_markers": [
+        "loin|tant",
+        "s'|se",
+        "en",
+        "faut"
+      ],
+      "register": "literary"
+    },
+    {
+      "key": "navoir_que_faire_de",
+      "schema_form": "n'avoir que faire de X",
+      "name_en": "n'avoir que faire de (to have no use for)",
+      "meaning_en": "to have no use for X, to not care about X — dismissive.",
+      "why_opaque": "'to have only to do of X' has no compositional route to 'I couldn't care less about X'; 'faire' is frozen and 'que' is not restrictive in the usual way.",
+      "literal_trap": "'I only have to do with your advice', i.e. read as an obligation instead of a rejection.",
+      "cefr": "C2",
+      "pattern_tokens": [
+        "n'|ne",
+        "ai|as|a|avons|avez|ont|avait|avais|avaient",
+        "que|qu'",
+        "faire",
+        "de|d'"
+      ],
+      "example_fr": "Je n'ai que faire de vos conseils.",
+      "example_en": "I have no use for your advice.",
+      "required_markers": [
+        "n'|ne",
+        "ai|as|a|avons|avez|ont|avait|avais|avaient",
+        "que|qu'",
+        "faire",
+        "de|d'"
+      ],
+      "register": "literary"
+    },
+    {
+      "key": "on_ne_peut_plus_adj",
+      "schema_form": "on ne peut plus + adjective",
+      "name_en": "on ne peut plus + adj (couldn't be more)",
+      "meaning_en": "extremely, as X as can be — a superlative intensifier of the adjective.",
+      "why_opaque": "An impersonal clause embedded as a modifier: 'one cannot more' has become a pure intensifier with no clausal meaning left.",
+      "literal_trap": "'one can no longer clear' — the learner tries to read 'on ne peut plus' as its own clause and the sentence breaks.",
+      "cefr": "C1",
+      "pattern_tokens": [
+        "on",
+        "ne|n'",
+        "peut",
+        "plus",
+        "POS:ADJ"
+      ],
+      "example_fr": "Son explication était on ne peut plus claire.",
+      "example_en": "His explanation could not have been clearer.",
+      "required_markers": [
+        "on",
+        "ne|n'",
+        "peut",
+        "plus"
+      ],
+      "register": "formal"
+    },
+    {
+      "key": "plus_moins",
+      "schema_form": "Plus ..., moins ...",
+      "name_en": "plus ... moins ... (the more ... the less)",
+      "meaning_en": "the more X, the less Y — inverse correlation.",
+      "why_opaque": "The inverse-proportion reading exists only in the paired quantifiers at clause heads.",
+      "literal_trap": "'More I know him, less I like him' parsed as two unconnected clauses, or confused with 'plus ou moins' (more or less).",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "plus",
+        "on|je|j'|tu|il|elle|ils|elles|nous|vous|le|la|l'|les|ce|cette|ces",
+        "*<=5!que|qu'|de|d'|ou",
+        "moins",
+        "on|je|j'|tu|il|elle|ils|elles|nous|vous|le|la|l'|les|ce|cette|ces"
+      ],
+      "example_fr": "Plus je le connais, moins je l'apprécie.",
+      "example_en": "The more I get to know him, the less I like him.",
+      "required_markers": [
+        "plus",
+        "moins"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "moins_plus",
+      "schema_form": "Moins ..., plus ...",
+      "name_en": "moins ... plus ... (the less ... the more)",
+      "meaning_en": "the less X, the more Y — inverse correlation, other direction.",
+      "why_opaque": "As above: the construction, not the words, encodes proportionality.",
+      "literal_trap": "Treating the second 'plus' as 'no longer' (ne...plus) and negating the second clause.",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "moins",
+        "on|je|j'|tu|il|elle|ils|elles|nous|vous|le|la|l'|les|ce|cette|ces",
+        "*<=5!que|qu'|de|d'|ou",
+        "plus",
+        "on|je|j'|tu|il|elle|ils|elles|nous|vous|le|la|l'|les|ce|cette|ces"
+      ],
+      "example_fr": "Moins il travaille, plus il se plaint.",
+      "example_en": "The less he works, the more he complains.",
+      "required_markers": [
+        "moins",
+        "plus"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "dautant_moins_que",
+      "schema_form": "d'autant moins (+ adj) que ...",
+      "name_en": "d'autant moins que (all the less so because)",
+      "meaning_en": "all the less X because — the stated reason reduces the degree.",
+      "why_opaque": "Mirror of d'autant plus que, with the same non-compositional degree-plus-cause packaging.",
+      "literal_trap": "Reading it as a plain comparative 'less ... than', which reverses the causal link.",
+      "cefr": "C1",
+      "pattern_tokens": [
+        "d'|de",
+        "autant",
+        "moins",
+        "*<=3",
+        "que|qu'"
+      ],
+      "example_fr": "Il est d'autant moins excusable qu'il savait tout.",
+      "example_en": "He is all the less excusable given that he knew everything.",
+      "required_markers": [
+        "d'|de",
+        "autant",
+        "moins",
+        "que|qu'"
+      ],
+      "register": "formal"
+    },
+    {
+      "key": "dautant_que",
+      "schema_form": "d'autant que ...",
+      "name_en": "d'autant que (especially since)",
+      "meaning_en": "especially since, all the more so as — adds a reinforcing reason.",
+      "why_opaque": "'of as much that' gives nothing; used alone (without plus/moins) it is a causal connector.",
+      "literal_trap": "Expecting a comparison because of 'autant', and looking for the second term that never comes.",
+      "cefr": "C1",
+      "pattern_tokens": [
+        "d'|de",
+        "autant",
+        "que|qu'"
+      ],
+      "example_fr": "Je n'irai pas, d'autant que je suis fatigué.",
+      "example_en": "I won't go, especially since I'm tired.",
+      "required_markers": [
+        "d'|de",
+        "autant",
+        "que|qu'"
+      ],
+      "register": "formal"
+    },
+    {
+      "key": "autant_autant",
+      "schema_form": "Autant ..., autant ...",
+      "name_en": "autant ... autant ... (as much as ..., by contrast)",
+      "meaning_en": "as much as X is true, so Y is true (in contrast) — sets two clauses in symmetric opposition.",
+      "why_opaque": "The contrastive-symmetry meaning comes only from the doubled 'autant'; there is no 'but' or 'whereas' anywhere.",
+      "literal_trap": "'As much I love summer, as much I hate winter' — read as a comparison of amounts rather than a contrast.",
+      "cefr": "C1",
+      "pattern_tokens": [
+        "autant",
+        "*<=6!que|qu'",
+        "autant"
+      ],
+      "example_fr": "Autant j'aime l'été, autant je déteste l'hiver.",
+      "example_en": "Much as I love summer, I hate winter.",
+      "required_markers": [
+        "autant",
+        "autant"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "tant_que_condition",
+      "schema_form": "tant que + indicative",
+      "name_en": "tant que (as long as, while)",
+      "meaning_en": "as long as / while / so long as — temporal-conditional limit.",
+      "why_opaque": "'so much that' is the natural reading of the words, but adjacent 'tant que' means 'as long as' — a completely different relation.",
+      "literal_trap": "'So much that there is life' — confusing it with the consequence construction tant ... que.",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "tant",
+        "que|qu'"
+      ],
+      "example_fr": "Tant qu'il y a de la vie, il y a de l'espoir.",
+      "example_en": "Where there's life, there's hope.",
+      "required_markers": [
+        "tant",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "tant_que_consequence",
+      "schema_form": "tant (de) ... que ...",
+      "name_en": "tant ... que (so much that)",
+      "meaning_en": "so much / so many X that Y — degree leading to a consequence.",
+      "why_opaque": "Split across the clause, 'tant' and 'que' form a degree-result frame; 'que' is neither 'that' as a complementiser nor 'than'.",
+      "literal_trap": "Reading 'que' as 'than' and expecting a comparison, or confusing it with adjacent 'tant que' (as long as).",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "tant",
+        "*<=1",
+        "POS:VERB",
+        "*<=4!plus|moins",
+        "que|qu'"
+      ],
+      "example_fr": "Il a tant insisté que j'ai fini par céder.",
+      "example_en": "He insisted so much that I eventually gave in.",
+      "required_markers": [
+        "tant",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "tellement_que",
+      "schema_form": "tellement ... que ...",
+      "name_en": "tellement ... que (so ... that)",
+      "meaning_en": "so much / so X that Y — degree with consequence.",
+      "why_opaque": "Same discontinuous degree-result frame; the consequence reading depends on both anchors being present.",
+      "literal_trap": "Reading 'que' as 'than' ('he shouted so much than...') or as a relative pronoun.",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "tellement",
+        "*<=6!plus|moins|aussi|autant|mieux|pire|meilleur|meilleure",
+        "que|qu'"
+      ],
+      "example_fr": "Il a tellement crié qu'il n'a plus de voix.",
+      "example_en": "He shouted so much that he's lost his voice.",
+      "required_markers": [
+        "tellement",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "si_bien_que",
+      "schema_form": "..., si bien que ...",
+      "name_en": "si bien que (with the result that)",
+      "meaning_en": "so that, with the result that — introduces an actual consequence.",
+      "why_opaque": "'so well that' suggests quality; in fact it is a neutral result connector with no evaluation of 'well' at all.",
+      "literal_trap": "'so well that he arrived late' — the learner reads praise into 'bien' and the clause contradicts itself.",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "si",
+        "bien",
+        "que|qu'"
+      ],
+      "example_fr": "Il a raté son train, si bien qu'il est arrivé en retard.",
+      "example_en": "He missed his train, so he arrived late.",
+      "required_markers": [
+        "si",
+        "bien",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "de_plus_en_plus",
+      "schema_form": "de plus en plus (+ adj / de + N)",
+      "name_en": "de plus en plus (more and more)",
+      "meaning_en": "increasingly, more and more — a progressive increase over time.",
+      "why_opaque": "'from more in more' is meaningless; the dynamic 'increasingly' sense is carried by the whole frozen frame.",
+      "literal_trap": "Reading it as a comparative 'more than' and looking for a second term.",
+      "cefr": "A2",
+      "pattern_tokens": [
+        "de|d'",
+        "plus",
+        "en",
+        "plus"
+      ],
+      "example_fr": "Il fait de plus en plus chaud.",
+      "example_en": "It's getting hotter and hotter.",
+      "required_markers": [
+        "de|d'",
+        "plus",
+        "en",
+        "plus"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "de_moins_en_moins",
+      "schema_form": "de moins en moins (+ adj / de + N)",
+      "name_en": "de moins en moins (less and less)",
+      "meaning_en": "increasingly less, fewer and fewer.",
+      "why_opaque": "Same frozen progressive frame as de plus en plus, unrecoverable from 'from less in less'.",
+      "literal_trap": "Reading a static comparative ('less than') instead of a change over time.",
+      "cefr": "A2",
+      "pattern_tokens": [
+        "de|d'",
+        "moins",
+        "en",
+        "moins"
+      ],
+      "example_fr": "Il y a de moins en moins de monde.",
+      "example_en": "There are fewer and fewer people.",
+      "required_markers": [
+        "de|d'",
+        "moins",
+        "en",
+        "moins"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "pas_mal_de",
+      "schema_form": "pas mal de + noun",
+      "name_en": "pas mal de (quite a lot of)",
+      "meaning_en": "quite a lot of, a fair number of — a positive, fairly large quantity.",
+      "why_opaque": "'not badly of' encodes quantity, not quality; the negation contributes nothing negative.",
+      "literal_trap": "'not bad' read as an evaluation ('the people are not bad') instead of as a quantifier.",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "pas",
+        "mal",
+        "de|d'",
+        "POS:NOUN"
+      ],
+      "example_fr": "Il y avait pas mal de monde au concert.",
+      "example_en": "There were quite a few people at the concert.",
+      "required_markers": [
+        "pas",
+        "mal",
+        "de|d'"
+      ],
+      "register": "colloquial"
+    },
+    {
+      "key": "il_y_a_qui_presentational",
+      "schema_form": "il y a X qui + verb",
+      "name_en": "il y a ... qui (presentational focus)",
+      "meaning_en": "X is ...ing — introduces a new subject as news; equivalent to a plain English sentence.",
+      "why_opaque": "The existential 'there is' plus a relative clause is French's way of saying 'the phone is ringing'; the existential meaning is not really present.",
+      "literal_trap": "'There is the telephone which is ringing' — read as an existential claim about a phone existing.",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "il",
+        "y",
+        "a",
+        "*<=4!à|de|d'|avec|pour|sur|chez|par",
+        "qui"
+      ],
+      "example_fr": "Il y a le téléphone qui sonne.",
+      "example_en": "The phone's ringing.",
+      "required_markers": [
+        "il",
+        "y",
+        "a",
+        "qui"
+      ],
+      "register": "colloquial"
+    },
+    {
+      "key": "voila_que_surprise",
+      "schema_form": "(et) voilà que + indicative",
+      "name_en": "voilà que (and then suddenly)",
+      "meaning_en": "and then, all of a sudden — marks an unexpected turn of events.",
+      "why_opaque": "'voilà' is normally a presentative 'here is'; immediately followed by 'que' it becomes a narrative surprise marker.",
+      "literal_trap": "'here is that it started to rain' — read as pointing something out rather than as 'and then suddenly'.",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "voilà|voila",
+        "que|qu'",
+        "il|elle|on|ils|elles|ce|c'|je|j'|tu|nous|vous|le|la|l'|les|mon|son|leur"
+      ],
+      "example_fr": "On partait, et voilà qu'il a commencé à pleuvoir.",
+      "example_en": "We were leaving, and then it started to rain.",
+      "required_markers": [
+        "voilà|voila",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "voila_duration_que",
+      "schema_form": "voilà + duration + que + clause",
+      "name_en": "voilà ... que (for ... now)",
+      "meaning_en": "I/we have been ...ing for X (and still am) — duration up to the present.",
+      "why_opaque": "French uses a presentative plus the present tense where English needs a present perfect continuous; 'here is three hours that' decodes to nothing.",
+      "literal_trap": "'Here is three hours that I wait for you' — the tense and the duration relation are both lost.",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "voilà|voila",
+        "*<=2",
+        "jours|jour|semaines|semaine|mois|ans|an|années|année|heures|heure|minutes|minute|temps|longtemps",
+        "que|qu'"
+      ],
+      "example_fr": "Voilà trois heures que je t'attends.",
+      "example_en": "I've been waiting for you for three hours.",
+      "required_markers": [
+        "voilà|voila",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "ca_fait_que_duration",
+      "schema_form": "ça fait + duration + que + clause",
+      "name_en": "ça fait ... que (it's been ... since)",
+      "meaning_en": "it has been X (amount of time) that / since — ongoing duration.",
+      "why_opaque": "'that makes' plus a time span is an impersonal duration frame; the present-tense verb after 'que' maps to an English perfect.",
+      "literal_trap": "'That makes two years that I live here' — read as a causal or arithmetical statement.",
+      "cefr": "A2",
+      "pattern_tokens": [
+        "ça|ca",
+        "fait",
+        "*<=2",
+        "jours|jour|semaines|semaine|mois|ans|an|années|année|heures|heure|minutes|minute|temps|longtemps",
+        "que|qu'"
+      ],
+      "example_fr": "Ça fait deux ans que je vis ici.",
+      "example_en": "I've been living here for two years.",
+      "required_markers": [
+        "ça|ca",
+        "fait",
+        "que|qu'"
+      ],
+      "register": "colloquial"
+    },
+    {
+      "key": "il_y_a_que_duration",
+      "schema_form": "il y a + duration + que + clause",
+      "name_en": "il y a ... que (for ... now)",
+      "meaning_en": "it has been X amount of time that / since — duration, formal counterpart of 'ça fait ... que'.",
+      "why_opaque": "The existential 'il y a' is recycled as a duration marker, and the following clause keeps a French tense that English renders as a perfect.",
+      "literal_trap": "'There is a long time that I have not seen him' — read as existential, and the negated passé composé is mistranslated as a completed past.",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "il",
+        "y",
+        "a",
+        "*<=2",
+        "jours|jour|semaines|semaine|mois|ans|an|années|année|heures|heure|minutes|minute|temps|longtemps|siècles",
+        "que|qu'"
+      ],
+      "example_fr": "Il y a longtemps que je ne l'ai pas vu.",
+      "example_en": "I haven't seen him for a long time.",
+      "required_markers": [
+        "il",
+        "y",
+        "a",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "a_peine_que",
+      "schema_form": "à peine ... que ...",
+      "name_en": "à peine ... que (no sooner ... than)",
+      "meaning_en": "scarcely had X happened when Y happened — immediate succession.",
+      "why_opaque": "'hardly' plus 'that' produces a temporal 'no sooner ... than'; formal French also inverts the subject, which further hides the structure.",
+      "literal_trap": "Reading 'que' as 'than' in a comparison, or as a complementiser, and losing the 'the moment X happened' timing.",
+      "cefr": "C1",
+      "pattern_tokens": [
+        "à",
+        "peine",
+        "*<=6!plus|moins|aussi|autant|mieux|pire|meilleur|meilleure",
+        "que|qu'"
+      ],
+      "example_fr": "À peine était-il sorti que le téléphone a sonné.",
+      "example_en": "No sooner had he left than the phone rang.",
+      "required_markers": [
+        "à",
+        "peine",
+        "que|qu'"
+      ],
+      "register": "formal"
+    },
+    {
+      "key": "loin_de_inf",
+      "schema_form": "être loin de + infinitive",
+      "name_en": "loin de + inf (far from being)",
+      "meaning_en": "far from doing/being X — an emphatic denial of X.",
+      "why_opaque": "A spatial word ('far') is used as a negator of degree; 'far from being stupid' is a full negation dressed as a distance.",
+      "literal_trap": "Reading spatial distance, or hedging it to 'not very' instead of the strong 'anything but'.",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "loin",
+        "de|d'",
+        "POS:INF"
+      ],
+      "example_fr": "Il est loin d'être bête.",
+      "example_en": "He's anything but stupid.",
+      "required_markers": [
+        "loin",
+        "de|d'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "aller_inf_futur_proche",
+      "schema_form": "aller (présent / imparfait) + INFINITIF",
+      "name_en": "near future aller + infinitive",
+      "meaning_en": "to be going to do something / to be about to do it",
+      "why_opaque": "'aller' loses its motion meaning entirely and becomes a pure future auxiliary, with no 'to' linking the two verbs; the same string can also still be literal motion, so the learner must choose.",
+      "literal_trap": "'Je vais lui parler' read as 'I go to speak to him' (physically going somewhere)",
+      "cefr": "A1",
+      "pattern_tokens": [
+        "vais|vas|va|allons|allez|vont|allais|allait|allions|alliez|allaient",
+        "*<=2!à|au|aux|chez|en|dans|vers|jusqu'|jusque",
+        "POS:INF"
+      ],
+      "example_fr": "Je vais lui parler ce soir.",
+      "example_en": "I'm going to talk to him tonight.",
+      "required_markers": [
+        "vais|vas|va|allons|allez|vont|allais|allait|allions|alliez|allaient"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "etre_sur_le_point_de",
+      "schema_form": "être + sur le point de + INFINITIF",
+      "name_en": "imminence être sur le point de",
+      "meaning_en": "to be on the verge of doing something",
+      "why_opaque": "A spatial noun phrase ('on the point of') is recycled as a pure aspect marker for imminence; nothing in the words signals time.",
+      "literal_trap": "'sur le point de fermer' read as 'on the subject of closing' or 'at the closing point'",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "sur",
+        "le",
+        "point",
+        "de|d'",
+        "*<=2",
+        "POS:INF"
+      ],
+      "example_fr": "L'entreprise était sur le point de fermer.",
+      "example_en": "The company was on the verge of closing down.",
+      "required_markers": [
+        "sur",
+        "le",
+        "point",
+        "de|d'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "finir_par_inf",
+      "schema_form": "finir + par + INFINITIF",
+      "name_en": "eventual outcome finir par",
+      "meaning_en": "to end up doing something, after a while or after resistance",
+      "why_opaque": "'par' does not mean 'by (means of)' here; the pair encodes 'eventually, in the end', which is a temporal notion absent from both words.",
+      "literal_trap": "'Il a fini par accepter' read as 'He finished by accepting', i.e. accepting was the last thing he did",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "finis|finit|finissons|finissez|finissent|fini|finissais|finissait|finissaient|finira|finirai|finiront|finirait|finir",
+        "par",
+        "*<=2",
+        "POS:INF"
+      ],
+      "example_fr": "Il a fini par accepter notre proposition.",
+      "example_en": "He eventually accepted our proposal.",
+      "required_markers": [
+        "finis|finit|finissons|finissez|finissent|fini|finissais|finissait|finissaient|finira|finirai|finiront|finirait|finir",
+        "par"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "commencer_par_inf",
+      "schema_form": "commencer + par + INFINITIF",
+      "name_en": "commencer par (do X first)",
+      "meaning_en": "to do X as the first step (before other things)",
+      "why_opaque": "It contrasts minimally with 'commencer à + infinitif' (to start doing), yet means something different: sequence, not onset. 'par' again is not instrumental.",
+      "literal_trap": "'Commence par lire la consigne' read as 'Start by reading' in the sense of 'begin reading' (= commencer à lire)",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "commence|commences|commençons|commencez|commencent|commencé|commençait|commençais|commencera|commencerai|commenceront|commencer",
+        "par",
+        "*<=2",
+        "POS:INF"
+      ],
+      "example_fr": "Commence par lire la consigne, tu répondras après.",
+      "example_en": "Read the instructions first, then answer.",
+      "required_markers": [
+        "commence|commences|commençons|commencez|commencent|commencé|commençait|commençais|commencera|commencerai|commenceront|commencer",
+        "par"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "ne_pas_arreter_de_inf",
+      "schema_form": "ne pas arrêter + de + INFINITIF",
+      "name_en": "continuative ne pas arrêter de",
+      "meaning_en": "to keep on doing something non-stop (usually annoyingly)",
+      "why_opaque": "A negated verb yields a positive, intensified statement about frequency: the negation applies to the stopping, so the whole thing means 'does it constantly'.",
+      "literal_trap": "'Il n'arrête pas de se plaindre' read as 'He doesn't stop to complain'",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "ne|n'",
+        "arrête|arrêtes|arrêtons|arrêtez|arrêtent|arrêtais|arrêtait|arrêtaient",
+        "pas",
+        "de|d'",
+        "*<=2",
+        "POS:INF"
+      ],
+      "example_fr": "Il n'arrête pas de se plaindre du bruit.",
+      "example_en": "He's constantly complaining about the noise.",
+      "required_markers": [
+        "ne|n'",
+        "arrête|arrêtes|arrêtons|arrêtez|arrêtent|arrêtais|arrêtait|arrêtaient",
+        "pas",
+        "de|d'"
+      ],
+      "register": "colloquial"
+    },
+    {
+      "key": "faillir_inf",
+      "schema_form": "avoir failli + INFINITIF",
+      "name_en": "counterfactual faillir + infinitive",
+      "meaning_en": "to have almost done something (and not done it)",
+      "why_opaque": "An affirmative past tense denies that the event happened: the event is asserted as nearly-but-not-actual, and 'faillir' is a verb learners never meet outside this frame.",
+      "literal_trap": "'J'ai failli tomber' read as 'I failed to fall' or 'I fell short of falling'",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "failli",
+        "*<=2",
+        "POS:INF"
+      ],
+      "example_fr": "J'ai failli tomber dans l'escalier.",
+      "example_en": "I almost fell on the stairs.",
+      "required_markers": [
+        "failli"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "etre_cense_inf",
+      "schema_form": "être censé(e)(s) + INFINITIF",
+      "name_en": "deontic être censé + infinitive",
+      "meaning_en": "to be supposed to do something (with a hint that it may not be happening)",
+      "why_opaque": "'censé' is a bound past participle with no independent use; the construction carries an implicature of non-compliance that no word states.",
+      "literal_trap": "'Tu es censé porter un casque' read as 'You are censored/deemed sensible to wear a helmet' (also confused with 'sensé' = sensible)",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "censé|censée|censés|censées",
+        "*<=2",
+        "POS:INF"
+      ],
+      "example_fr": "Tu es censé porter un casque sur le chantier.",
+      "example_en": "You're supposed to wear a helmet on the site.",
+      "required_markers": [
+        "censé|censée|censés|censées"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "ne_pas_manquer_de_inf",
+      "schema_form": "ne pas manquer + de + INFINITIF",
+      "name_en": "ne pas manquer de (be sure to)",
+      "meaning_en": "to be sure to do something / to do it without fail",
+      "why_opaque": "A negated verb of lacking yields a strong positive commitment or a guarantee; the meaning ('definitely will') is the opposite of the surface 'not lacking'.",
+      "literal_trap": "'Je ne manquerai pas de vous informer' read as 'I will not lack to inform you' / 'I won't miss informing you'",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "ne|n'",
+        "*<=2",
+        "manque|manques|manquons|manquez|manquent|manquerai|manqueras|manquera|manquerons|manquerez|manqueront|manqué",
+        "*<=1",
+        "de|d'",
+        "*<=1",
+        "POS:INF"
+      ],
+      "example_fr": "Je ne manquerai pas de vous tenir informé.",
+      "example_en": "I'll be sure to keep you posted.",
+      "required_markers": [
+        "ne|n'",
+        "manque|manques|manquons|manquez|manquent|manquerai|manqueras|manquera|manquerons|manquerez|manqueront|manqué",
+        "de|d'"
+      ],
+      "register": "formal"
+    },
+    {
+      "key": "n_avoir_qu_a_inf",
+      "schema_form": "ne + avoir + qu'à + INFINITIF (aussi: il n'y a qu'à)",
+      "name_en": "n'avoir qu'à (all you have to do is)",
+      "meaning_en": "all that is needed is to do X / you just have to X",
+      "why_opaque": "The restrictive ne...que attaches to a following infinitive and turns 'have' into 'the only required step is', frequently with an impatient or dismissive tone the words never show.",
+      "literal_trap": "'Tu n'as qu'à demander' read as 'You have only at to ask' or as a reproach 'you only ask'",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "ne|n'",
+        "*<=1",
+        "ai|as|a|avons|avez|ont|avais|avait|avions|aviez|avaient|aura|auras|aurait|auront",
+        "qu'",
+        "à",
+        "*<=1",
+        "POS:INF"
+      ],
+      "example_fr": "Si tu as besoin d'aide, tu n'as qu'à demander.",
+      "example_en": "If you need help, all you have to do is ask.",
+      "required_markers": [
+        "ne|n'",
+        "ai|as|a|avons|avez|ont|avais|avait|avions|aviez|avaient|aura|auras|aurait|auront",
+        "qu'",
+        "à"
+      ],
+      "register": "colloquial"
+    },
+    {
+      "key": "il_me_faut",
+      "schema_form": "il + PRONOM (me / te / lui / nous / vous / leur) + faut",
+      "name_en": "dative impersonal il me faut",
+      "meaning_en": "I / you / he ... need something",
+      "why_opaque": "The needer is an indirect object, not the subject, and the subject 'il' refers to nothing; there is no verb 'to need' visible anywhere.",
+      "literal_trap": "'Il me faut deux jours' read as 'He needs me two days' or 'it is necessary to me two days'",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "il",
+        "me|te|lui|nous|vous|leur",
+        "faut|fallait|faudra|faudrait"
+      ],
+      "example_fr": "Il me faut deux jours de plus pour finir.",
+      "example_en": "I need two more days to finish.",
+      "required_markers": [
+        "il",
+        "me|te|lui|nous|vous|leur",
+        "faut|fallait|faudra|faudrait"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "il_faut_que_subj",
+      "schema_form": "il faut que + SUBJONCTIF",
+      "name_en": "impersonal obligation il faut que + subjunctive",
+      "meaning_en": "someone must / has to do something",
+      "why_opaque": "Personal obligation is expressed by an impersonal frame with a dummy 'il', and the real subject appears inside a subordinate clause that must be subjunctive; the obligation is on that subject, not on 'il'.",
+      "literal_trap": "'Il faut que tu partes' read as 'It is needed that you leave' with no sense of who is obliged, or produced with the indicative ('que tu pars')",
+      "cefr": "A2",
+      "pattern_tokens": [
+        "il",
+        "*<=1",
+        "faut|faudrait|fallait|faudra",
+        "que|qu'"
+      ],
+      "example_fr": "Il faut que tu partes maintenant.",
+      "example_en": "You have to leave now.",
+      "required_markers": [
+        "il",
+        "faut|faudrait|fallait|faudra",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "il_s_agit_de",
+      "schema_form": "il s'agit de + NOM / INFINITIF (il ne s'agit pas de ...)",
+      "name_en": "impersonal il s'agit de",
+      "meaning_en": "it is about X / what is at issue is X; (with an infinitive) what is required is to X",
+      "why_opaque": "A reflexive of 'agir' (to act) used impersonally means 'be a matter of'; there is no acting, no agent, and the construction can never take a real subject (never 'ce livre s'agit de').",
+      "literal_trap": "'Il s'agit d'un malentendu' read as 'He acts of a misunderstanding' or 'he is dealing with a misunderstanding'",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "il",
+        "*<=1",
+        "s'",
+        "agit|agissait|agisse|agira|agirait",
+        "*<=1",
+        "de|d'"
+      ],
+      "example_fr": "Il ne s'agit pas de discuter, il s'agit d'obéir.",
+      "example_en": "This isn't about arguing, it's about doing as you're told.",
+      "required_markers": [
+        "il",
+        "s'",
+        "agit|agissait|agisse|agira|agirait",
+        "de|d'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "il_suffit_de_inf",
+      "schema_form": "il suffit de + INFINITIF / NOM (+ pour ...)",
+      "name_en": "il suffit de (all it takes is)",
+      "meaning_en": "all you need to do is X / X is enough (to cause the result)",
+      "why_opaque": "An impersonal 'it suffices' with a dummy subject encodes minimal sufficiency, and the optional 'pour' clause supplies the consequence; often the pragmatic force is 'that's all it takes for things to go wrong'.",
+      "literal_trap": "'Il suffit d'appuyer' read as 'He is sufficient to press'",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "il",
+        "*<=1",
+        "suffit|suffisait|suffira|suffirait",
+        "de|d'",
+        "*<=2",
+        "POS:INF"
+      ],
+      "example_fr": "Il suffit d'appuyer sur ce bouton pour tout annuler.",
+      "example_en": "All you have to do is press this button to cancel everything.",
+      "required_markers": [
+        "il",
+        "suffit|suffisait|suffira|suffirait",
+        "de|d'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "il_suffit_que_subj",
+      "schema_form": "il suffit que + SUBJONCTIF (+ pour que + SUBJONCTIF)",
+      "name_en": "il suffit que + subjunctive",
+      "meaning_en": "it only takes X happening (for the consequence to follow)",
+      "why_opaque": "Two subjunctive clauses chain a minimal cause to an outsized effect; nothing in the words expresses 'only', and English needs a completely different frame ('the slightest ... and ...').",
+      "literal_trap": "'Il suffit qu'il pleuve' read as 'it suffices that it rains' with no sense of 'the slightest rain and...'",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "il",
+        "*<=1",
+        "suffit|suffisait|suffira|suffirait",
+        "que|qu'"
+      ],
+      "example_fr": "Il suffit qu'il pleuve pour que tout soit annulé.",
+      "example_en": "The slightest bit of rain and the whole thing gets cancelled.",
+      "required_markers": [
+        "il",
+        "suffit|suffisait|suffira|suffirait",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "faire_inf_causative",
+      "schema_form": "faire + INFINITIF (+ à quelqu'un)",
+      "name_en": "causative faire + infinitive",
+      "meaning_en": "to make someone do something, or to have something done (by someone else)",
+      "why_opaque": "Two verbs share one clause with no linking word, and the doer of the second verb becomes an object of 'faire' — so the subject of the sentence is precisely the person who does NOT perform the action.",
+      "literal_trap": "'Je fais réparer ma voiture' read as 'I repair my car' or 'I make repair my car'",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "fais|fait|faisons|faites|font|faisais|faisait|faisaient|ferai|fera|ferons|feront|ferait|fasse|fassent|faire",
+        "*<=1!du|de|d'|des|le|la|les|l'|un|une|pour|afin|à|au|aux|en|ce|cette|ces|mon|ton|son|leur",
+        "POS:INF"
+      ],
+      "example_fr": "Je fais réparer ma voiture demain.",
+      "example_en": "I'm getting my car repaired tomorrow.",
+      "required_markers": [
+        "fais|fait|faisons|faites|font|faisais|faisait|faisaient|ferai|fera|ferons|feront|ferait|fasse|fassent|faire"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "se_faire_inf",
+      "schema_form": "se faire + INFINITIF",
+      "name_en": "passive causative se faire + infinitive",
+      "meaning_en": "to get X-ed (to have something done to oneself, often unpleasantly)",
+      "why_opaque": "The reflexive marks the subject as the victim or beneficiary, not the agent: the subject undergoes the infinitive's action. It reads as an active sentence but means a passive one.",
+      "literal_trap": "'Il s'est fait voler son vélo' read as 'He stole his own bike' or 'he made himself steal a bike'",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "me|m'|te|t'|se|s'|nous|vous",
+        "*<=1",
+        "fais|fait|faisons|faites|font|faisais|faisait|faisaient|ferai|fera|feront|ferait|faire",
+        "*<=1",
+        "POS:INF"
+      ],
+      "example_fr": "Il s'est fait voler son vélo devant la gare.",
+      "example_en": "He had his bike stolen outside the station.",
+      "required_markers": [
+        "me|m'|te|t'|se|s'|nous|vous",
+        "fais|fait|faisons|faites|font|faisais|faisait|faisaient|ferai|fera|feront|ferait|faire"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "laisser_inf",
+      "schema_form": "laisser + INFINITIF (+ quelqu'un / quelque chose)",
+      "name_en": "permissive laisser + infinitive",
+      "meaning_en": "to let someone do something / to let something happen",
+      "why_opaque": "Like the causative, two verbs share one clause with no 'to', and the permitted doer surfaces as an object; 'laisser' loses its 'leave behind' sense.",
+      "literal_trap": "'Laisse-moi faire' read as 'Leave me to do' / 'abandon me doing' instead of 'let me handle it'",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "laisse|laisses|laissons|laissez|laissent|laissé|laissais|laissait|laissaient|laissera|laisseront|laisser",
+        "*<=2",
+        "POS:INF"
+      ],
+      "example_fr": "Laisse-moi faire, je m'en occupe.",
+      "example_en": "Let me handle it, I'll take care of it.",
+      "required_markers": [
+        "laisse|laisses|laissons|laissez|laissent|laissé|laissais|laissait|laissaient|laissera|laisseront|laisser"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "se_laisser_inf",
+      "schema_form": "se laisser + INFINITIF",
+      "name_en": "se laisser + infinitive (let oneself be)",
+      "meaning_en": "to let oneself be X-ed, to put up with it without resisting",
+      "why_opaque": "The subject is the undergoer and the construction adds a strong notion of passivity or failure to resist; 'ne te laisse pas faire' has no word for 'stand up for yourself', which is exactly what it means.",
+      "literal_trap": "'Ne te laisse pas faire' read as 'Don't let yourself do' or 'don't leave yourself to be made'",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "me|m'|te|t'|se|s'|nous|vous",
+        "*<=1",
+        "laisse|laisses|laissons|laissez|laissent|laissé|laissais|laissait|laissaient|laisser",
+        "*<=1",
+        "POS:INF"
+      ],
+      "example_fr": "Ne te laisse pas faire, réponds-lui !",
+      "example_en": "Don't let them walk all over you, answer back!",
+      "required_markers": [
+        "me|m'|te|t'|se|s'|nous|vous",
+        "laisse|laisses|laissons|laissez|laissent|laissé|laissais|laissait|laissaient|laisser"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "a_force_de",
+      "schema_form": "à force de + INFINITIF / NOM",
+      "name_en": "cumulative cause à force de",
+      "meaning_en": "as a result of doing something over and over / through sheer repetition",
+      "why_opaque": "'force' does not mean strength or coercion here: the phrase encodes repeated effort over time as the cause of a result, an aspectual notion no single word carries.",
+      "literal_trap": "'À force de répéter' read as 'by force of repeating', i.e. forcibly",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "à",
+        "force",
+        "de|d'"
+      ],
+      "example_fr": "À force de répéter, il a fini par comprendre.",
+      "example_en": "After going over it again and again, he finally got it.",
+      "required_markers": [
+        "à",
+        "force",
+        "de|d'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "avoir_beau_inf",
+      "schema_form": "avoir beau + INFINITIF, (proposition principale)",
+      "name_en": "concessive avoir beau + infinitive",
+      "meaning_en": "however much / no matter how much someone does X, it makes no difference",
+      "why_opaque": "'beau' is frozen and invariable, has no article, and means nothing like 'beautiful'; the construction is the main clause yet functions as a concession, and the crucial 'but it changes nothing' is only implied by the following clause.",
+      "literal_trap": "'Il a beau essayer' read as 'He has a nice try' or 'he had a good go at trying'",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "ai|as|a|avons|avez|ont|avais|avait|avions|aviez|avaient|aura|auras|aurons|aurez|auront|aurait|aie|ait|avoir",
+        "beau",
+        "*<=1!jeu|temps|nombre|joueur|geste",
+        "POS:INF"
+      ],
+      "example_fr": "Il a beau s'excuser, personne ne le croit.",
+      "example_en": "He can apologise all he likes, nobody believes him.",
+      "required_markers": [
+        "ai|as|a|avons|avez|ont|avais|avait|avions|aviez|avaient|aura|auras|aurons|aurez|auront|aurait|aie|ait|avoir",
+        "beau"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "quitte_a_inf",
+      "schema_form": "quitte à + INFINITIF",
+      "name_en": "concessive quitte à + infinitive",
+      "meaning_en": "even if it means X / at the risk of X",
+      "why_opaque": "'quitte' is a frozen invariable adjective here, unrelated to the verb 'quitter'; the phrase expresses an accepted cost or risk, which neither word states.",
+      "literal_trap": "'quitte à me fâcher avec lui' read as 'leaving to get angry with him'",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "quitte",
+        "à",
+        "*<=2",
+        "POS:INF"
+      ],
+      "example_fr": "Je dirai la vérité, quitte à me fâcher avec lui.",
+      "example_en": "I'll tell the truth, even if it means falling out with him.",
+      "required_markers": [
+        "quitte",
+        "à"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "quand_bien_meme",
+      "schema_form": "quand bien même + CONDITIONNEL",
+      "name_en": "strong concessive quand bien même",
+      "meaning_en": "even if / even though (hypothetically)",
+      "why_opaque": "Three high-frequency words ('when', 'well', 'even') combine into a concessive conjunction with no temporal meaning at all, and it uniquely takes the conditional rather than the subjunctive.",
+      "literal_trap": "'Quand bien même il s'excuserait' read as 'when even well he would apologise'",
+      "cefr": "C1",
+      "pattern_tokens": [
+        "quand",
+        "bien",
+        "même"
+      ],
+      "example_fr": "Quand bien même il s'excuserait, je ne lui pardonnerais pas.",
+      "example_en": "Even if he did apologise, I wouldn't forgive him.",
+      "required_markers": [
+        "quand",
+        "bien",
+        "même"
+      ],
+      "register": "formal"
+    },
+    {
+      "key": "tout_en_gerondif",
+      "schema_form": "tout en + PARTICIPE PRÉSENT (-ant)",
+      "name_en": "concessive/simultaneous tout en + gerund",
+      "meaning_en": "while at the same time doing X / even though one does X",
+      "why_opaque": "'tout' is not a quantifier here but a marker that turns the gerund concessive or strictly simultaneous; the frequent 'although' reading is completely invisible in the words.",
+      "literal_trap": "'tout en reconnaissant que j'avais raison' read as 'all in recognising that I was right'",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "tout",
+        "en",
+        "POS:PART"
+      ],
+      "example_fr": "Il a refusé, tout en reconnaissant que j'avais raison.",
+      "example_en": "He refused, while admitting that I was right.",
+      "required_markers": [
+        "tout",
+        "en"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "quoi_que_subj",
+      "schema_form": "quoi que + SUBJONCTIF",
+      "name_en": "universal concessive quoi que",
+      "meaning_en": "whatever (someone does / says), no matter what",
+      "why_opaque": "Two separate words meaning 'what' and 'that' produce a free-choice concessive; it is also one letter away from 'quoique' (although), so the split spelling is the only clue to which meaning is intended.",
+      "literal_trap": "'Quoi que tu fasses' read as 'What that you do' or as 'although you do'",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "quoi",
+        "que|qu'"
+      ],
+      "example_fr": "Quoi que tu fasses, préviens-moi avant.",
+      "example_en": "Whatever you do, let me know beforehand.",
+      "required_markers": [
+        "quoi",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "quel_que_soit",
+      "schema_form": "quel(le)(s) que + être au SUBJONCTIF + NOM",
+      "name_en": "quel que soit (whatever ... may be)",
+      "meaning_en": "whatever / whichever X may be, regardless of X",
+      "why_opaque": "An interrogative adjective plus 'que' plus a subjunctive 'être' yields a concessive; the adjective agrees with a noun that follows the verb, which no word-by-word reading predicts.",
+      "literal_trap": "'Quel que soit le résultat' read as 'Which that be the result'",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "quel|quelle|quels|quelles",
+        "que|qu'",
+        "*<=1",
+        "soit|soient"
+      ],
+      "example_fr": "Quel que soit le résultat, on continuera.",
+      "example_en": "Whatever the outcome, we'll carry on.",
+      "required_markers": [
+        "quel|quelle|quels|quelles",
+        "que|qu'",
+        "soit|soient"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "aussi_adj_que_subj_concessive",
+      "schema_form": "aussi / quelque / tout + ADJECTIF + que + SUBJONCTIF",
+      "name_en": "concessive aussi/tout + adjective + que + subjunctive",
+      "meaning_en": "however X (someone or something) may be",
+      "why_opaque": "The same words otherwise form a plain comparison ('aussi grand que moi'); only the subjunctive and the absence of a second term of comparison signal the concessive 'however X'.",
+      "literal_trap": "'Aussi surprenant que cela puisse paraître' read as 'as surprising as that can appear' (a comparison)",
+      "cefr": "C1",
+      "pattern_tokens": [
+        "aussi|quelque|tout|toute",
+        "POS:ADJ",
+        "que|qu'",
+        "*<=1",
+        "soit|soient|sois|puisse|puissent|ait|aient|fût"
+      ],
+      "example_fr": "Aussi surprenant que cela puisse paraître, il a accepté.",
+      "example_en": "Surprising as it may seem, he agreed.",
+      "required_markers": [
+        "aussi|quelque|tout|toute",
+        "que|qu'"
+      ],
+      "register": "formal"
+    },
+    {
+      "key": "pour_que_afin_que_subj",
+      "schema_form": "pour que / afin que + SUBJONCTIF",
+      "name_en": "purpose pour que / afin que + subjunctive",
+      "meaning_en": "so that / in order that (someone else does something)",
+      "why_opaque": "'pour' means 'for' with a noun and 'in order to' with an infinitive, but with 'que' it opens a full clause that must be subjunctive; the switch is triggered purely by whether the subject changes.",
+      "literal_trap": "'pour que tu sois prêt' read as 'for that you are ready', or produced with the indicative 'pour que tu es prêt'",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "pour|afin",
+        "que|qu'"
+      ],
+      "example_fr": "Je te le dis maintenant pour que tu sois prêt.",
+      "example_en": "I'm telling you now so that you'll be ready.",
+      "required_markers": [
+        "pour|afin",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "de_maniere_a_inf",
+      "schema_form": "de manière / façon à + INFINITIF",
+      "name_en": "purpose de manière à + infinitive",
+      "meaning_en": "so as to, in such a way as to",
+      "why_opaque": "A noun of manner plus 'à' expresses intended result; the contrast with 'de manière à ce que + subjonctif' (different subject) is invisible in the words.",
+      "literal_trap": "'de manière à être entendu' read as 'in a manner at being heard'",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "de",
+        "*<=1",
+        "manière|façon",
+        "à",
+        "*<=1",
+        "POS:INF"
+      ],
+      "example_fr": "Parle plus fort, de manière à être entendu du fond.",
+      "example_en": "Speak up so that you can be heard at the back.",
+      "required_markers": [
+        "de",
+        "manière|façon",
+        "à"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "de_peur_que_subj",
+      "schema_form": "de peur / crainte que (+ ne) + SUBJONCTIF",
+      "name_en": "negative purpose de peur que",
+      "meaning_en": "for fear that, lest, so as to avoid X happening",
+      "why_opaque": "The clause states what the subject wants to avoid, and it normally carries an expletive 'ne' that is not a negation — so the feared event looks negated when it is not.",
+      "literal_trap": "'de peur qu'on ne l'entende' read as 'for fear that they do not hear him' (exact opposite)",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "de|d'",
+        "peur|crainte",
+        "que|qu'"
+      ],
+      "example_fr": "Il chuchotait de peur qu'on ne l'entende.",
+      "example_en": "He was whispering so he wouldn't be heard.",
+      "required_markers": [
+        "de|d'",
+        "peur|crainte",
+        "que|qu'"
+      ],
+      "register": "formal"
+    },
+    {
+      "key": "histoire_de_inf",
+      "schema_form": "histoire de + INFINITIF",
+      "name_en": "casual purpose histoire de",
+      "meaning_en": "just to, only so as to (informal)",
+      "why_opaque": "'histoire' (story) is emptied of meaning and becomes a downplaying purpose marker equivalent to 'just to'; extremely common in speech and film dialogue.",
+      "literal_trap": "'histoire de dire bonjour' read as 'a story of saying hello'",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "histoire",
+        "de|d'",
+        "*<=1",
+        "POS:INF"
+      ],
+      "example_fr": "On est passés, histoire de dire bonjour.",
+      "example_en": "We dropped by, just to say hello.",
+      "required_markers": [
+        "histoire",
+        "de|d'"
+      ],
+      "register": "colloquial"
+    },
+    {
+      "key": "de_sorte_que",
+      "schema_form": "de (telle) sorte que + SUBJONCTIF (but) / INDICATIF (résultat)",
+      "name_en": "de sorte que (so that / with the result that)",
+      "meaning_en": "so that (intended) with the subjunctive, or with the result that (actual) with the indicative",
+      "why_opaque": "The same three words mean purpose or result depending only on the mood of the following verb, and 'sorte' has nothing to do with kinds or sorting.",
+      "literal_trap": "'de sorte que tout soit prêt' read as 'of the sort that everything is ready'",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "de",
+        "*<=1",
+        "sorte",
+        "que|qu'"
+      ],
+      "example_fr": "Range tes affaires de sorte que tout soit prêt demain.",
+      "example_en": "Tidy your things away so that everything is ready tomorrow.",
+      "required_markers": [
+        "de",
+        "sorte",
+        "que|qu'"
+      ],
+      "register": "formal"
+    },
+    {
+      "key": "si_c_est_que",
+      "schema_form": "Si + PROPOSITION, c'est que + INDICATIF",
+      "name_en": "explanatory si ..., c'est que",
+      "meaning_en": "if X (is the case), it's because Y",
+      "why_opaque": "'si' is not hypothetical but presuppositional ('given that'), and the bare 'c'est que' means 'it is because'; the causal link has no word for 'because' anywhere.",
+      "literal_trap": "'Si je te dis ça, c'est que je m'inquiète' read as 'If I tell you that, it is that I'm worried'",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "si",
+        "*<=10",
+        "c'",
+        "est",
+        "que|qu'"
+      ],
+      "example_fr": "Si je te dis ça, c'est que je m'inquiète pour toi.",
+      "example_en": "The reason I'm telling you this is that I'm worried about you.",
+      "required_markers": [
+        "si",
+        "c'",
+        "est",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "au_cas_ou",
+      "schema_form": "au cas où + CONDITIONNEL (ou seul, en fin de phrase)",
+      "name_en": "au cas où (in case)",
+      "meaning_en": "in case, in the event that; used alone at the end of a sentence it means 'just in case'",
+      "why_opaque": "'où' is a place word yet introduces a hypothesis, the verb must be conditional (not subjunctive, unlike most such conjunctions), and the phrase can stand alone with no clause at all.",
+      "literal_trap": "'au cas où il pleuvrait' read as 'at the case where it would rain'",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "au",
+        "cas",
+        "où"
+      ],
+      "example_fr": "Prends un parapluie, au cas où il pleuvrait.",
+      "example_en": "Take an umbrella, in case it rains.",
+      "required_markers": [
+        "au",
+        "cas",
+        "où"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "pour_peu_que_subj",
+      "schema_form": "pour peu que + SUBJONCTIF",
+      "name_en": "minimal condition pour peu que",
+      "meaning_en": "if only ever so slightly / the slightest bit of X and ...",
+      "why_opaque": "'peu' (little) plus 'pour' produces a threshold condition: the smallest amount is enough for the consequence, an implication no word states.",
+      "literal_trap": "'Pour peu qu'on l'écoute' read as 'for little that one listens to him'",
+      "cefr": "C1",
+      "pattern_tokens": [
+        "pour",
+        "peu",
+        "que|qu'"
+      ],
+      "example_fr": "Pour peu qu'on l'écoute, il parle pendant des heures.",
+      "example_en": "Give him the slightest encouragement and he'll talk for hours.",
+      "required_markers": [
+        "pour",
+        "peu",
+        "que|qu'"
+      ],
+      "register": "formal"
+    },
+    {
+      "key": "a_condition_que",
+      "schema_form": "à condition que + SUBJONCTIF / à condition de + INFINITIF",
+      "name_en": "à condition que / de (provided that)",
+      "meaning_en": "provided that, on condition that",
+      "why_opaque": "The conjunction is a frozen prepositional phrase whose complement type flips with the subject: 'que + subjonctif' when the subject changes, 'de + infinitif' when it does not.",
+      "literal_trap": "'à condition que tu viennes' read as 'at condition that you come', or produced with the indicative",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "à",
+        "condition",
+        "de|d'|que|qu'"
+      ],
+      "example_fr": "Je veux bien t'aider, à condition que tu me préviennes avant.",
+      "example_en": "I'm happy to help, provided you let me know in advance.",
+      "required_markers": [
+        "à",
+        "condition",
+        "de|d'|que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "a_moins_que_subj",
+      "schema_form": "à moins que (+ ne) + SUBJONCTIF / à moins de + INFINITIF",
+      "name_en": "exceptive à moins que",
+      "meaning_en": "unless",
+      "why_opaque": "'moins' (less) builds a negative condition meaning 'unless', and the clause usually contains an expletive 'ne' that does not negate anything — so the exception looks like a negation.",
+      "literal_trap": "'à moins qu'il ne pleuve' read as 'unless it doesn't rain' (the opposite condition)",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "à",
+        "moins",
+        "de|d'|que|qu'"
+      ],
+      "example_fr": "On part demain, à moins qu'il ne pleuve.",
+      "example_en": "We're leaving tomorrow, unless it rains.",
+      "required_markers": [
+        "à",
+        "moins",
+        "de|d'|que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "sans_que_subj",
+      "schema_form": "sans que + SUBJONCTIF",
+      "name_en": "sans que + subjunctive",
+      "meaning_en": "without someone doing something / without it happening",
+      "why_opaque": "French subordinates a whole clause under a preposition, which English can only render with 'without' plus a gerund; the clause is subjunctive and often contains a negative-looking word ('personne', 'ne') that is not a second negation.",
+      "literal_trap": "'sans que personne s'en aperçoive' read as 'without that nobody notices' (double negative)",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "sans",
+        "que|qu'"
+      ],
+      "example_fr": "Il est parti sans que personne s'en aperçoive.",
+      "example_en": "He left without anyone noticing.",
+      "required_markers": [
+        "sans",
+        "que|qu'"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "si_imparfait_suggestion",
+      "schema_form": "Si + on / tu / vous / nous + IMPARFAIT ?",
+      "name_en": "suggestion si + imperfect",
+      "meaning_en": "how about we ...? / why don't we ...?",
+      "why_opaque": "A bare 'if' clause with no main clause and a past-tense verb is a proposal about the future; the sentence looks unfinished and past-referring but is neither.",
+      "literal_trap": "'Si on allait au cinéma ?' read as 'If we went to the cinema...' (an unfinished conditional)",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "si",
+        "on|tu|nous|vous",
+        "allais|allait|allions|alliez|faisais|faisait|faisions|faisiez|prenais|prenait|prenions|preniez|essayais|essayait|essayions|essayiez|commençais|commençait|commencions|commenciez|partais|partait|partions|partiez|venais|venait|venions|veniez"
+      ],
+      "example_fr": "Si on allait au cinéma ce soir ?",
+      "example_en": "How about going to the cinema tonight?",
+      "required_markers": [
+        "si",
+        "on|tu|nous|vous"
+      ],
+      "register": "colloquial"
+    },
+    {
+      "key": "sans_quoi_faute_de_quoi",
+      "schema_form": "..., sans quoi / faute de quoi + PROPOSITION",
+      "name_en": "sans quoi / faute de quoi (otherwise)",
+      "meaning_en": "otherwise, failing which, or else",
+      "why_opaque": "'quoi' is a resumptive pronoun standing for the whole preceding clause, producing a sentence connector meaning 'if that does not happen'; the conditional force is entirely structural.",
+      "literal_trap": "'sans quoi l'offre expire' read as 'without what the offer expires'",
+      "cefr": "C1",
+      "pattern_tokens": [
+        "sans",
+        "quoi"
+      ],
+      "example_fr": "Signez avant lundi, sans quoi l'offre expire.",
+      "example_en": "Sign before Monday, otherwise the offer lapses.",
+      "required_markers": [
+        "sans|faute",
+        "quoi"
+      ],
+      "register": "formal"
+    },
+    {
+      "key": "si_tant_est_que",
+      "schema_form": "si tant est que + SUBJONCTIF",
+      "name_en": "si tant est que (assuming that)",
+      "meaning_en": "assuming that / if indeed it is even true that",
+      "why_opaque": "Four words with no combinable meaning ('if so much is that') form a sceptical hedge casting doubt on the presupposition, which is pure pragmatics.",
+      "literal_trap": "'si tant est qu'il ait compris' read as 'if so much is that he understood'",
+      "cefr": "C1",
+      "pattern_tokens": [
+        "si",
+        "tant",
+        "est",
+        "que|qu'"
+      ],
+      "example_fr": "Il viendra, si tant est qu'il ait compris la date.",
+      "example_en": "He'll come, assuming he even got the date right.",
+      "required_markers": [
+        "si",
+        "tant",
+        "est",
+        "que|qu'"
+      ],
+      "register": "formal"
+    },
+    {
+      "key": "dont",
+      "schema_form": "NOM + dont + PROPOSITION",
+      "name_en": "relative pronoun dont",
+      "meaning_en": "whose / of which / about which — a relative pronoun that already contains 'de'",
+      "why_opaque": "'dont' silently absorbs the preposition 'de' required by the verb or noun inside the clause, so the English equivalent varies wildly ('that I told you about', 'whose father', 'which I need') and no preposition appears in French.",
+      "literal_trap": "Treated as a plain 'that' — 'le film dont je t'ai parlé' read as 'the film that I told you'",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "POS:NOUN",
+        "dont",
+        "*<=2",
+        "POS:VERB"
+      ],
+      "example_fr": "Le film dont je t'ai parlé sort demain.",
+      "example_en": "The film I told you about comes out tomorrow.",
+      "required_markers": [
+        "dont"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "ce_dont",
+      "schema_form": "ce dont + PROPOSITION",
+      "name_en": "headless relative ce dont",
+      "meaning_en": "the thing that ... of / what ... (with a verb built with de)",
+      "why_opaque": "'ce' is an empty placeholder head and 'dont' hides the 'de' that 'avoir besoin de' requires; the English is a single word, 'what'.",
+      "literal_trap": "'ce dont j'avais besoin' read as 'this of which I had need' or 'that which I needed of'",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "ce",
+        "dont"
+      ],
+      "example_fr": "C'est exactement ce dont j'avais besoin.",
+      "example_en": "That's exactly what I needed.",
+      "required_markers": [
+        "ce",
+        "dont"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "ce_a_quoi",
+      "schema_form": "ce à quoi + PROPOSITION",
+      "name_en": "headless relative ce à quoi",
+      "meaning_en": "the thing to/about which ... / what ... (with a verb built with à)",
+      "why_opaque": "The choice between 'ce que', 'ce dont' and 'ce à quoi' is dictated by the preposition the inner verb takes, information that is invisible in English where all three are 'what'.",
+      "literal_trap": "'ce à quoi je pensais' read as 'this at what I was thinking'",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "ce",
+        "à",
+        "quoi"
+      ],
+      "example_fr": "Ce à quoi je pensais, c'est un voyage en train.",
+      "example_en": "What I had in mind was a train trip.",
+      "required_markers": [
+        "ce",
+        "à",
+        "quoi"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "auquel_duquel",
+      "schema_form": "NOM + auquel / à laquelle / auxquels / duquel / desquelles + PROPOSITION",
+      "name_en": "contracted relative auquel / duquel",
+      "meaning_en": "to which / of which / from which",
+      "why_opaque": "The preposition is fused into the pronoun and the pronoun agrees in gender and number with a noun that may be several words back, so the learner sees one opaque word where English has two or three.",
+      "literal_trap": "'le problème auquel nous faisons face' read as 'the problem at which we make face'",
+      "cefr": "B2",
+      "pattern_tokens": [
+        "auquel|auxquels|auxquelles|duquel|desquels|desquelles"
+      ],
+      "example_fr": "Le problème auquel nous faisons face est grave.",
+      "example_en": "The problem we are facing is a serious one.",
+      "required_markers": [
+        "auquel|auxquels|auxquelles|duquel|desquels|desquelles"
+      ],
+      "register": "neutral"
+    },
+    {
+      "key": "en_gerondif",
+      "schema_form": "en + PARTICIPE PRÉSENT (-ant)",
+      "name_en": "gérondif: en + present participle",
+      "meaning_en": "by doing / while doing / on doing — expresses means, simultaneity or condition",
+      "why_opaque": "One form covers three unrelated English readings (means, simultaneity, condition) and 'en' never means 'in' here; the subject of the gerund must be the subject of the main verb, which is why 'en tombant' can only refer to the person who got hurt.",
+      "literal_trap": "'Il s'est blessé en tombant' read as 'He hurt himself in falling' with no causal link, or 'while he was falling down'",
+      "cefr": "B1",
+      "pattern_tokens": [
+        "en",
+        "POS:PART"
+      ],
+      "example_fr": "Il s'est blessé en tombant dans l'escalier.",
+      "example_en": "He hurt himself falling down the stairs.",
+      "required_markers": [
+        "en"
+      ],
+      "register": "neutral"
+    }
+  ]
+}

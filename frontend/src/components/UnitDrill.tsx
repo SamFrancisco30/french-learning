@@ -276,6 +276,11 @@ function Drill({
               response={responses[ex.id]}
               setResponse={(r) => setResponses((prev) => ({ ...prev, [ex.id]: r }))}
               play={player.playWindow}
+              // Guarded here so keyboard submission can never do what the disabled Check
+              // button wouldn't — no empty attempts, no double submits.
+              onSubmit={() => {
+                if (!res && busy !== ex.id && isAnswered(ex, responses[ex.id])) submit(ex)
+              }}
             />
 
             {!res ? (
@@ -287,8 +292,14 @@ function Drill({
                 >
                   {busy === ex.id ? 'Checking…' : 'Check'}
                 </button>
-                {!isAnswered(ex, responses[ex.id]) && (
+                {!isAnswered(ex, responses[ex.id]) ? (
                   <span className="bar-label">answer to enable</span>
+                ) : (
+                  ex.kind === 'cloze' && (
+                    <span className="bar-label">
+                      <kbd>Enter</kbd> next blank · <kbd>Enter</kbd> on the last one checks
+                    </span>
+                  )
                 )}
               </div>
             ) : (

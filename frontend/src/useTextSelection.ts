@@ -25,7 +25,9 @@ export interface Picked {
 }
 
 const MIN_CHARS = 1
-const MAX_CHARS = 120
+// Long enough for a full sentence — the grammar feature needs whole clauses, not just
+// words. The backend caps sentence analysis at 600 chars independently.
+const MAX_CHARS = 400
 
 const SEGMENT_ATTR = 'data-off'
 

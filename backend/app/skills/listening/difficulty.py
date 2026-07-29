@@ -21,12 +21,28 @@ from ...languages import LanguageProfile
 from ...models import CEFR_LEVELS
 
 # Calibration anchors.
-SLOW_WPM_RATIO = 0.65  # <= 0.65x native baseline reads as slow//deliberate
+#
+# The lexical anchors were re-fitted after measuring 33 units of real French media
+# (learner podcasts through fast financial debate to literary theory). The original
+# 3.2-5.2 window was chosen a priori and turned out far too wide: observed mean content
+# Zipf spans only 3.97-5.05, and observed rare-word share peaks at 0.15 against a 0.30
+# saturation point. The lexical and rarity components could therefore reach only ~54% and
+# ~52% of their range, stranding ~24 of the 100 points and making C1 (>66) unreachable no
+# matter how hard the source.
+#
+# The new anchors sit just outside the observed extremes rather than exactly on them —
+# fitting tightly to 33 samples would define "hardest French" as "hardest thing measured
+# so far", which is circular and would clip genuinely harder material at 1.0.
+#
+# IMPORTANT: this is a better-spread heuristic, not a validated CEFR mapping. Real
+# calibration requires learner accuracy per unit (the Attempt table exists for exactly
+# this). Until then, treat C1/C2 labels as ordering hints, not assessments.
+SLOW_WPM_RATIO = 0.65  # <= 0.65x native baseline reads as slow/deliberate
 FAST_WPM_RATIO = 1.25  # >= 1.25x reads as fast
-EASY_MEAN_ZIPF = 5.2  # everyday-register vocabulary
-HARD_MEAN_ZIPF = 3.2  # specialist / literary vocabulary
+EASY_MEAN_ZIPF = 5.10  # observed max 5.05 — everyday-register vocabulary
+HARD_MEAN_ZIPF = 3.70  # observed min 3.97, with headroom below for denser material
 RARE_ZIPF_CUTOFF = 3.0  # below this a word is "rare" for a learner
-RARE_SATURATION = 0.30  # 30% rare content words is already very hard
+RARE_SATURATION = 0.18  # observed max 0.15, with headroom
 SHORT_SENTENCE = 8.0
 LONG_SENTENCE = 28.0
 

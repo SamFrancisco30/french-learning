@@ -4,7 +4,7 @@ import { ListeningPage } from './pages/ListeningPage'
 import { ReadingPage } from './pages/ReadingPage'
 import { SkillStatusPage } from './pages/SkillStatusPage'
 import { useHashRoute } from './router'
-import { SKILLS, skillFromPath } from './skills'
+import { SKILLS, skillFromPath, skillTitle } from './skills'
 import type { Language } from './types'
 
 // Anonymous, device-local identity. Replace with real auth when accounts land.
@@ -34,9 +34,12 @@ export default function App() {
       <header className="masthead">
         <div className="masthead-inner">
           <div className="brand">
-            <h1>Écoute</h1>
+            {/* Title is the current skill's name in the target language, so it tracks both
+                the page and the chosen language rather than sitting on "Écoute" (which
+                means "listening" and is wrong everywhere else). */}
+            <h1 lang={language}>{skillTitle(skill, language)}</h1>
             <span className="tagline">
-              {active ? active.name_native : 'Français'} · from authentic media
+              {active ? active.name_native : language} · {skill.label.toLowerCase()}
             </span>
           </div>
 

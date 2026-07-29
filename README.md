@@ -189,6 +189,88 @@ falls back to headwords — fine for nouns and compounds, but `mis` no longer re
 `mettre`, so inflected verbs stop matching in unseen text. Degraded, not broken; the
 response reports which lemmatizer was used.
 
+## Sentence grammar
+
+Select a whole sentence and the popup explains its **constructions** — patterns whose
+meaning isn't recoverable from the words, which is the case where knowing every word
+still leaves you stuck. `il n'y a pas que le travail` reads word-by-word as "there is not
+that work", which is close to the opposite of "work isn't the only thing".
+
+Each construction shows its schematic form, what it means, **the wrong reading you'd
+arrive at word-by-word**, and what it means in this particular sentence. Then a practice
+item: an English sentence to render in French using that structure.
+
+### Detection is a pattern problem; explanation is a language problem
+
+The two are deliberately split. A model asked to *find* constructions hallucinates
+confidently — it will announce `ne ... que` in any sentence containing both words. So
+detection is 99 deterministic token patterns in
+[`lexicon/data/fr_constructions.json`](backend/app/lexicon/data/fr_constructions.json),
+and the model receives that list and explains only what it means *here*. A side benefit:
+the popup names the construction instantly, and the explanation arrives after.
+
+The pattern DSL, in `lexicon/constructions.py`:
+
+| step | meaning |
+|------|---------|
+| `ne\|n'` | literal alternatives; the token must equal one |
+| `*<=6` | a gap of up to 6 intervening tokens |
+| `*<=5!pas\|plus` | …with those tokens **barred** from the gap |
+| `POS:INF` | part-of-speech constraint (needs spaCy) |
+| `!POS:VERB\|AUX@<=2` | zero-width: no verb within the next 2 tokens |
+| `!ça\|cela` | zero-width: the next token isn't one of these |
+| `@,` | zero-width: a comma sits just before here |
+
+The last four exist because of one specific failure. `["ne", "*<=6", "que"]` also fires on
+*"je ne pense pas que ce soit vrai"*, where `que` is a complementizer, not restrictive
+"only" — and telling a learner their sentence contains a construction it doesn't is the
+worst thing this feature can do. The distinctions needed were: bar negation words from the
+gap; require that no verb follows `que` (a complementizer introduces a clause, restrictive
+`que` introduces a noun phrase); and for the correlative `plus …, plus …`, require the
+clause-break comma that separates it from *"plus de temps et plus d'argent"*.
+
+Tokenization keeps elided prefixes as their own token *with* the apostrophe, so `n'y a pas`
+is `["n'", "y", "a", "pas"]` and a pattern can name `n'` precisely.
+
+### Quality gates
+
+Two suites, both required to pass:
+
+* **self-consistency** — every construction must match its own documented example. 99/99.
+* **adversarial** — 51 innocent sentences that must *not* match, from an agent tasked with
+  breaking the patterns. 51/51.
+  See [`tests/negative_constructions.json`](backend/tests/negative_constructions.json).
+
+23 curated constructions were **dropped** rather than shipped: one that can't match its own
+example will never fire correctly, and one that fires on innocent sentences teaches
+something false. Precision over coverage, the same rule the expression extractor follows.
+
+### Practice grading keeps two signals apart
+
+Free translation has many correct answers, so exact matching is useless and an
+unconstrained judge is either a pushover or a pedant. But one thing *can* be checked
+exactly — whether the construction was used:
+
+1. **Structure** — deterministic, from `required_markers`. Free, exact, no model opinion.
+2. **Meaning and grammar** — a judge, told explicitly that it is *not* judging the
+   construction (checked precisely elsewhere) and *not* judging accents or typos.
+
+Narrowing the judge to one question is what keeps it honest. And keeping the signals
+separate is what lets the feedback say the most useful thing it can:
+
+> **Good French — but it avoids il n'y a pas que X**
+> ✗ missing `qu'/que` · ✓ meaning and grammar fine
+
+A single blended score could never express that. Diacritic slips and one-character typos
+are credited with a note, matching the cloze grader.
+
+### Cost
+
+`POST /api/sentence` is one model call, cached by sentence, so re-selecting is instant.
+Deliberately *not* precomputed at ingest, unlike expressions: most sentences are never
+selected, so precomputing every sentence of every unit would pay for analysis nobody reads.
+Construction detection itself is free and needs no key.
+
 ## Layout
 
 ```

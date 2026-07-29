@@ -27,6 +27,8 @@ from ..languages import get_language
 from ..llm.openai_client import LLMError, StructuredLLM
 from ..models import Expression, ListeningUnit
 from .anchor import find_span, sentence_around, sentence_bounds, snap_to_words
+from .constructions import find_constructions
+from .sentence import is_sentence_selection
 from .lemmas import (
     lemma_proximity,
     locate_lemmas_near,
@@ -269,7 +271,17 @@ def resolve_selection(
 
     audio_start, audio_end = _audio_window(unit, text, start, end)
 
+    # Sentence-level constructions. The matcher is deterministic and free, so these come
+    # back with the lookup itself — the popup can name "ne ... que" before any model call.
+    # The fuller explanation and practice come from POST /api/sentence.
+    is_sentence = is_sentence_selection(selection, lang)
+    construction_hits = (
+        [h.to_dict() for h in find_constructions(selection, lang.code)] if is_sentence else []
+    )
+
     return {
+        "is_sentence": is_sentence,
+        "constructions": construction_hits,
         "language": lang.code,
         "selection": selection,
         "char_start": start,

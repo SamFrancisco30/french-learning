@@ -195,6 +195,10 @@ export interface LookupResult {
   /** Original-video timeline, null when not locatable in the audio. */
   audio_start_s: number | null
   audio_end_s: number | null
+  /** True when the selection is long enough to warrant sentence analysis. */
+  is_sentence: boolean
+  /** Deterministic matches — arrive with the lookup, no extra round trip. */
+  constructions: ConstructionHit[]
   word: WordGloss
   expressions: ExpressionHit[]
   source: 'precomputed' | 'cache' | 'live' | 'offline' | 'error'
@@ -222,4 +226,78 @@ export interface SavedVocab {
   zipf: number | null
   reps: number
   due_at: string | null
+}
+
+// ---------------------------------------------------------------- sentence grammar
+
+export interface ConstructionHit {
+  key: string
+  schema_form: string
+  name_en: string
+  meaning_en: string
+  why_opaque: string
+  literal_trap: string | null
+  cefr: string
+  example_fr: string
+  example_en: string
+  register_note: string
+  char_start: number
+  char_end: number
+  marker_spans: number[][]
+}
+
+export interface Structure {
+  key: string
+  schema_form: string
+  name_en: string
+  meaning_en: string
+  why_opaque: string
+  literal_trap: string | null
+  in_this_sentence: string
+  quote: string
+  cefr: string
+  char_start: number
+  char_end: number
+  marker_spans: number[][]
+  /** pattern = matched deterministically; llm = model-proposed, less certain. */
+  source: 'pattern' | 'llm'
+}
+
+export interface Practice {
+  construction_key: string
+  schema_form: string
+  prompt_en: string
+  hint_en: string | null
+  required_markers: string[]
+}
+
+export interface SentenceAnalysis {
+  text: string
+  translation_en: string
+  register_note: string | null
+  structures: Structure[]
+  practices: Practice[]
+  notes: string | null
+  source: string
+}
+
+export interface PracticeCheck {
+  correct: boolean
+  score: number
+  headline: string
+  structure: {
+    checked: boolean
+    used: boolean
+    missing_markers: string[]
+    schema_form: string | null
+  }
+  meaning_ok: boolean | null
+  grammar_ok: boolean | null
+  issues: { fragment: string; problem: string; fix: string }[]
+  corrected_fr: string | null
+  note_en: string | null
+  tolerance: string | null
+  reference_fr: string
+  better_than_reference: boolean
+  judged: boolean
 }

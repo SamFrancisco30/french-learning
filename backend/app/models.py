@@ -311,6 +311,37 @@ class Expression(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class SentenceAnalysis(Base):
+    """Cached grammar analysis of one selected sentence.
+
+    Not precomputed at ingest, unlike expressions. Expressions need to exist before any
+    click so known spans can be underlined, and word glosses repeat constantly so caching
+    pays immediately. Sentence analysis is neither: the learner selects a specific sentence
+    deliberately, most sentences are never selected, and precomputing every sentence of
+    every unit would pay for analysis nobody reads. So it is generated on demand and cached
+    by sentence, which makes a re-selection instant.
+    """
+
+    __tablename__ = "sentence_analyses"
+    __table_args__ = (UniqueConstraint("language", "text_key", name="uq_sentence_lookup"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    language: Mapped[str] = mapped_column(String(8), index=True)
+    text_key: Mapped[str] = mapped_column(String(64))
+    text: Mapped[str] = mapped_column(Text)
+
+    translation_en: Mapped[str] = mapped_column(Text)
+    register: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    # [{key, schema_form, name_en, meaning_en, why_opaque, literal_trap,
+    #   in_this_sentence, char_start, char_end, marker_spans, cefr, source}]
+    structures: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    # [{construction_key, schema_form, prompt_en, reference_fr, alternatives, hint_en}]
+    practices: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hits: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class GlossCache(Base):
     """Memoized single-word / free-phrase translations.
 

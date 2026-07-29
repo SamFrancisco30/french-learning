@@ -70,3 +70,15 @@ export const lexicon = {
     learner_key?: string
   }) => post<import('./types').SavedVocab>('/api/vocab', body),
 }
+
+export const grammar = {
+  sentence: (language: string, text: string) =>
+    post<import('./types').SentenceAnalysis>('/api/sentence', { language, text }),
+
+  checkPractice: (body: {
+    language: string
+    sentence: string
+    practice_index: number
+    answer: string
+  }) => post<import('./types').PracticeCheck>('/api/practice/check', body),
+}

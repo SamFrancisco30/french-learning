@@ -14,6 +14,13 @@ export interface Skill {
   label: string
   /** Chinese label, matching the planning notes this was specced from. */
   native: string
+  /**
+   * The skill's name in each target language, shown as the page title.
+   * "Écoute" literally means listening, so a fixed title would be wrong on every
+   * page but one — the title has to follow both the skill and the chosen language.
+   * Keyed by language code; falls back to `label` for an unlisted language.
+   */
+  titles: Record<string, string>
   status: SkillStatus
   /** One line for the page header. */
   blurb: string
@@ -31,6 +38,7 @@ export const SKILLS: Skill[] = [
     route: '/listening',
     label: 'Listening',
     native: '听力',
+    titles: { fr: 'Écoute', ru: 'Аудирование', zh: '听力' },
     status: 'live',
     blurb:
       'Authentic media turned into calibrated comprehension practice — cloze, multiple ' +
@@ -44,6 +52,7 @@ export const SKILLS: Skill[] = [
     route: '/dictation',
     label: 'Dictation',
     native: '听写',
+    titles: { fr: 'Dictée', ru: 'Диктант', zh: '听写' },
     status: 'partial',
     blurb:
       'Write down what you hear. Word-level dictation works today through the listening ' +
@@ -66,6 +75,7 @@ export const SKILLS: Skill[] = [
     route: '/reading',
     label: 'Reading',
     native: '阅读',
+    titles: { fr: 'Lecture', ru: 'Чтение', zh: '阅读' },
     status: 'partial',
     blurb:
       'Read any French text with expression-aware lookup. Select a word for its meaning ' +
@@ -87,6 +97,7 @@ export const SKILLS: Skill[] = [
     route: '/writing',
     label: 'Writing',
     native: '写作',
+    titles: { fr: 'Écriture', ru: 'Письмо', zh: '写作' },
     status: 'none',
     blurb:
       'Produce French and get it corrected. Not built — it needs free-text grading, which ' +
@@ -109,6 +120,7 @@ export const SKILLS: Skill[] = [
     route: '/speaking',
     label: 'Speaking',
     native: '口语',
+    titles: { fr: 'Parole', ru: 'Говорение', zh: '口语' },
     status: 'none',
     blurb:
       'Say it out loud and get pronunciation feedback. The heaviest module — it needs ' +
@@ -132,4 +144,9 @@ export const SKILL_BY_KEY = Object.fromEntries(SKILLS.map((s) => [s.key, s]))
 
 export function skillFromPath(segments: string[]): Skill {
   return SKILL_BY_KEY[segments[0] ?? ''] ?? SKILLS[0]
+}
+
+/** The skill's name in the target language, e.g. Écoute / Dictée / Lecture for French. */
+export function skillTitle(skill: Skill, language: string): string {
+  return skill.titles[language] ?? skill.label
 }

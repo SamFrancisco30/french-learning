@@ -193,6 +193,10 @@ class LookupOut(BaseModel):
     char_start: int
     char_end: int
     context: str
+    # True when the selection is long enough to warrant sentence analysis.
+    is_sentence: bool = False
+    # Deterministic construction matches — free and instant, unlike POST /api/sentence.
+    constructions: list[ConstructionHitOut] = Field(default_factory=list)
     # Original-video timeline; null when the selection can't be located in the audio.
     audio_start_s: float | None = None
     audio_end_s: float | None = None
@@ -230,3 +234,102 @@ class VocabItemOut(BaseModel):
     zipf: float | None
     reps: int
     due_at: datetime | None
+
+
+# ---------------------------------------------------------------- sentence grammar
+
+
+class ConstructionHitOut(BaseModel):
+    key: str
+    schema_form: str
+    name_en: str
+    meaning_en: str
+    why_opaque: str
+    literal_trap: str | None = None
+    cefr: str
+    example_fr: str
+    example_en: str
+    register_note: str
+    char_start: int
+    char_end: int
+    marker_spans: list[list[int]] = Field(default_factory=list)
+
+
+class StructureOut(BaseModel):
+    key: str
+    schema_form: str
+    name_en: str
+    meaning_en: str
+    why_opaque: str
+    literal_trap: str | None = None
+    in_this_sentence: str
+    quote: str = ""
+    cefr: str
+    char_start: int = 0
+    char_end: int = 0
+    marker_spans: list[list[int]] = Field(default_factory=list)
+    # pattern = found by the deterministic matcher; llm = proposed by the model, less certain
+    source: str = "pattern"
+
+
+class PracticeOut(BaseModel):
+    construction_key: str
+    schema_form: str = ""
+    prompt_en: str
+    hint_en: str | None = None
+    required_markers: list[str] = Field(default_factory=list)
+    # reference_fr and alternatives are withheld until the learner answers.
+
+
+class SentenceIn(BaseModel):
+    language: str = "fr"
+    text: str = Field(min_length=1, max_length=600)
+    refresh: bool = False
+
+
+class SentenceOut(BaseModel):
+    text: str
+    translation_en: str
+    register_note: str | None = None
+    structures: list[StructureOut] = Field(default_factory=list)
+    practices: list[PracticeOut] = Field(default_factory=list)
+    notes: str | None = None
+    source: str
+
+
+class PracticeCheckIn(BaseModel):
+    language: str = "fr"
+    # The sentence the practice came from, so the reference can be looked up server-side
+    # rather than trusted from the client.
+    sentence: str = Field(min_length=1, max_length=600)
+    practice_index: int = Field(ge=0, le=9)
+    answer: str = Field(min_length=1, max_length=400)
+
+
+class PracticeStructureOut(BaseModel):
+    checked: bool
+    used: bool
+    missing_markers: list[str] = Field(default_factory=list)
+    schema_form: str | None = None
+
+
+class PracticeIssueOut(BaseModel):
+    fragment: str
+    problem: str
+    fix: str
+
+
+class PracticeCheckOut(BaseModel):
+    correct: bool
+    score: float
+    headline: str
+    structure: PracticeStructureOut
+    meaning_ok: bool | None = None
+    grammar_ok: bool | None = None
+    issues: list[PracticeIssueOut] = Field(default_factory=list)
+    corrected_fr: str | None = None
+    note_en: str | None = None
+    tolerance: str | None = None
+    reference_fr: str
+    better_than_reference: bool = False
+    judged: bool

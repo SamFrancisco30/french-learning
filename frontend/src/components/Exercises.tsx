@@ -10,13 +10,18 @@ export interface ExerciseProps {
   setResponse: (r: unknown) => void
   /** Plays a window in ORIGINAL-video seconds; the player handles the clip offset. */
   play: (from: number, to: number, loop?: boolean) => void
+  /**
+   * Submit this exercise. Already guarded by the caller for "answered, not busy, not
+   * already submitted", so components can call it on Enter without re-checking.
+   */
+  onSubmit?: () => void
 }
 
 const LETTERS = 'ABCDEFGH'
 
 /* ------------------------------------------------------------------ cloze */
 
-function Cloze({ ex, result, response, setResponse, play }: ExerciseProps) {
+function Cloze({ ex, result, response, setResponse, play, onSubmit }: ExerciseProps) {
   const text = ex.payload.text ?? ''
   const blanks = useMemo(
     () => [...(ex.payload.blanks ?? [])].sort((a, b) => a.char_start - b.char_start),
@@ -35,6 +40,25 @@ function Cloze({ ex, result, response, setResponse, play }: ExerciseProps) {
     const next = [...values]
     next[i] = v
     setResponse(next)
+  }
+
+  // Enter advances to the next blank; Enter on the last one submits. Tab still works
+  // natively — this is the addition that makes the whole exercise keyboard-only, so a
+  // learner can type through a passage without reaching for the mouse.
+  const inputs = useRef<(HTMLInputElement | null)[]>([])
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, i: number) => {
+    if (e.key !== 'Enter') return
+    e.preventDefault() // never insert a newline or trigger implicit form submission
+    const back = e.shiftKey
+    if (!back && i === blanks.length - 1) {
+      onSubmit?.()
+      return
+    }
+    const target = inputs.current[i + (back ? -1 : 1)]
+    if (target) {
+      target.focus()
+      target.select() // so revisiting a filled blank overwrites rather than appends
+    }
   }
 
   const nodes: ReactNode[] = []
@@ -61,13 +85,16 @@ function Cloze({ ex, result, response, setResponse, play }: ExerciseProps) {
       <span className="blank-wrap" key={`b${i}`}>
         <span className="blank-num">{i + 1}</span>
         <input
+          ref={(el) => {
+            inputs.current[i] = el
+          }}
           className={`cloze-input ${cls}`}
           style={{ width: `${Math.max(6, b.length + 2)}ch` }}
           value={values[i] ?? ''}
           onChange={(e) => set(i, e.target.value)}
+          onKeyDown={(e) => onKeyDown(e, i)}
           disabled={!!result}
-          placeholder={'·'.repeat(Math.min(b.length, 12))}
-          aria-label={`Blank ${i + 1}`}
+          aria-label={`Blank ${i + 1} of ${blanks.length}`}
           spellCheck={false}
           autoComplete="off"
         />

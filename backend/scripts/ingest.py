@@ -214,6 +214,67 @@ def search(
     console.print(table)
 
 
+@app_cli.command("rescore")
+def rescore(
+    dry_run: bool = typer.Option(False, help="Show what would change without writing"),
+) -> None:
+    """Recompute difficulty for every stored unit and lesson.
+
+    Difficulty is derived purely from stored text and duration, so recalibrating the model
+    costs nothing — no ASR, no LLM. Run this after changing the anchors in
+    skills/listening/difficulty.py.
+    """
+    from collections import Counter
+
+    from app.languages import get_language
+    from app.skills.listening import difficulty as diff
+
+    init_db()
+    moved = 0
+    before_levels: Counter[str] = Counter()
+    after_levels: Counter[str] = Counter()
+
+    with session_scope() as db:
+        lessons = db.query(Lesson).order_by(Lesson.id).all()
+        for lesson in lessons:
+            lang = get_language(lesson.language)
+            reports = []
+            for u in lesson.units:
+                old_cefr, old_score = u.cefr, u.difficulty_score or 0.0
+                r = diff.analyze(u.text, u.duration_s, lang)
+                reports.append(r)
+                before_levels[old_cefr or "?"] += 1
+                after_levels[r.cefr] += 1
+                if old_cefr != r.cefr:
+                    moved += 1
+                    console.print(
+                        f"  unit {lesson.id}/{u.idx}: [dim]{old_cefr} ({old_score:.0f})[/dim]"
+                        f" → [cyan]{r.cefr} ({r.score:.0f})[/cyan]"
+                    )
+                if not dry_run:
+                    u.cefr, u.difficulty_score, u.difficulty_detail = (
+                        r.cefr,
+                        r.score,
+                        r.to_dict(),
+                    )
+            if reports:
+                score, cefr = diff.aggregate(reports)
+                if not dry_run:
+                    lesson.difficulty_score, lesson.cefr = score, cefr
+        if dry_run:
+            db.rollback()
+
+    table = Table(title="unit level distribution")
+    for col in ("level", "before", "after"):
+        table.add_column(col)
+    for lvl in ("A1", "A2", "B1", "B2", "C1", "C2"):
+        table.add_row(lvl, str(before_levels.get(lvl, 0)), str(after_levels.get(lvl, 0)))
+    console.print(table)
+    console.print(
+        f"{moved} unit(s) changed band" + ("  [yellow](dry run — nothing written)[/yellow]" if dry_run else "")
+    )
+
+
 @app_cli.command("annotate")
 def annotate(
     lesson_id: int | None = typer.Option(None, help="Only this lesson; omit for all"),

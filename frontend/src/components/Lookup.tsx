@@ -9,8 +9,15 @@ import {
   type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { lexicon } from '../api'
-import type { ExpressionHit, LookupResult } from '../types'
+import { grammar, lexicon } from '../api'
+import type {
+  ConstructionHit,
+  ExpressionHit,
+  LookupResult,
+  Practice,
+  PracticeCheck,
+  SentenceAnalysis,
+} from '../types'
 import { useTextSelection, type Picked } from '../useTextSelection'
 
 /* ------------------------------------------------------------------ context */
@@ -361,6 +368,14 @@ function Popup({
             </div>
           )}
 
+          {result.is_sentence && (
+            <SentenceSection
+              sentence={result.selection}
+              language={language}
+              constructions={result.constructions}
+            />
+          )}
+
           {others.length > 0 && (
             <div className="tr-others">
               <span className="tr-senses-label">also part of</span>
@@ -472,6 +487,242 @@ export function SelectableText({
   return (
     <div ref={ref} className={`selectable ${className}`} lang={lang}>
       {nodes}
+    </div>
+  )
+}
+
+
+/* ------------------------------------------------------------------ sentence grammar */
+
+/**
+ * Sentence-level grammar, in two waves.
+ *
+ * The constructions arrive with the lookup itself — they come from the deterministic
+ * matcher, so naming "il n'y a pas que X" costs nothing and appears immediately. The
+ * translation, the sentence-specific reading and the practice item need a model call, so
+ * they fill in after. That ordering is deliberate: the learner sees *what* the structure is
+ * without waiting, and the explanation catches up.
+ */
+function SentenceSection({
+  sentence,
+  language,
+  constructions,
+}: {
+  sentence: string
+  language: string
+  constructions: ConstructionHit[]
+}) {
+  const [analysis, setAnalysis] = useState<SentenceAnalysis | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let live = true
+    setAnalysis(null)
+    setLoading(true)
+    setFailed(false)
+    grammar
+      .sentence(language, sentence)
+      .then((a) => live && setAnalysis(a))
+      .catch(() => live && setFailed(true))
+      .finally(() => live && setLoading(false))
+    return () => {
+      live = false
+    }
+  }, [sentence, language])
+
+  // Prefer the analysed structures (they carry the sentence-specific reading); fall back to
+  // the raw matcher hits so something useful shows even if the model call fails.
+  const structures = analysis?.structures ?? []
+  const showing = structures.length
+    ? structures
+    : constructions.map((c) => ({ ...c, in_this_sentence: '', source: 'pattern' as const }))
+
+  return (
+    <div className="tr-sentence">
+      <div className="tr-senses-label">Sentence</div>
+
+      {analysis?.translation_en ? (
+        <div className="tr-translation">{analysis.translation_en}</div>
+      ) : loading ? (
+        <div className="tr-loading">Translating…</div>
+      ) : failed ? (
+        <div className="tr-error">Couldn't analyse this sentence.</div>
+      ) : null}
+
+      {showing.length === 0 && !loading && (
+        <div className="tr-note">No fixed structures detected — this sentence is built plainly.</div>
+      )}
+
+      {showing.map((st) => (
+        <div className={`tr-struct ${st.source === 'llm' ? 'is-proposed' : ''}`} key={st.key}>
+          <div className="tr-struct-top">
+            <span className="tr-schema">{st.schema_form}</span>
+            <span className="tr-kind">{st.cefr}</span>
+            {st.source === 'llm' && (
+              <span className="tr-kind tr-split" title="Proposed by the model, not pattern-matched">
+                unverified
+              </span>
+            )}
+          </div>
+          <div className="tr-struct-name">{st.name_en}</div>
+          <div className="tr-struct-meaning">{st.meaning_en}</div>
+          {st.literal_trap && (
+            <div className="tr-trap">
+              <span className="tr-trap-label">word-by-word you'd read</span> {st.literal_trap}
+            </div>
+          )}
+          {st.why_opaque && <div className="tr-why">{st.why_opaque}</div>}
+          {'in_this_sentence' in st && st.in_this_sentence && (
+            <div className="tr-here">
+              <span className="tr-trap-label">here</span> {st.in_this_sentence}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {(analysis?.practices ?? []).map((p, i) => (
+        <PracticeBox
+          key={`${p.construction_key}-${i}`}
+          practice={p}
+          index={i}
+          sentence={sentence}
+          language={language}
+        />
+      ))}
+    </div>
+  )
+}
+
+/** Produce the construction, don't just read about it. */
+function PracticeBox({
+  practice,
+  index,
+  sentence,
+  language,
+}: {
+  practice: Practice
+  index: number
+  sentence: string
+  language: string
+}) {
+  const [answer, setAnswer] = useState('')
+  const [result, setResult] = useState<PracticeCheck | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [showHint, setShowHint] = useState(false)
+
+  const submit = async () => {
+    if (!answer.trim() || busy) return
+    setBusy(true)
+    try {
+      setResult(
+        await grammar.checkPractice({
+          language,
+          sentence,
+          practice_index: index,
+          answer,
+        }),
+      )
+    } catch {
+      setResult(null)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const tone = !result ? '' : result.correct ? 'correct' : result.score > 0 ? 'partial' : 'wrong'
+
+  return (
+    <div className={`tr-practice ${tone}`}>
+      <div className="tr-practice-head">
+        <span className="tr-senses-label">Your turn</span>
+        {practice.schema_form && <span className="tr-schema sm">{practice.schema_form}</span>}
+      </div>
+      <div className="tr-practice-prompt">{practice.prompt_en}</div>
+
+      <textarea
+        className="tr-practice-input"
+        value={answer}
+        onChange={(e) => setAnswer(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            void submit()
+          }
+        }}
+        placeholder="Écrivez-le en français…"
+        disabled={!!result}
+        rows={2}
+        spellCheck={false}
+        lang={language}
+      />
+
+      {!result ? (
+        <div className="tr-practice-actions">
+          <button className="tr-btn" onClick={submit} disabled={busy || !answer.trim()}>
+            {busy ? 'Checking…' : 'Check'}
+          </button>
+          {practice.hint_en && (
+            <button className="tr-btn" onClick={() => setShowHint((h) => !h)}>
+              {showHint ? 'hide hint' : 'hint'}
+            </button>
+          )}
+          {showHint && practice.hint_en && <div className="tr-hint">{practice.hint_en}</div>}
+        </div>
+      ) : (
+        <div className="tr-practice-result">
+          <div className="tr-practice-headline">{result.headline}</div>
+
+          {/* The two signals stay separate — "correct French that dodges the pattern" is the
+              most useful thing this can say, and a single score could not express it. */}
+          {result.structure.checked && (
+            <div className={`tr-signal ${result.structure.used ? 'ok' : 'no'}`}>
+              {result.structure.used
+                ? `✓ used ${result.structure.schema_form ?? 'the structure'}`
+                : `✗ missing ${result.structure.missing_markers.join(', ') || 'the structure'}`}
+            </div>
+          )}
+          {result.meaning_ok !== null && (
+            <div className={`tr-signal ${result.meaning_ok && result.grammar_ok ? 'ok' : 'no'}`}>
+              {result.meaning_ok && result.grammar_ok
+                ? '✓ meaning and grammar fine'
+                : result.meaning_ok
+                  ? '~ right idea, grammar off'
+                  : '✗ meaning is off'}
+            </div>
+          )}
+
+          {result.issues.map((iss) => (
+            <div className="tr-issue" key={iss.fragment + iss.problem}>
+              <s>{iss.fragment}</s> → <b lang={language}>{iss.fix}</b>
+              <div className="tr-why">{iss.problem}</div>
+            </div>
+          ))}
+
+          {result.corrected_fr && (
+            <div className="tr-corrected">
+              <span className="tr-trap-label">corrected</span>{' '}
+              <span lang={language}>{result.corrected_fr}</span>
+            </div>
+          )}
+          {result.note_en && <div className="tr-why">{result.note_en}</div>}
+          <div className="tr-model-answer">
+            <span className="tr-trap-label">
+              {result.better_than_reference ? 'another way' : 'model answer'}
+            </span>{' '}
+            <span lang={language}>{result.reference_fr}</span>
+          </div>
+          <button
+            className="tr-btn"
+            onClick={() => {
+              setResult(null)
+              setAnswer('')
+            }}
+          >
+            try again
+          </button>
+        </div>
+      )}
     </div>
   )
 }

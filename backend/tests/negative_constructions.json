@@ -1,0 +1,208 @@
+{
+  "cases": [
+    {
+      "sentence": "Je ne pense pas que ce soit vrai.",
+      "must_not_match": "ne_pas_que"
+    },
+    {
+      "sentence": "Je ne pense pas que ce soit vrai. / Rien ne va plus vite que la lumière.",
+      "must_not_match": "ne_que"
+    },
+    {
+      "sentence": "Tu sais bien que je t'aime.",
+      "must_not_match": "bien_que_subj"
+    },
+    {
+      "sentence": "Il en parle souvent.",
+      "must_not_match": "en_gerondif"
+    },
+    {
+      "sentence": "Si tu viens demain, je serai content.",
+      "must_not_match": "si_imparfait_suggestion"
+    },
+    {
+      "sentence": "Je fais du sport pour maigrir.",
+      "must_not_match": "faire_inf_causative"
+    },
+    {
+      "sentence": "Il vient de Paris pour étudier.",
+      "must_not_match": "venir_de_inf"
+    },
+    {
+      "sentence": "Je vais à Paris voir ma sœur.",
+      "must_not_match": "aller_inf_futur_proche"
+    },
+    {
+      "sentence": "Je me mets à table pour manger.",
+      "must_not_match": "se_mettre_a_inf"
+    },
+    {
+      "sentence": "Je veux plus de temps et plus d'argent.",
+      "must_not_match": "plus_plus"
+    },
+    {
+      "sentence": "Il y a moins de bruit et moins de gens ici.",
+      "must_not_match": "moins_moins"
+    },
+    {
+      "sentence": "Il y a plus de travail et moins de temps.",
+      "must_not_match": "plus_moins"
+    },
+    {
+      "sentence": "C'est moins cher mais plus lourd.",
+      "must_not_match": "moins_plus"
+    },
+    {
+      "sentence": "Il gagne autant que moi et travaille autant que lui.",
+      "must_not_match": "autant_autant"
+    },
+    {
+      "sentence": "Il aime autant marcher que courir.",
+      "must_not_match": "autant_inf"
+    },
+    {
+      "sentence": "C'est vrai que c'est compliqué.",
+      "must_not_match": "cest_que_cleft"
+    },
+    {
+      "sentence": "Je ne sais pas ce que c'est.",
+      "must_not_match": "ce_qui_que_cest"
+    },
+    {
+      "sentence": "C'est un homme qui travaille beaucoup.",
+      "must_not_match": "cest_qui_cleft"
+    },
+    {
+      "sentence": "Il y a des choses que je ne comprends pas.",
+      "must_not_match": "il_y_a_que_duration"
+    },
+    {
+      "sentence": "Voilà le livre que j'ai acheté.",
+      "must_not_match": "voila_duration_que"
+    },
+    {
+      "sentence": "Ça fait le même bruit que la dernière fois.",
+      "must_not_match": "ca_fait_que_duration"
+    },
+    {
+      "sentence": "Il est à peine plus grand que moi.",
+      "must_not_match": "a_peine_que"
+    },
+    {
+      "sentence": "Il est tellement plus grand que moi.",
+      "must_not_match": "tellement_que"
+    },
+    {
+      "sentence": "Il y a tant de choses que je ne connais pas.",
+      "must_not_match": "tant_que_consequence"
+    },
+    {
+      "sentence": "Il n'est pas si vieux que ça.",
+      "must_not_match": "si_adj_que"
+    },
+    {
+      "sentence": "Il est aussi grand que moi.",
+      "must_not_match": "aussi_adj_que_concessive"
+    },
+    {
+      "sentence": "Elle est aussi douée que sa sœur. / Toute jeune que tu es, tu comprends.",
+      "must_not_match": "aussi_adj_que_subj_concessive"
+    },
+    {
+      "sentence": "Je ne suis pas si certain que ça marche.",
+      "must_not_match": "pas_si_que_ca"
+    },
+    {
+      "sentence": "C'est la faute de Pierre.",
+      "must_not_match": "faute_de"
+    },
+    {
+      "sentence": "Ce n'est pas mal de faire ça.",
+      "must_not_match": "pas_mal_de"
+    },
+    {
+      "sentence": "Il s'occupe bien des enfants.",
+      "must_not_match": "bien_des"
+    },
+    {
+      "sentence": "D'un point de vue économique, au point de vue légal c'est différent.",
+      "must_not_match": "au_point_de_que"
+    },
+    {
+      "sentence": "Il est parti sans savoir quoi dire.",
+      "must_not_match": "sans_quoi_faute_de_quoi"
+    },
+    {
+      "sentence": "Il a réussi sans compter sur l'aide de personne.",
+      "must_not_match": "sans_compter"
+    },
+    {
+      "sentence": "Il est parti sans parler de son projet.",
+      "must_not_match": "sans_parler_de"
+    },
+    {
+      "sentence": "Si ce n'est pas grave, on continue.",
+      "must_not_match": "si_ce_nest"
+    },
+    {
+      "sentence": "Ce ne serait que justice. / Ce ne serait pas que ça me dérange.",
+      "must_not_match": "ne_serait_ce_que"
+    },
+    {
+      "sentence": "Il ne part jamais sans prévenir.",
+      "must_not_match": "ne_pas_etre_sans_inf"
+    },
+    {
+      "sentence": "Je ne veux plus que tu viennes.",
+      "must_not_match": "ne_plus_que"
+    },
+    {
+      "sentence": "Il n'y a rien que je puisse faire.",
+      "must_not_match": "rien_que"
+    },
+    {
+      "sentence": "Il a beau jeu de critiquer les autres.",
+      "must_not_match": "avoir_beau_inf"
+    },
+    {
+      "sentence": "Avant que Paul parte, je ne veux rien dire.",
+      "must_not_match": "expletive_ne"
+    },
+    {
+      "sentence": "Non, plus tard je serai occupé.",
+      "must_not_match": "non_plus"
+    },
+    {
+      "sentence": "Il m'en faut plus que ça.",
+      "must_not_match": "il_faut_que_subj"
+    },
+    {
+      "sentence": "Ils ont trop bu; pour rentrer, ils ont pris un taxi.",
+      "must_not_match": "trop_pour_inf"
+    },
+    {
+      "sentence": "J'ai assez travaillé ; pour être honnête, je rentre.",
+      "must_not_match": "assez_pour_inf"
+    },
+    {
+      "sentence": "Je ne veux pas plus que trois exemplaires.",
+      "must_not_match": "pas_plus_que"
+    },
+    {
+      "sentence": "Voilà. Que veux-tu que je fasse ?",
+      "must_not_match": "voila_que_surprise"
+    },
+    {
+      "sentence": "Il y a des gens à qui je pense souvent.",
+      "must_not_match": "il_y_a_qui_presentational"
+    },
+    {
+      "sentence": "Pour lequel des deux vas-tu voter ?",
+      "must_not_match": "prep_lequel"
+    },
+    {
+      "sentence": "Il a tout en double.",
+      "must_not_match": "tout_en_gerondif"
+    }
+  ]
+}
