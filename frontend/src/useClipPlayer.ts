@@ -21,8 +21,14 @@ import type { ClipVariant } from './types'
  * avoid.
  */
 
-/** Speeds offered in the UI. 1 is the untouched original. */
-export const SPEEDS = [0.75, 0.9, 1] as const
+/**
+ * Speeds offered in the UI. 1 is the untouched original.
+ *
+ * 0.5 is qualitatively different from the others: the word stretch tops out around 1.28x, so
+ * most of the extra time has to come from the gaps between words, which run to a second or more
+ * each. That is dictation pace — a phrase, then room to think — rather than slowed speech.
+ */
+export const SPEEDS = [0.5, 0.75, 0.9, 1] as const
 
 /** Piecewise-linear lookup over `map`, reading column `from` and returning column `to`. */
 function interpolate(t: number, map: number[][], from: 0 | 1 = 0, to: 0 | 1 = 1): number {

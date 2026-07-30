@@ -247,6 +247,7 @@ def get_unit_clip(
             "natural": False,
             "word_factor": res.word_factor,
             "inserted_silence_s": res.inserted_silence_s,
+            "pauses": res.boundaries,
             "time_map": res.time_map,
         }
         store.put_bytes(map_key, json.dumps(meta).encode("utf-8"), overwrite=True)

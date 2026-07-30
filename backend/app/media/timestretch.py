@@ -67,8 +67,10 @@ MAX_SILENCE_FLOOR = 0.030
 # a plosive closure is exactly the artifact this design exists to avoid.
 MIN_SILENCE_S = 0.030
 
-# Hard per-pause ceiling used by the water-fill.
+# Per-pause ceiling used by the water-fill, and how far above the mean requirement it may be
+# lifted when even that ceiling cannot absorb the budget (see the note where `cap` is chosen).
 MAX_INSERT_S = 1.2
+CAP_HEADROOM = 1.6
 
 # The length a single added pause may reach before it stops sounding like speech and starts
 # sounding like a gap. This — not MAX_INSERT_S — decides whether the clip's silence can
@@ -296,8 +298,8 @@ def _silence_weight(length_s: float, preceding_word: str) -> float:
     return w
 
 
-def _water_fill(budget_s: float, weights: list[float]) -> list[float]:
-    """Distribute `budget_s` proportionally to `weights`, honouring MAX_INSERT_S per pause.
+def _water_fill(budget_s: float, weights: list[float], cap_s: float) -> list[float]:
+    """Distribute `budget_s` proportionally to `weights`, honouring `cap_s` per pause.
 
     Iterative because capping one pause frees its remainder for the others; without the
     redistribution the total falls short of the target duration.
@@ -314,9 +316,9 @@ def _water_fill(budget_s: float, weights: list[float]) -> list[float]:
         spent = 0.0
         for i in open_idx:
             want = alloc[i] + remaining * weights[i] / wsum
-            if want >= MAX_INSERT_S:
-                spent += MAX_INSERT_S - alloc[i]
-                alloc[i] = MAX_INSERT_S
+            if want >= cap_s:
+                spent += cap_s - alloc[i]
+                alloc[i] = cap_s
                 newly_capped.append(i)
             else:
                 spent += want - alloc[i]
@@ -424,7 +426,22 @@ def natural_slow(
     # leaves the capped remainder unspent, so the clip comes out short of the requested
     # speed — measured 1.307x against a 1.333x target on a dense clip. Redistributing to
     # the uncapped pauses closes it.
-    inserts = _water_fill(needed, weights)
+    # How long a single pause may run.
+    #
+    # MAX_INSERT_S is the ceiling at which a pause stops reading as a pause and starts reading
+    # as the audio having stopped. At 0.75x it is never reached. At 0.5x it cannot hold: the
+    # deepest word stretch only buys 1.28x, so the remaining ~0.7 of the original duration has
+    # to come out of the gaps, and a dense clip with few gaps needs seconds in each. Capping
+    # there would leave the budget unspent and quietly serve 0.61x to someone who asked for
+    # 0.5x — the clip would simply not be as slow as the button says.
+    #
+    # So the ceiling rises to what the budget needs. Choosing half speed is choosing the
+    # pauses; the alternative is stretching the words past the point where atempo smears
+    # consonants, and intelligible words separated by long gaps is the whole thesis of this
+    # design. The headroom lets the weighting still make phrase boundaries longer than
+    # mid-clause ones instead of flattening every pause to the mean.
+    cap = max(MAX_INSERT_S, needed / len(runs) * CAP_HEADROOM)
+    inserts = _water_fill(needed, weights, cap)
     reservoir = _tone_reservoir(audio, runs)
 
     # Splice the extra silence into the middle of each existing silence. Both sides are

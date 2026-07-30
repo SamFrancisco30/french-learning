@@ -240,7 +240,9 @@ function Drill({
                 title={
                   r === 1
                     ? 'Original speed'
-                    : `${r}× — words kept near normal, pauses lengthened`
+                    : r <= 0.5
+                      ? '0.5× — dictation pace: words still articulated, a second or more between them'
+                      : `${r}× — words kept near normal, pauses lengthened`
                 }
               >
                 {r}×
@@ -257,9 +259,15 @@ function Drill({
           {!player.loadingSpeed && player.variant && !player.variant.natural && (
             <>
               {' · '}
-              {player.speed}×: words at {Math.round((player.variant.word_factor ?? 1) * 100)}%,
-              {' '}
-              +{(player.variant.inserted_silence_s ?? 0).toFixed(0)}s of added pauses
+              {player.speed}×: words at {Math.round((player.variant.word_factor ?? 1) * 100)}%
+              {/* The mean gap, not just the total, because the same requested speed lands very
+                  differently depending on how much silence a clip already has: 0.3s between
+                  words on a measured talk, 2s on dense speech with few natural pauses. */}
+              {player.variant.pauses
+                ? `, ${(
+                    (player.variant.inserted_silence_s ?? 0) / player.variant.pauses
+                  ).toFixed(2)}s added at each of ${player.variant.pauses} pauses`
+                : `, +${(player.variant.inserted_silence_s ?? 0).toFixed(0)}s of added pauses`}
             </>
           )}
           {!player.loadingSpeed && player.speed === 1 &&

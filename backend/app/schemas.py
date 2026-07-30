@@ -347,6 +347,11 @@ class ClipVariantOut(BaseModel):
     natural: bool
     word_factor: float | None = None
     inserted_silence_s: float | None = None
+    # How many pauses the added time was spread across. With inserted_silence_s this gives the
+    # mean gap, which is the number that actually tells a learner what 0.5x will sound like —
+    # 316ms on one clip and 2.1s on a dense one, for the same requested speed. Optional so
+    # variants cached before this field existed still deserialize.
+    pauses: int | None = None
     # [[original_clip_s, stretched_clip_s], ...] at word starts. The client interpolates
     # through it so an exercise's replay window still lands on the right audio at 0.75x.
     time_map: list[list[float]] = Field(default_factory=list)

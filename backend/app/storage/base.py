@@ -105,7 +105,9 @@ def clip_key(provider_id: str, unit_idx: int) -> str:
 #       requested stretch factor. v1-v4 skewed the whole map by up to 2.4% on any clip whose
 #       factor search ran to its last step, which put late words past the end of the file —
 #       heard as a word that is never pronounced.
-VARIANT_VERSION = "v5"
+#   v6  the per-pause ceiling lifts when the budget cannot fit under it, so 0.5x actually
+#       reaches 0.5x instead of silently serving ~0.61x on dense speech
+VARIANT_VERSION = "v6"
 
 
 def variant_clip_key(provider_id: str, unit_idx: int, speed: float) -> str:

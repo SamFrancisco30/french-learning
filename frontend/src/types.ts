@@ -327,6 +327,8 @@ export interface ClipVariant {
   natural: boolean
   word_factor: number | null
   inserted_silence_s: number | null
+  /** Pauses the added time was spread across; with inserted_silence_s, the mean gap. */
+  pauses: number | null
   /** [[original_clip_s, stretched_clip_s], ...] at word starts. */
   time_map: number[][]
 }
