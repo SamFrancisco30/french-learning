@@ -91,15 +91,22 @@ def clip_key(provider_id: str, unit_idx: int) -> str:
     return f"clips/{provider_id}/unit_{unit_idx:03d}.m4a"
 
 
+# Bump when the slow-audio algorithm changes, so cached variants are regenerated instead
+# of serving output from the previous version.
+#   v1  silence inserted at every word boundary — audibly cut elisions like "l'emprise"
+#   v2  silence only lengthened where the waveform already has it
+VARIANT_VERSION = "v2"
+
+
 def variant_clip_key(provider_id: str, unit_idx: int, speed: float) -> str:
-    """Naturally-slowed variant, e.g. clips/ID/unit_000@0.75.m4a."""
-    return f"clips/{provider_id}/unit_{unit_idx:03d}@{speed:g}.m4a"
+    """Naturally-slowed variant, e.g. clips/ID/unit_000@0.75v2.m4a."""
+    return f"clips/{provider_id}/unit_{unit_idx:03d}@{speed:g}{VARIANT_VERSION}.m4a"
 
 
 def variant_map_key(provider_id: str, unit_idx: int, speed: float) -> str:
     """Original->stretched time map for a variant, stored beside it so replay windows
     survive a speed change without regenerating the audio."""
-    return f"clips/{provider_id}/unit_{unit_idx:03d}@{speed:g}.map.json"
+    return f"clips/{provider_id}/unit_{unit_idx:03d}@{speed:g}{VARIANT_VERSION}.map.json"
 
 
 def transcript_key(provider_id: str, backend: str) -> str:
