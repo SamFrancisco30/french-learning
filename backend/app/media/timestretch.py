@@ -69,11 +69,32 @@ MAX_INSERT_S = 1.2
 #
 # Measured on this library: a recording's natural silences sit at RMS ~0.0068 — there is
 # always breath, air and preamp noise. Padding with zeros drops the noise floor to nothing
-# and brings it back, which is audible as a pump on every added pause even when the splice
-# edges themselves are clean. Tone is taken from the very silence being extended, so level
-# and character match locally, and it is tiled by mirroring so there is no periodic buzz
-# and no discontinuity at the seams.
+# and brings it back, which is audible as a pump on every added pause.
+#
+# CRITICAL: the tone must come from genuinely silent audio, and it must be a GLOBAL
+# reservoir rather than the run being extended. A mean-RMS threshold admits runs that
+# contain quiet speech — measured, only 5 of 197 runs were true silence while 41 held
+# speech peaking at 0.086 — and mirror-tiling one of those repeats the word, which is
+# audible as the same word spoken twice. So runs are additionally gated on PEAK amplitude,
+# and the reservoir is built only from the quietest stretches in the whole clip.
 ROOM_TONE_MIN_SAMPLES = 256
+
+# A run only counts as a place to insert if its peak stays under this. Mean RMS alone is
+# not enough: a quiet syllable averages low while peaking well into speech territory.
+SILENCE_PEAK_MULTIPLE = 2.0
+SILENCE_PEAK_CEILING = 0.035
+
+# Tone is sampled only from run cores at or below this peak — genuinely noise floor.
+TONE_PEAK_CEILING = 0.020
+
+# Both the insertion test and the tone sample use a run's CORE, not the whole run.
+# A pause's edges hold the offset of the previous word and the onset of the next, so
+# whole-run peaks read as speech even when the middle is pure noise floor. Judging by the
+# core admits far more usable pauses (47 -> ~150 on the sample clip) and yields seconds of
+# tone instead of 30 ms, which matters because tiling a very short sample pulses audibly.
+RUN_CORE_FRACTION = 0.5
+# Enough tone that tiling has no perceptible period.
+TONE_TARGET_S = 1.0
 
 # When the available silence can't absorb the required time, deepen the continuous word
 # stretch instead of cutting speech. A stretch degrades gracefully; a bad splice does not.
@@ -161,6 +182,7 @@ def _find_silences(audio: np.ndarray) -> tuple[list[tuple[int, int]], float]:
     threshold = float(np.clip(floor, MIN_SILENCE_FLOOR, MAX_SILENCE_FLOOR))
 
     quiet = rms < threshold
+    peak_limit = min(SILENCE_PEAK_CEILING, threshold * SILENCE_PEAK_MULTIPLE)
     runs: list[tuple[int, int]] = []
     i = 0
     min_frames = max(1, int(MIN_SILENCE_S * 1000.0 / FRAME_MS))
@@ -170,11 +192,53 @@ def _find_silences(audio: np.ndarray) -> tuple[list[tuple[int, int]], float]:
             while j < n and quiet[j]:
                 j += 1
             if j - i >= min_frames:
-                runs.append((i * win, j * win))
+                a, b = i * win, j * win
+                # Peak gate, applied to the run's CORE: silence is inserted at the midpoint,
+                # so what matters is whether the middle is clean, not whether the edges
+                # carry the neighbouring words' onset and offset. Judging the whole run
+                # rejected most genuine pauses.
+                ca, cb = _run_core(a, b)
+                if float(np.abs(audio[ca:cb]).max()) <= peak_limit:
+                    runs.append((a, b))
             i = j
         else:
             i += 1
     return runs, threshold
+
+
+def _run_core(a: int, b: int) -> tuple[int, int]:
+    """The central portion of a silence run, away from the neighbouring words' edges."""
+    span = b - a
+    keep = max(ROOM_TONE_MIN_SAMPLES, int(span * RUN_CORE_FRACTION))
+    mid = (a + b) // 2
+    half = keep // 2
+    return max(a, mid - half), min(b, mid + half)
+
+
+def _tone_reservoir(audio: np.ndarray, runs: list[tuple[int, int]]) -> np.ndarray:
+    """Genuinely-silent audio pooled from the whole clip, for filling added pauses.
+
+    Deliberately global rather than per-run: sampling the run being extended is what let
+    quiet speech get repeated. Only the very quietest runs qualify.
+    """
+    cores = [_run_core(a, b) for a, b in runs]
+    quietest = [
+        (a, b) for a, b in cores if float(np.abs(audio[a:b]).max()) <= TONE_PEAK_CEILING
+    ]
+    if not quietest:
+        # Nothing clean enough. Take the single lowest-peak run and use its middle, which
+        # is the least likely part to hold a transient.
+        if not runs:
+            return np.zeros(0, dtype=np.float32)
+        a, b = min(runs, key=lambda r: float(np.abs(audio[r[0] : r[1]]).max()))
+        mid = (a + b) // 2
+        span = max(ROOM_TONE_MIN_SAMPLES, (b - a) // 4)
+        return audio[max(a, mid - span) : min(b, mid + span)].copy()
+    pooled = np.concatenate([audio[a:b] for a, b in quietest])
+    if pooled.size >= int(TONE_TARGET_S * SAMPLE_RATE):
+        return pooled
+    # Short pool: mirror-extend it once so tiling has a longer, non-repeating period.
+    return np.concatenate([pooled, pooled[::-1]])
 
 
 def _room_tone(source: np.ndarray, n: int) -> np.ndarray:
@@ -209,6 +273,38 @@ def _silence_weight(length_s: float, preceding_word: str) -> float:
     elif t.endswith(_SOFT_PUNCT):
         w += W_SOFT_PUNCT
     return w
+
+
+def _water_fill(budget_s: float, weights: list[float]) -> list[float]:
+    """Distribute `budget_s` proportionally to `weights`, honouring MAX_INSERT_S per pause.
+
+    Iterative because capping one pause frees its remainder for the others; without the
+    redistribution the total falls short of the target duration.
+    """
+    n = len(weights)
+    alloc = [0.0] * n
+    remaining = budget_s
+    open_idx = list(range(n))
+    for _ in range(8):
+        if remaining <= 1e-6 or not open_idx:
+            break
+        wsum = sum(weights[i] for i in open_idx) or 1.0
+        newly_capped = []
+        spent = 0.0
+        for i in open_idx:
+            want = alloc[i] + remaining * weights[i] / wsum
+            if want >= MAX_INSERT_S:
+                spent += MAX_INSERT_S - alloc[i]
+                alloc[i] = MAX_INSERT_S
+                newly_capped.append(i)
+            else:
+                spent += want - alloc[i]
+                alloc[i] = want
+        remaining -= spent
+        if not newly_capped:
+            break
+        open_idx = [i for i in open_idx if i not in newly_capped]
+    return alloc
 
 
 def natural_slow(
@@ -287,8 +383,12 @@ def natural_slow(
                 break
         weights.append(_silence_weight((s1 - s0) / SAMPLE_RATE, prev))
 
-    wsum = sum(weights) or 1.0
-    inserts = [min(MAX_INSERT_S, needed * w / wsum) for w in weights]
+    # Water-fill the time budget across pauses by weight. Simply capping each allocation
+    # leaves the capped remainder unspent, so the clip comes out short of the requested
+    # speed — measured 1.307x against a 1.333x target on a dense clip. Redistributing to
+    # the uncapped pauses closes it.
+    inserts = _water_fill(needed, weights)
+    reservoir = _tone_reservoir(audio, runs)
 
     # Splice the extra silence into the middle of each existing silence. Both sides are
     # already near zero, so there is no discontinuity and no fade is required.
@@ -300,9 +400,9 @@ def natural_slow(
         pieces.append(audio[cursor:mid])
         n_pad = int(round(pad * SAMPLE_RATE))
         if n_pad > 0:
-            # Fill with room tone lifted from this same silence, so the noise floor is
-            # continuous through the added pause.
-            pieces.append(_room_tone(audio[s0:s1], n_pad))
+            # Fill from the global quiet reservoir, never from this run — see the note on
+            # ROOM_TONE_MIN_SAMPLES for why the local sample caused doubled words.
+            pieces.append(_room_tone(reservoir, n_pad))
             insert_points.append((mid, n_pad))
         cursor = mid
     pieces.append(audio[cursor:])

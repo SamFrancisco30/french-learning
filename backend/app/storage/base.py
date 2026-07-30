@@ -95,7 +95,11 @@ def clip_key(provider_id: str, unit_idx: int) -> str:
 # of serving output from the previous version.
 #   v1  silence inserted at every word boundary — audibly cut elisions like "l'emprise"
 #   v2  silence only lengthened where the waveform already has it
-VARIANT_VERSION = "v2"
+#   v3  pauses filled with pooled room tone, and both the insertion test and the tone
+#       sample judge a run's core rather than its edges. v2 filled with digital zero (a
+#       pump on every pause) and a local sample that could contain quiet speech, which was
+#       audible as the same word spoken twice.
+VARIANT_VERSION = "v3"
 
 
 def variant_clip_key(provider_id: str, unit_idx: int, speed: float) -> str:
