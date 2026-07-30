@@ -15,6 +15,7 @@ import {
   isAnswered,
   toApiResponse,
 } from './Exercises'
+import { FollowTranscript } from './FollowTranscript'
 import { LookupProvider, SelectableText } from './Lookup'
 
 interface Props {
@@ -363,20 +364,24 @@ function Drill({
         </button>
       </div>
 
-      {showTranscript && (
-        <div className="transcript">
-          <div className="label">
-            Transcript {transcript ? `· ${transcript.asr_backend}/${transcript.asr_model}` : ''}
-            {markSpans.length > 0 && ` · ${exprSpans.length} expressions marked`}
-            {' · select any word to translate'}
+      {showTranscript &&
+        (transcript ? (
+          <FollowTranscript
+            transcript={transcript}
+            markSpans={markSpans}
+            expressionCount={exprSpans.length}
+            language={language}
+            playing={player.playing}
+            subscribe={player.subscribe}
+            toOriginal={player.toOriginal}
+            seekTo={player.seekTo}
+          />
+        ) : (
+          <div className="transcript">
+            <div className="label">Transcript</div>
+            Loading…
           </div>
-          {transcript ? (
-            <SelectableText text={transcript.text} spans={markSpans} lang={language} />
-          ) : (
-            'Loading…'
-          )}
-        </div>
-      )}
+        ))}
     </LookupProvider>
   )
 }

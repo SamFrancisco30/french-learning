@@ -254,6 +254,54 @@ def get_unit_clip(
     return ClipVariantOut(unit_id=unit.id, speed=speed, url=store.url_for(key), **meta)
 
 
+def _located_words(unit: ListeningUnit) -> list[dict]:
+    """Unit words carrying both their timing and their span in the displayed text.
+
+    The stored word list has timestamps but no character spans, because ASR emits bare
+    tokens while the display text is punctuated. Recovering the spans here — with the same
+    aligner the cloze builder uses — is what lets the client highlight the word being
+    spoken: it needs one array that answers "which characters is this moment?".
+
+    Doing it server-side matters. The client cannot re-tokenize its way to the same answer:
+    the model may emit "l'a" as one token or as "l" + "a", so any naive split would drift
+    and highlight the wrong word — silently, and worse the further into the passage you get.
+
+    Words the aligner could not place are dropped rather than sent with null spans: they
+    have nothing to highlight, and holding the previous word through them reads better than
+    a gap.
+    """
+    raw = [w for w in (unit.words_json or []) if (w.get("word") or "").strip()]
+    if not raw or not unit.text:
+        return []
+
+    from ..asr.base import Word
+    from ..skills.listening.align import align_words_to_text
+
+    spans = align_words_to_text(
+        [
+            Word(
+                text=w.get("word", ""),
+                start=float(w.get("start") or 0.0),
+                end=float(w.get("end") or 0.0),
+                probability=w.get("probability"),
+            )
+            for w in raw
+        ],
+        unit.text,
+    )
+    return [
+        {
+            "word": w.get("word", ""),
+            "start": round(float(w.get("start") or 0.0), 3),
+            "end": round(float(w.get("end") or 0.0), 3),
+            "char_start": span[0],
+            "char_end": span[1],
+        }
+        for w, span in zip(raw, spans)
+        if span is not None
+    ]
+
+
 @router.get("/units/{unit_id}/transcript", response_model=TranscriptOut)
 def get_unit_transcript(unit_id: int, db: Session = Depends(get_db)) -> TranscriptOut:
     """Full text for a unit. The UI gates this behind 'reveal transcript'."""
@@ -264,7 +312,7 @@ def get_unit_transcript(unit_id: int, db: Session = Depends(get_db)) -> Transcri
     return TranscriptOut(
         unit_id=unit.id,
         text=unit.text,
-        words=unit.words_json or [],
+        words=_located_words(unit),
         asr_backend=tr.asr_backend if tr else "unknown",
         asr_model=tr.asr_model if tr else "unknown",
     )

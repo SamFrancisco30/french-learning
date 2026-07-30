@@ -24,23 +24,26 @@ import type { ClipVariant } from './types'
 /** Speeds offered in the UI. 1 is the untouched original. */
 export const SPEEDS = [0.75, 0.9, 1] as const
 
-function interpolate(t: number, map: number[][]): number {
+/** Piecewise-linear lookup over `map`, reading column `from` and returning column `to`. */
+function interpolate(t: number, map: number[][], from: 0 | 1 = 0, to: 0 | 1 = 1): number {
   if (map.length === 0) return t
-  if (t <= map[0][0]) return map[0][1]
+  if (t <= map[0][from]) return map[0][to]
   const last = map[map.length - 1]
-  if (t >= last[0]) {
+  if (t >= last[from]) {
     // Past the final breakpoint the two timelines advance together again.
-    return last[1] + (t - last[0])
+    return last[to] + (t - last[from])
   }
   let lo = 0
   let hi = map.length - 1
   while (hi - lo > 1) {
     const mid = (lo + hi) >> 1
-    if (map[mid][0] <= t) lo = mid
+    if (map[mid][from] <= t) lo = mid
     else hi = mid
   }
-  const [ax, ay] = map[lo]
-  const [bx, by] = map[hi]
+  const ax = map[lo][from]
+  const ay = map[lo][to]
+  const bx = map[hi][from]
+  const by = map[hi][to]
   const span = bx - ax
   return span <= 0 ? ay : ay + ((t - ax) / span) * (by - ay)
 }
@@ -76,6 +79,52 @@ export function useClipPlayer(
     [clipDuration, unitStart, duration, timeMap],
   )
 
+  /** playback seconds -> original-video seconds. The inverse, read off the same map. */
+  const toOriginal = useCallback(
+    (t: number) => unitStart + interpolate(Math.max(0, t), timeMap, 1, 0),
+    [unitStart, timeMap],
+  )
+
+  // Follow-along highlighting needs the playhead far more often than the ~4 Hz that
+  // `timeupdate` fires: at 220 words/min a word lasts ~270ms, so a quarter-second update
+  // lands the highlight a whole word behind. But putting a 60 Hz value in state would
+  // re-render the entire drill on every frame. So the frame loop pushes the time to
+  // subscribers instead, and a subscriber re-renders only when its own derived value —
+  // which word is being spoken — actually changes.
+  const listeners = useRef(new Set<(t: number) => void>())
+  const emit = useCallback(() => {
+    const t = ref.current?.currentTime ?? 0
+    listeners.current.forEach((fn) => fn(t))
+  }, [])
+
+  const subscribe = useCallback((cb: (t: number) => void) => {
+    listeners.current.add(cb)
+    cb(ref.current?.currentTime ?? 0)
+    return () => {
+      listeners.current.delete(cb)
+    }
+  }, [])
+
+  // Two clocks, deliberately. The frame loop is smooth but browsers suspend
+  // requestAnimationFrame entirely in a hidden tab — measured: 0 frames in 500ms — while the
+  // audio keeps playing. On its own that leaves a learner who switches windows mid-clip
+  // returning to a highlight frozen on a word from minutes ago. `timeupdate` keeps firing
+  // there, so it drives the same emit at ~4 Hz as a floor. Subscribers are idempotent, so
+  // both clocks running at once costs nothing.
+  useEffect(() => {
+    if (!playing) {
+      emit() // settle on the final position when playback stops
+      return
+    }
+    let raf = 0
+    const tick = () => {
+      emit()
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [playing, emit])
+
   // Fetch the variant whenever the chosen speed changes. Position is preserved as a
   // fraction of the clip: the two timelines are not linearly related, and re-deriving an
   // exact offset would need the inverse map for a benefit nobody would notice.
@@ -99,6 +148,7 @@ export function useClipPlayer(
           const restore = () => {
             if (a.duration > 0) a.currentTime = fraction * a.duration
             if (wasPlaying) void a.play()
+            else emit() // paused: nothing else will move the highlight to the new position
             a.removeEventListener('loadedmetadata', restore)
           }
           if (a.readyState >= 1) restore()
@@ -113,7 +163,7 @@ export function useClipPlayer(
     return () => {
       live = false
     }
-  }, [unitId, speed])
+  }, [unitId, speed, emit])
 
   useEffect(() => {
     const el = ref.current
@@ -121,6 +171,7 @@ export function useClipPlayer(
 
     const onTime = () => {
       setPosition(el.currentTime)
+      emit()
       const limit = stopAt.current
       if (limit !== null && el.currentTime >= limit) {
         const loop = loopRange.current
@@ -151,7 +202,7 @@ export function useClipPlayer(
       el.removeEventListener('pause', onPause)
       el.removeEventListener('ended', onEnded)
     }
-  }, [src])
+  }, [src, emit])
 
   const toggle = useCallback(() => {
     const el = ref.current
@@ -176,9 +227,25 @@ export function useClipPlayer(
       stopAt.current = b
       loopRange.current = loop ? { from: a, to: b } : null
       setReplays((n) => n + 1)
+      emit()
       void el.play()
     },
-    [toPlayback, duration],
+    [toPlayback, duration, emit],
+  )
+
+  /** Jump to a moment given in ORIGINAL-video seconds and keep playing from there. */
+  const seekTo = useCallback(
+    (t: number) => {
+      const el = ref.current
+      if (!el) return
+      stopAt.current = null
+      loopRange.current = null
+      el.currentTime = toPlayback(t)
+      setPosition(el.currentTime)
+      emit()
+      void el.play()
+    },
+    [toPlayback, emit],
   )
 
   const stopLoop = useCallback(() => {
@@ -195,8 +262,9 @@ export function useClipPlayer(
       loopRange.current = null
       el.currentTime = Math.max(0, Math.min(duration, f * duration))
       setPosition(el.currentTime)
+      emit()
     },
-    [duration],
+    [duration, emit],
   )
 
   const restart = useCallback(() => {
@@ -205,8 +273,9 @@ export function useClipPlayer(
     stopAt.current = null
     loopRange.current = null
     el.currentTime = 0
+    emit()
     void el.play()
-  }, [])
+  }, [emit])
 
   return {
     ref,
@@ -221,9 +290,12 @@ export function useClipPlayer(
     replays,
     toggle,
     playWindow,
+    seekTo,
     stopLoop,
     seekFraction,
     restart,
+    subscribe,
+    toOriginal,
     isLooping: () => loopRange.current !== null,
   }
 }

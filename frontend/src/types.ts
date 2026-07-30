@@ -127,10 +127,24 @@ export interface AttemptResult {
   audio_end_s: number | null
 }
 
+/**
+ * One spoken word, located in both timelines at once: `start`/`end` are original-video
+ * seconds, `char_start`/`char_end` its span in `Transcript.text`. That pairing is what
+ * makes follow-along highlighting possible — the server aligns bare ASR tokens onto the
+ * punctuated text so the client never has to guess where a word begins.
+ */
+export interface TimedWord {
+  word: string
+  start: number
+  end: number
+  char_start: number
+  char_end: number
+}
+
 export interface Transcript {
   unit_id: number
   text: string
-  words: { word: string; start: number; end: number }[]
+  words: TimedWord[]
   asr_backend: string
   asr_model: string
 }

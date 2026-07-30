@@ -49,6 +49,11 @@ CHANNELS = 1
 # atempo starts to smear consonants, which defeats the purpose.
 DEFAULT_WORD_FACTOR = 0.9
 
+# The word stretch is deepened in these steps when the clip's own pauses cannot absorb the
+# time budget. The step count is DERIVED from the range rather than picked, because the
+# search must always end having actually decoded the factor it settled on — see the loop.
+DEEPEN_STEP = 0.02
+
 # Silence detection. The threshold adapts to each recording's own noise floor, so a quiet
 # studio clip and a noisy street interview are both handled.
 FRAME_MS = 5.0
@@ -111,6 +116,10 @@ TONE_TARGET_S = 1.0
 # When the available silence can't absorb the required time, deepen the continuous word
 # stretch instead of cutting speech. A stretch degrades gracefully; a bad splice does not.
 MIN_WORD_FACTOR = 0.78
+
+# How many deepening steps the search may take before it is standing on the floor. Derived
+# so the loop can never run out of iterations with the factor still moving.
+DEEPEN_STEPS = int(round((DEFAULT_WORD_FACTOR - MIN_WORD_FACTOR) / DEEPEN_STEP))
 
 # Weighting: longer existing silences and silences after punctuation are stronger phrase
 # boundaries, so they take more of the added time.
@@ -357,8 +366,19 @@ def natural_slow(
     # Choose the word stretch. Start at the requested factor and deepen it only if the
     # clip's own silence cannot absorb the remaining time within the per-pause cap —
     # deepening a continuous stretch is graceful, cutting speech is not.
+    #
+    # The deepening happens at the TOP of the loop, before the decode, so that every exit
+    # leaves `audio` decoded at exactly the `factor` the rest of the function believes in.
+    # Decrementing at the bottom looked equivalent and was not: when the loop ran out of
+    # iterations it stepped the factor once more without re-decoding, so the time map was
+    # built with scale=1/0.78 over audio actually stretched by 1/0.80. That is a 2.4% skew
+    # accumulating from t=0 — measured at 3.1s by the end of a 98s clip, which silently
+    # pointed every replay window at the wrong audio and put the clip's last three seconds
+    # past the end of the file entirely.
     factor = word_factor
-    for _ in range(6):
+    for step in range(DEEPEN_STEPS + 1):
+        if step:
+            factor = max(MIN_WORD_FACTOR, factor - DEEPEN_STEP)
         audio = _decode(src, factor)
         runs, threshold = _find_silences(audio)
         # Capacity is measured against a NATURAL pause, not the hard cap, so a clip with
@@ -367,10 +387,13 @@ def natural_slow(
         needed = target_duration - len(audio) / SAMPLE_RATE
         if needed <= 0 or needed <= capacity or factor <= MIN_WORD_FACTOR + 1e-6:
             break
-        factor = max(MIN_WORD_FACTOR, factor - 0.02)
 
-    scale = 1.0 / factor
-    needed = max(0.0, target_duration - len(audio) / SAMPLE_RATE)
+    # MEASURED, not assumed. atempo does not hit its requested factor exactly, and deriving
+    # the map's slope from the audio that actually exists makes the map correct by
+    # construction rather than correct only while the factor bookkeeping is right.
+    stretched_duration = len(audio) / SAMPLE_RATE
+    scale = stretched_duration / orig_duration if orig_duration > 0 else 1.0 / factor
+    needed = max(0.0, target_duration - stretched_duration)
 
     if not runs:
         # Nothing to lengthen — a wall of continuous speech. Serve the stretch alone rather
@@ -464,5 +487,19 @@ def natural_slow(
         boundaries=len(inserts),
         time_map=time_map,
     )
+
+    # The map must not describe audio that isn't there. A map running past the end of the
+    # file means every mapped time is skewed, which is inaudible in review and shows up only
+    # as a word that seems never to be spoken — so it is worth a loud line in the log.
+    if time_map and time_map[-1][1] > result.new_duration_s + 0.05:
+        log.warning(
+            "time map overruns the audio by %.3fs (map ends %.3f, audio %.3f) for %s — "
+            "replay windows will be misplaced",
+            time_map[-1][1] - result.new_duration_s,
+            time_map[-1][1],
+            result.new_duration_s,
+            src.name,
+        )
+
     log.info("natural slow %s (silence threshold %.4f)", result.summary(), threshold)
     return result

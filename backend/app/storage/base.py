@@ -101,7 +101,11 @@ def clip_key(provider_id: str, unit_idx: int) -> str:
 #       audible as the same word spoken twice.
 #   v4  time map carries word ends as well as starts, and pause length is capped at a
 #       natural 250ms (deepening the word stretch instead) rather than at the 1.2s hard cap
-VARIANT_VERSION = "v4"
+#   v5  time map slope is measured from the rendered audio instead of assumed from the
+#       requested stretch factor. v1-v4 skewed the whole map by up to 2.4% on any clip whose
+#       factor search ran to its last step, which put late words past the end of the file —
+#       heard as a word that is never pronounced.
+VARIANT_VERSION = "v5"
 
 
 def variant_clip_key(provider_id: str, unit_idx: int, speed: float) -> str:
