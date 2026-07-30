@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import { ALL, TopicArt, topicMeta } from '../topics'
+import { ALL, TopicArt, hasPhoto, topicMeta } from '../topics'
 import type { LessonDetail, LessonSummary, Progress } from '../types'
 import { fmt } from '../useClipPlayer'
 
@@ -73,8 +73,8 @@ export function LessonLibrary({
         <span>{meta.label}</span>
       </div>
 
-      <div className="topic-banner">
-        <span className="topic-art" aria-hidden="true">
+      <div className={`topic-banner ${hasPhoto(topic) ? 'has-photo' : ''}`}>
+            <span className="topic-art" aria-hidden="true">
           <TopicArt slug={topic} />
         </span>
         <span className="topic-body">

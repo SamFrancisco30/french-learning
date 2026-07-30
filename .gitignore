@@ -38,3 +38,6 @@ dist/
 Thumbs.db
 .idea/
 .vscode/
+
+# scratch dir for the topic photo pipeline (downloads + contact sheets)
+frontend/.topic-photos/

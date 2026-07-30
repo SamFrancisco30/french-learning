@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import type { LessonSummary } from '../types'
-import { ALL, TOPICS, TopicArt, topicMeta } from '../topics'
+import { ALL, TOPICS, TopicArt, hasPhoto, topicMeta } from '../topics'
 
 /**
  * The listening landing page: pick a subject, then a lesson.
@@ -62,7 +62,7 @@ export function TopicGrid({
         const range = levelRange(group)
         return (
           <button
-            className="topic-card"
+            className={`topic-card ${hasPhoto(slug) ? 'has-photo' : ''}`}
             key={slug}
             onClick={() => onOpenTopic(slug)}
             aria-label={`${meta.label} — ${group.length} lessons`}
@@ -90,11 +90,11 @@ export function TopicGrid({
 
       {groups.length > 1 && (
         <button
-          className="topic-card wide"
+          className={`topic-card wide ${hasPhoto(ALL.slug) ? 'has-photo' : ''}`}
           onClick={() => onOpenTopic(ALL.slug)}
           aria-label={`${ALL.label} — ${lessons.length} lessons`}
         >
-          <span className="topic-art" aria-hidden="true">
+            <span className="topic-art" aria-hidden="true">
             <TopicArt slug={ALL.slug} />
           </span>
           <span className="topic-body">

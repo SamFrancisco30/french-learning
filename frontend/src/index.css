@@ -158,7 +158,11 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .topic-card, .topic-banner {
   position: relative; overflow: hidden;
   display: flex; align-items: flex-end;
-  min-height: 148px;
+  /* Tall enough that the photograph has real presence above the text. A card this narrow
+     cannot do photo-beside-text: the blurb alone runs to 34ch, about 80% of the width, so a
+     side-by-side scrim would leave the picture a sliver. Text sits at the bottom over a
+     rising scrim instead, and the photograph gets the rest. */
+  min-height: 196px;
   text-align: left;
   padding: 15px 17px;
   background: var(--bg-raised);
@@ -172,28 +176,59 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .topic-card:active { transform: translateY(1px); }
 .topic-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* Span the full row when it is the last, odd card — the "Everything" tile. */
-.topic-card.wide { grid-column: 1 / -1; min-height: 118px; }
+/* Span the full row when it is the last, odd card — the "Everything" tile. Shorter, because at
+   full width the photograph has plenty of room without the height. */
+.topic-card.wide { grid-column: 1 / -1; min-height: 150px; }
 
-.topic-banner { align-items: center; min-height: 104px; margin-bottom: 16px; }
+.topic-banner { min-height: 152px; margin-bottom: 16px; }
 
-/* The artwork. Line drawings in currentColor, so the tint comes from `color` here and the
-   opacity keeps them behind the text rather than competing with it. Anchored right and
-   allowed to bleed off that edge, which is why the drawings keep their left third quiet. */
-.topic-art {
+.topic-art { position: absolute; inset: 0; pointer-events: none; }
+
+/* Base layer: the line-art motif, drawn in currentColor so the tint comes from `color` here.
+   Always present, so a card is never an empty rectangle while its photograph loads — or if the
+   photograph is missing altogether. */
+.topic-art .art-base {
   position: absolute; inset: 0;
-  color: var(--accent);
-  opacity: 0.16;
-  pointer-events: none;
+  color: var(--accent); opacity: 0.16;
 }
-.topic-art svg {
+.topic-art .art-base svg {
   position: absolute; right: 0; top: 50%; transform: translateY(-50%);
   height: 100%; width: auto; min-width: 62%;
 }
-.topic-card:hover .topic-art { opacity: 0.26; }
+.topic-card:hover .topic-art .art-base { opacity: 0.26; }
 
-/* A scrim so the title stays readable over the busiest part of any drawing. */
-.topic-card::before, .topic-banner::before {
+/* Photograph, over the base. Every one arrives with its own colour temperature, so they are all
+   pulled toward the app's cool near-white palette rather than each shouting its own. */
+.topic-art .art-photo {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%; object-fit: cover;
+  filter: saturate(0.5) contrast(0.94) brightness(1.05);
+  transition: filter .22s ease, transform .35s ease;
+}
+.topic-card:hover .topic-art .art-photo {
+  filter: saturate(0.78) contrast(1) brightness(1);
+  transform: scale(1.04);
+}
+
+/* A scrim rising from the bottom, so the text block sits on near-solid white while the
+   photograph keeps the upper half. The stops are not decorative: the text region is scrimmed to
+   0.97+ alpha, which holds contrast against --text above WCAG AA no matter how dark or busy the
+   photograph underneath happens to be. Verified per image by scripts/check-contrast.mjs. */
+.topic-card.has-photo::before, .topic-banner.has-photo::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(to top,
+    rgba(255, 255, 255, 0.99) 0%,
+    rgba(255, 255, 255, 0.97) 46%,
+    rgba(255, 255, 255, 0.70) 66%,
+    rgba(255, 255, 255, 0.26) 85%,
+    rgba(255, 255, 255, 0.06) 100%);
+  pointer-events: none;
+  transition: opacity .22s ease;
+}
+.topic-card.has-photo:hover::before { opacity: 0.93; }
+
+/* Line art needs far less help, and reads better with the drawing kept to the right. */
+.topic-card:not(.has-photo)::before, .topic-banner:not(.has-photo)::before {
   content: ''; position: absolute; inset: 0;
   background: linear-gradient(100deg,
     var(--bg-raised) 0%, var(--bg-raised) 34%, rgba(255, 255, 255, 0.55) 62%, transparent 100%);
@@ -208,7 +243,8 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .topic-stats { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .topic-card { transition: none; }
+  .topic-card, .topic-art.is-photo img, .topic-card.has-photo::before { transition: none; }
+  .topic-card:hover .topic-art.is-photo img { transform: none; }
 }
 
 /* ---------------- cards ---------------- */

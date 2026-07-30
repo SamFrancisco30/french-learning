@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { TOPIC_ART } from './topicArt'
+import { TOPIC_PHOTO } from './topicPhotos'
 
 /**
  * The listening library's topic taxonomy.
@@ -129,7 +130,38 @@ export function topicMeta(slug: string | null | undefined): TopicMeta {
   return { ...OTHER, slug, label: slug.replace(/_/g, ' ') }
 }
 
-/** Background art for a topic, or the neutral fallback motif. */
+/**
+ * Background for a topic card, in two stacked layers.
+ *
+ * The line-art motif is the base and the photograph sits on top. Two reasons that is better
+ * than swapping one for the other: a lazily-loaded photo renders nothing until it arrives, so a
+ * photo-only card is briefly — or, if the asset is missing, permanently — an empty rectangle;
+ * and the base layer costs nothing, since it is inline SVG that is already parsed.
+ *
+ * The photo is decorative, so its alt is empty: a screen reader announcing "photograph of
+ * shipping containers" before the word "Economics" is noise, and the card's own aria-label
+ * already says what it is. Lazy, so the subjects below the fold wait their turn.
+ */
 export function TopicArt({ slug }: { slug: string }): ReactNode {
-  return TOPIC_ART[slug] ?? TOPIC_ART.other ?? null
+  const photo = TOPIC_PHOTO[slug]
+  return (
+    <>
+      <span className="art-base">{TOPIC_ART[slug] ?? TOPIC_ART.other}</span>
+      {photo && (
+        <img
+          className="art-photo"
+          src={photo}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+        />
+      )}
+    </>
+  )
+}
+
+/** True when this topic has a photograph, so the card can pick the right scrim weight. */
+export function hasPhoto(slug: string): boolean {
+  return !!TOPIC_PHOTO[slug]
 }
