@@ -83,6 +83,22 @@ export const grammar = {
   }) => post<import('./types').PracticeCheck>('/api/practice/check', body),
 }
 
+export const dictation = {
+  /** The learner's derived level in each mode. */
+  levels: (learnerKey = 'anonymous') =>
+    get<import('./types').DictationLevel[]>(
+      `/api/dictation/levels?learner_key=${encodeURIComponent(learnerKey)}`,
+    ),
+  inventory: (language = 'fr') =>
+    get<import('./types').DictationInventory>(`/api/dictation/inventory?language=${language}`),
+  /** One item at the learner's level. `level` overrides the derived one. */
+  next: (mode: string, learnerKey = 'anonymous', language = 'fr', level?: string | null) =>
+    get<import('./types').DictationNext>(
+      `/api/dictation/next?mode=${mode}&learner_key=${encodeURIComponent(learnerKey)}` +
+        `&language=${language}${level ? `&level=${level}` : ''}`,
+    ),
+}
+
 export const clips = {
   /** Naturally-slowed variant of a unit's clip. speed 1.0 returns the original. */
   variant: (unitId: number, speed: number) =>

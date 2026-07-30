@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .db import init_db
-from .routers import attempts, ingest, lessons, lexicon
+from .routers import dictation, attempts, ingest, lessons, lexicon
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,6 +42,7 @@ app.include_router(lessons.router)
 app.include_router(attempts.router)
 app.include_router(ingest.router)
 app.include_router(lexicon.router)
+app.include_router(dictation.router)
 
 
 @app.on_event("startup")

@@ -120,6 +120,14 @@ export interface AttemptResult {
     correct_value?: unknown
     pairs?: Record<string, { given: string; expected: string; correct: boolean }>
     correct_order?: string[]
+    // dictation
+    words?: DictationWord[]
+    counts?: Record<string, number>
+    exact?: number
+    typed?: number
+    punctuation_missing?: Record<string, number>
+    punctuation_scored?: boolean
+    reference?: string
   }
   explanation: string | null
   answer: Record<string, unknown>
@@ -331,4 +339,72 @@ export interface ClipVariant {
   pauses: number | null
   /** [[original_clip_s, stretched_clip_s], ...] at word starts. */
   time_map: number[][]
+}
+
+// ---------------------------------------------------------------- dictation
+
+export type DictationMode = 'sentence' | 'paragraph'
+
+export interface DictationLevel {
+  level: string
+  mode: DictationMode
+  attempts: number
+  recent_mean: number | null
+  /** Why the level is what it is — shown to the learner, so it never feels arbitrary. */
+  reason: string
+}
+
+export interface DictationItem {
+  exercise_id: number
+  mode: DictationMode
+  prompt: string
+  cefr: string | null
+  difficulty_score: number | null
+  word_count: number | null
+  sentence_count: number | null
+  /** Original-video timeline, as everywhere else. */
+  audio_start_s: number | null
+  audio_end_s: number | null
+  unit_id: number
+  unit_start_s: number
+  unit_end_s: number
+  clip_url: string | null
+  lesson_title: string | null
+  topic: string | null
+}
+
+export interface DictationNext {
+  item: DictationItem
+  level: DictationLevel
+  /** What was actually served — differs from the target when a level has nothing left. */
+  served_level: string
+  off_level: boolean
+  repeat: boolean
+  remaining_at_level: number
+}
+
+export interface DictationInventory {
+  language: string
+  by_mode: Record<DictationMode, Record<string, number>>
+  totals: Record<DictationMode, number>
+  levels: string[]
+}
+
+/** One aligned word in a graded dictation. `expected` empty means the learner added it. */
+export interface DictationWord {
+  expected: string
+  given: string
+  verdict:
+    | 'exact'
+    | 'case'
+    | 'accent'
+    | 'typo'
+    | 'elision'
+    | 'ending'
+    | 'homophone'
+    | 'wrong'
+    | 'missing'
+    | 'added'
+  credit: number
+  note: string | null
 }

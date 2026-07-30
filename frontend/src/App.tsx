@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { api } from './api'
+import { DictationPage } from './pages/DictationPage'
 import { ListeningPage } from './pages/ListeningPage'
 import { ReadingPage } from './pages/ReadingPage'
 import { SkillStatusPage } from './pages/SkillStatusPage'
@@ -112,7 +113,9 @@ export default function App() {
 
       {skill.key === 'reading' && <ReadingPage language={language} learnerKey={key} />}
 
-      {(skill.key === 'writing' || skill.key === 'speaking' || skill.key === 'dictation') && (
+      {skill.key === 'dictation' && <DictationPage language={language} learnerKey={key} />}
+
+      {(skill.key === 'writing' || skill.key === 'speaking') && (
         <SkillStatusPage skill={skill} onGoListening={() => navigate('/listening')} />
       )}
     </div>

@@ -355,3 +355,44 @@ class ClipVariantOut(BaseModel):
     # [[original_clip_s, stretched_clip_s], ...] at word starts. The client interpolates
     # through it so an exercise's replay window still lands on the right audio at 0.75x.
     time_map: list[list[float]] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------- dictation
+
+
+class DictationLevelOut(BaseModel):
+    level: str
+    mode: str
+    attempts: int
+    recent_mean: float | None = None
+    # Shown to the learner: an adaptive level that cannot explain itself feels arbitrary.
+    reason: str
+
+
+class DictationItemOut(BaseModel):
+    exercise_id: int
+    mode: str
+    prompt: str
+    cefr: str | None
+    difficulty_score: float | None = None
+    word_count: int | None = None
+    sentence_count: int | None = None
+    # ORIGINAL-VIDEO seconds, same timeline as the listening player.
+    audio_start_s: float | None
+    audio_end_s: float | None
+    unit_id: int
+    unit_start_s: float
+    unit_end_s: float
+    clip_url: str | None = None
+    lesson_title: str | None = None
+    topic: str | None = None
+
+
+class DictationNextOut(BaseModel):
+    item: DictationItemOut
+    level: DictationLevelOut
+    # What was actually served, which can differ from the target when a level is empty.
+    served_level: str
+    off_level: bool
+    repeat: bool
+    remaining_at_level: int

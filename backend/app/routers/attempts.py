@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..languages import get_language
 from ..models import Attempt, Exercise
+from ..grading import grade
 from ..schemas import AttemptIn, AttemptOut, ProgressOut
-from ..skills.listening.grading import grade
 
 router = APIRouter(prefix="/api", tags=["attempts"])
 

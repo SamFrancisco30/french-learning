@@ -48,4 +48,44 @@ FRENCH = LanguageProfile(
     # French news/documentary narration typically runs 160-200 wpm.
     baseline_wpm=175.0,
     diacritics_significant=True,
+    # Measured on this corpus: "M." appears 3 times and bare initials 5, so both guards earn
+    # their place; the rest are here because news and lecture material reliably produces them.
+    sentence_abbreviations=frozenset(
+        """m mm mme mmes mlle mlles dr pr st ste sts stes ex av apr env art
+           no nos fig vol chap ch éd ed p pp t j.-c j.c av.j.-c""".split()
+    ),
+    terminal_abbreviations=frozenset("etc cf ibid op".split()),
+    # Ordered roughly by how often a learner trips on them. Ranked sets, not a dictionary: the
+    # grader only asks "did the learner write a different member of the same set", which is
+    # cheap and catches the confusions French dictée is actually testing.
+    homophone_groups=(
+        ("a", "à"),
+        ("ou", "où"),
+        ("et", "est", "es", "ai", "aie", "aies"),
+        ("son", "sont"),
+        ("on", "ont", "on n'"),
+        ("ce", "se", "ceux"),
+        ("ses", "ces", "c'est", "s'est", "sais", "sait", "s'en", "c'en"),
+        ("la", "là", "l'a", "l'as"),
+        ("leur", "leurs"),
+        ("du", "dû", "dus"),
+        ("sur", "sûr", "sûre"),
+        ("mais", "mes", "met", "mets", "mai", "m'es", "m'est"),
+        ("peu", "peut", "peux", "peuh"),
+        ("quand", "quant", "qu'en", "camp"),
+        ("si", "s'y", "ci", "scie"),
+        ("ni", "n'y", "nid"),
+        ("dans", "d'en", "dent"),
+        ("plutôt", "plus tôt"),
+        ("quelque", "quel que", "quelques"),
+        ("davantage", "d'avantage", "d'avantages"),
+        ("parce que", "par ce que"),
+        ("tout", "tous", "toux"),
+        ("voir", "voire"),
+        ("qu'il", "qui"),
+        ("notre", "nôtre"),
+        ("votre", "vôtre"),
+        # The -é / -er / -ez ending, the single most common French dictation error. Handled
+        # separately in the grader because it is a suffix rule, not a fixed word set.
+    ),
 )

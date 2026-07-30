@@ -52,14 +52,28 @@ class Base(DeclarativeBase):
 # --- vocabulary of string enums (kept as plain strings for SQLite friendliness) ---
 
 SKILL_LISTENING = "listening"
-SKILLS = (SKILL_LISTENING, "speaking", "writing", "reading", "dictation")
+SKILL_DICTATION = "dictation"
+SKILLS = (SKILL_LISTENING, "speaking", "writing", "reading", SKILL_DICTATION)
 
 EX_CLOZE = "cloze"
 EX_MCQ = "mcq"
 EX_TRUE_FALSE = "true_false"
 EX_VOCAB_MATCH = "vocab_match"
 EX_ORDERING = "ordering"
-EXERCISE_KINDS = (EX_CLOZE, EX_MCQ, EX_TRUE_FALSE, EX_VOCAB_MATCH, EX_ORDERING)
+# Dictation reuses the Exercise/Attempt tables rather than growing its own: an item has a prompt,
+# a withheld answer, an audio window and a CEFR level, which is exactly what an Exercise is, and
+# reusing it means attempts, scoring history and progress work with no new plumbing.
+EX_DICTATION_SENTENCE = "dictation_sentence"
+EX_DICTATION_PASSAGE = "dictation_passage"
+DICTATION_KINDS = (EX_DICTATION_SENTENCE, EX_DICTATION_PASSAGE)
+EXERCISE_KINDS = (
+    EX_CLOZE,
+    EX_MCQ,
+    EX_TRUE_FALSE,
+    EX_VOCAB_MATCH,
+    EX_ORDERING,
+    *DICTATION_KINDS,
+)
 
 CEFR_LEVELS = ("A1", "A2", "B1", "B2", "C1", "C2")
 

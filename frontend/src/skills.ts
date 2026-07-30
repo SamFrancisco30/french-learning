@@ -53,22 +53,14 @@ export const SKILLS: Skill[] = [
     label: 'Dictation',
     native: '听写',
     titles: { fr: 'Dictée', ru: 'Диктант', zh: '听写' },
-    status: 'partial',
+    status: 'live',
     blurb:
-      'Write down what you hear. Word-level dictation works today through the listening ' +
-      'module; full-sentence dictation is the missing half.',
-    progress: 60,
-    have: [
-      'Fill-in-from-audio (听音频填词) — already shipping as the cloze exercise',
-      'Level-based blank selection (根据级别) — frequency-band targeting, word bank at A1–A2',
-      'Per-blank audio replay from word-level timestamps',
-      'Diacritic- and typo-tolerant grading',
-    ],
-    need: [
-      'Full-sentence dictation (整句听写) — a free-text input over a whole segment',
-      'A word-level diff view so a learner sees exactly what they missed',
-      'Its own page: pick a segment, hear it, type it, get scored',
-    ],
+      'Hear it, type it. Sentence and paragraph length, at a level that follows your scores — ' +
+      'and unlike the listening drills, spelling counts, because homophones and verb endings ' +
+      'are the whole point of a dictée.',
+    progress: 100,
+    have: [],
+    need: [],
   },
   {
     key: 'reading',

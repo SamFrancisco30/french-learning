@@ -825,3 +825,89 @@ kbd {
 }
 .tr-issue s { color: var(--text-faint); }
 .tr-corrected, .tr-model-answer { margin-top: 7px; font-size: 13px; }
+
+/* ---------------- dictation ---------------- */
+
+.dict-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+@media (max-width: 620px) { .dict-modes { grid-template-columns: 1fr; } }
+
+.dict-mode {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
+  text-align: left; padding: 13px 15px;
+  background: var(--bg-raised); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-sm);
+  transition: border-color .14s, box-shadow .14s;
+}
+.dict-mode:hover { border-color: var(--border-hover); }
+.dict-mode.on {
+  border-color: var(--accent-border); background: var(--accent-soft);
+  box-shadow: var(--shadow-md);
+}
+.dict-mode-label { font-size: 15.5px; font-weight: 650; letter-spacing: -0.01em; }
+.dict-mode.on .dict-mode-label { color: var(--accent-ink); }
+.dict-mode-hint { font-size: 12.5px; color: var(--text-dim); }
+
+.dict-level {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px;
+  padding: 10px 14px; margin-bottom: 16px;
+  background: var(--bg-sunken); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.dict-level-main { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.dict-level-reason { font-size: 12.5px; color: var(--text-dim); }
+.dict-level-pick { display: flex; align-items: center; gap: 4px; }
+
+.dict-player {
+  display: flex; align-items: center; gap: 11px; flex-wrap: wrap;
+  padding: 12px 0 14px;
+}
+
+.dict-input {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font: inherit; font-size: 15.5px; line-height: 1.7; color: var(--text);
+  resize: vertical;
+}
+.dict-input:focus { outline: none; border-color: var(--accent); background: var(--bg-raised); }
+.dict-input:disabled { color: var(--text-dim); background: var(--bg-sunken); }
+
+/* The marked-up reference. Reading your own errors in place is what makes the correction stick,
+   so the whole passage is rendered with each word carrying its verdict. */
+.dict-diff {
+  margin: 10px 0 12px; padding: 12px 14px;
+  background: var(--bg-raised); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 15.5px; line-height: 2.1;
+}
+.dw { padding: 1px 2px; border-radius: 3px; }
+.dw + .dw { margin-left: 4px; }
+.dw.ok { color: var(--text); }
+.dw.missing { background: var(--bad-bg); color: var(--bad-ink); text-decoration: underline dotted; }
+.dw.wrong, .dw.homophone, .dw.ending { background: var(--bad-bg); color: var(--bad-ink); font-weight: 600; }
+.dw.accent, .dw.typo, .dw.elision { background: var(--warn-bg); color: var(--warn-ink); }
+.dw.added { background: var(--bg-sunken); color: var(--text-faint); text-decoration: line-through; }
+/* What the learner actually typed, shown next to what was said. */
+.dw-given { font-style: italic; opacity: .75; font-size: 13px; margin-left: 3px; }
+.dw-given::before { content: '≠'; margin-right: 2px; opacity: .6; }
+
+.dict-notes { margin: 8px 0 4px; padding-left: 18px; font-size: 13.5px; color: var(--text-dim); }
+.dict-notes li { margin-bottom: 3px; }
+.dict-notes b { color: var(--text); }
+
+.dict-tag {
+  display: inline-block; padding: 0 6px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  background: var(--bg-sunken); border: 1px solid var(--border); color: var(--text-faint);
+}
+.dict-tag.homophone, .dict-tag.ending, .dict-tag.wrong, .dict-tag.missing {
+  background: var(--bad-bg); border-color: var(--bad-border); color: var(--bad-ink);
+}
+.dict-tag.accent, .dict-tag.typo, .dict-tag.elision {
+  background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-ink);
+}
+
+.dict-counts { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 4px; }

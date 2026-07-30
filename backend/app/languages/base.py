@@ -45,6 +45,22 @@ class LanguageProfile:
     # about a diacritic-only miss rather than silently accepting it.
     diacritics_significant: bool = True
 
+    # Words that end in a full stop without ending a sentence ("M.", "Mme"), lowercased and
+    # without the stop. Used by the dictation sentence splitter — splitting "M. Dupont" into two
+    # sentences would produce a one-word dictation item and orphan the rest.
+    sentence_abbreviations: frozenset[str] = field(default_factory=frozenset)
+
+    # Abbreviations that CAN close a sentence, so a following capital is believed. The distinction
+    # is real: a title precedes a name, so "M. Dupont" continues; "etc." closes a list, so
+    # "etc. Mais" does not. Without the split those items run two sentences long.
+    terminal_abbreviations: frozenset[str] = field(default_factory=frozenset)
+
+    # Groups of words that sound alike. Dictation lives or dies on these: writing "ses" for
+    # "c'est" is not a typo, it is the actual skill being tested, and a learner who is told
+    # "homophone — you heard it right, you chose the wrong spelling" learns something that
+    # "wrong" does not teach. Each inner tuple is one confusable set.
+    homophone_groups: tuple[tuple[str, ...], ...] = ()
+
     _word_re: re.Pattern[str] = field(
         default_factory=lambda: re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*", re.UNICODE),
         repr=False,
