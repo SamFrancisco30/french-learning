@@ -48,14 +48,14 @@ const SCROLL_DISMISS_PX = 48
 export function useLookupOn(
   ref: React.RefObject<HTMLElement | null>,
   text: string,
-  { allowCrossSegment = true }: { allowCrossSegment?: boolean } = {},
+  { blockedRanges }: { blockedRanges?: number[][] } = {},
 ) {
   const ctx = useContext(LookupContext)
   const onPick = useCallback(
     (p: Picked) => ctx?.request({ text, start: p.start, end: p.end, rect: p.rect }),
     [ctx, text],
   )
-  useTextSelection(ref, onPick, { allowCrossSegment, enabled: !!ctx })
+  useTextSelection(ref, onPick, { blockedRanges, enabled: !!ctx })
   const active = ctx?.activeFor === text ? (ctx?.activeSpans ?? []) : []
   return { activeSpans: active }
 }
@@ -432,7 +432,7 @@ function normalizeSpans(spans: number[][], len: number): number[][] {
 }
 
 /** A run of text with one set of decorations. Geometry only — classes are applied later. */
-interface Piece {
+export interface TextPiece {
   start: number
   end: number
   mwe: boolean
@@ -452,6 +452,124 @@ function wordSpanAt(spans: [number, number, number][], pos: number): number {
     else return i
   }
   return -1
+}
+
+/**
+ * Cut a passage at every boundary any decoration could ever need.
+ *
+ * Shared by the transcript and the cloze passage so both produce identical markup and identical
+ * `data-off` semantics. `extraCuts` lets a caller force boundaries of its own — the cloze passes
+ * its blank edges, which guarantees no piece straddles a blank and therefore that rendering a
+ * range of pieces can never emit part of a hidden answer.
+ *
+ * Geometry does not depend on which word is currently spoken, so the result is stable across
+ * playback and only `className` changes frame to frame.
+ */
+export function buildPieces(
+  text: string,
+  {
+    spans = [],
+    words = [],
+    extraCuts = [],
+  }: {
+    spans?: number[][]
+    words?: { char_start: number; char_end: number }[]
+    extraCuts?: number[]
+  } = {},
+): TextPiece[] {
+  const marks = normalizeSpans(spans, text.length)
+
+  // Drop any span that runs backwards into its predecessor. Alignment is per-word and
+  // ascending, so an overlap means one of the two is wrong; keeping the earlier one at least
+  // keeps the sequence sane.
+  const wordSpans: [number, number, number][] = []
+  words.forEach((w, i) => {
+    const s = Math.max(0, w.char_start)
+    const e = Math.min(text.length, w.char_end)
+    const prev = wordSpans[wordSpans.length - 1]
+    if (e <= s || (prev && s < prev[1])) return
+    wordSpans.push([s, e, i])
+  })
+
+  const cuts = new Set<number>([0, text.length])
+  for (const [s, e] of marks) {
+    cuts.add(s)
+    cuts.add(e)
+  }
+  for (const [s, e] of wordSpans) {
+    cuts.add(s)
+    cuts.add(e)
+  }
+  for (const c of extraCuts) {
+    if (c > 0 && c < text.length) cuts.add(c)
+  }
+  const bounds = [...cuts].sort((a, b) => a - b)
+
+  const out: TextPiece[] = []
+  for (let i = 0; i < bounds.length - 1; i++) {
+    const s = bounds[i]
+    const e = bounds[i + 1]
+    if (e <= s) continue
+    out.push({
+      start: s,
+      end: e,
+      mwe: marks.some(([ms, me]) => s >= ms && e <= me),
+      word: wordSpanAt(wordSpans, s),
+    })
+  }
+  return out
+}
+
+/** Class list for one piece, given what is currently highlighted. */
+function pieceClass(
+  p: TextPiece,
+  {
+    activeWord = -1,
+    lineSpan = null,
+    isActive,
+  }: {
+    activeWord?: number
+    lineSpan?: [number, number] | null
+    isActive?: (s: number, e: number) => boolean
+  },
+): string | undefined {
+  const mid = p.start + (p.end - p.start) / 2
+  const cls = [
+    p.mwe ? 'mwe' : '',
+    p.mwe && isActive?.(p.start, p.end) ? 'mwe-active' : '',
+    p.word >= 0 && p.word === activeWord ? 'now' : '',
+    // Midpoint test: a sentence boundary falls on punctuation, not on a word edge, so a piece
+    // can straddle it. Half a comma of imprecision is invisible.
+    lineSpan && mid >= lineSpan[0] && mid < lineSpan[1] ? 'now-line' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+  return cls || undefined
+}
+
+/**
+ * Render pieces as `[data-off]` spans. Both passages go through this, so a selection resolves
+ * the same way and the follow-along highlight looks the same wherever it appears.
+ */
+export function renderPieces(
+  text: string,
+  pieces: TextPiece[],
+  opts: {
+    activeWord?: number
+    lineSpan?: [number, number] | null
+    isActive?: (s: number, e: number) => boolean
+  } = {},
+): ReactNode[] {
+  return pieces.map((p) => (
+    <span
+      key={p.start}
+      data-off={p.start}
+      data-w={p.word >= 0 ? p.word : undefined}
+      className={pieceClass(p, opts)}
+    >
+      {text.slice(p.start, p.end)}
+    </span>
+  ))
 }
 
 /**
@@ -491,46 +609,7 @@ export function SelectableText({
   const active = useMemo(() => normalizeSpans(activeSpans, text.length), [activeSpans, text.length])
   const isActive = (s: number, e: number) => active.some(([as, ae]) => s < ae && as < e)
 
-  const pieces = useMemo<Piece[]>(() => {
-    const marks = normalizeSpans(spans, text.length)
-
-    // Drop any span that runs backwards into its predecessor. Alignment is per-word and
-    // ascending, so an overlap means one of the two is wrong; keeping the earlier one at
-    // least keeps the sequence sane.
-    const wordSpans: [number, number, number][] = []
-    words.forEach((w, i) => {
-      const s = Math.max(0, w.char_start)
-      const e = Math.min(text.length, w.char_end)
-      const prev = wordSpans[wordSpans.length - 1]
-      if (e <= s || (prev && s < prev[1])) return
-      wordSpans.push([s, e, i])
-    })
-
-    const cuts = new Set<number>([0, text.length])
-    for (const [s, e] of marks) {
-      cuts.add(s)
-      cuts.add(e)
-    }
-    for (const [s, e] of wordSpans) {
-      cuts.add(s)
-      cuts.add(e)
-    }
-    const bounds = [...cuts].sort((a, b) => a - b)
-
-    const out: Piece[] = []
-    for (let i = 0; i < bounds.length - 1; i++) {
-      const s = bounds[i]
-      const e = bounds[i + 1]
-      if (e <= s) continue
-      out.push({
-        start: s,
-        end: e,
-        mwe: marks.some(([ms, me]) => s >= ms && e <= me),
-        word: wordSpanAt(wordSpans, s),
-      })
-    }
-    return out
-  }, [text, spans, words])
+  const pieces = useMemo(() => buildPieces(text, { spans, words }), [text, spans, words])
 
   // A click seeks; a drag looks a word up. Both end in `mouseup`, so the two are told
   // apart by whether anything is actually selected.
@@ -553,31 +632,7 @@ export function SelectableText({
       lang={lang}
       onClick={onClick}
     >
-      {pieces.map((p) => {
-        const cls = [
-          p.mwe ? 'mwe' : '',
-          p.mwe && isActive(p.start, p.end) ? 'mwe-active' : '',
-          p.word >= 0 && p.word === activeWord ? 'now' : '',
-          // Midpoint test: a sentence boundary falls on punctuation, not on a word edge,
-          // so a piece can straddle it. Half a comma of imprecision is invisible.
-          lineSpan && p.start + (p.end - p.start) / 2 >= lineSpan[0] &&
-          p.start + (p.end - p.start) / 2 < lineSpan[1]
-            ? 'now-line'
-            : '',
-        ]
-          .filter(Boolean)
-          .join(' ')
-        return (
-          <span
-            key={p.start}
-            data-off={p.start}
-            data-w={p.word >= 0 ? p.word : undefined}
-            className={cls || undefined}
-          >
-            {text.slice(p.start, p.end)}
-          </span>
-        )
-      })}
+      {renderPieces(text, pieces, { activeWord, lineSpan, isActive })}
     </div>
   )
 }

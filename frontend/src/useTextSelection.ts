@@ -80,18 +80,61 @@ function resolvePoint(
 
 export interface UseTextSelectionOptions {
   /**
-   * When false, a selection spanning more than one segment is clamped to the first.
-   * The cloze passage sets this: a selection crossing a blank would otherwise ask the
-   * server to gloss text that includes the hidden answer, leaking it into the popup.
+   * Character ranges the resolved selection may never touch. The cloze passage passes its
+   * blanks: a selection dragged across one would otherwise ask the server to gloss a range
+   * that includes the hidden answer, printing it into the popup.
+   *
+   * This replaced a "clamp to the first segment" rule, which happened to work only because a
+   * cloze chunk between two blanks was a single segment. Once the passage is split per word —
+   * which follow-along highlighting requires — that rule would clamp every phrase selection
+   * down to one word and take the sentence-grammar feature with it. Naming the real
+   * constraint fixes both: whole sentences select freely, blanks stay sealed.
    */
-  allowCrossSegment?: boolean
+  blockedRanges?: number[][]
   enabled?: boolean
+}
+
+/**
+ * Largest part of [start, end) that lies wholly between blocked ranges.
+ *
+ * Returning the biggest safe portion rather than nothing keeps a slightly-too-greedy drag
+ * useful — you get the phrase you meant, minus the blank — and the result is safe by
+ * construction because it sits inside a single gap.
+ */
+function clampToSafeGap(
+  start: number,
+  end: number,
+  blocked: number[][],
+): [number, number] | null {
+  const sorted = [...blocked]
+    .map(([s, e]) => [Math.min(s, e), Math.max(s, e)] as [number, number])
+    .sort((a, b) => a[0] - b[0])
+
+  const gaps: [number, number][] = []
+  let cursor = 0
+  for (const [bs, be] of sorted) {
+    if (bs > cursor) gaps.push([cursor, bs])
+    cursor = Math.max(cursor, be)
+  }
+  gaps.push([cursor, Number.MAX_SAFE_INTEGER])
+
+  let best: [number, number] | null = null
+  let bestLen = 0
+  for (const [gs, ge] of gaps) {
+    const s = Math.max(start, gs)
+    const e = Math.min(end, ge)
+    if (e - s > bestLen) {
+      bestLen = e - s
+      best = [s, e]
+    }
+  }
+  return best
 }
 
 export function useTextSelection(
   ref: React.RefObject<HTMLElement | null>,
   onPick: (picked: Picked) => void,
-  { allowCrossSegment = true, enabled = true }: UseTextSelectionOptions = {},
+  { blockedRanges, enabled = true }: UseTextSelectionOptions = {},
 ) {
   // Keep the callback in a ref so listeners don't re-bind on every render.
   const onPickRef = useRef(onPick)
@@ -120,11 +163,11 @@ export function useTextSelection(
     let start = Math.min(a.logical, b.logical)
     let end = Math.max(a.logical, b.logical)
 
-    if (!allowCrossSegment && a.seg !== b.seg) {
-      const seg = a.logical <= b.logical ? a.seg : b.seg
-      const base = Number(seg.getAttribute(SEGMENT_ATTR))
-      start = Math.max(start, base)
-      end = Math.min(end, base + (seg.textContent?.length ?? 0))
+    if (blockedRanges && blockedRanges.length > 0) {
+      const safe = clampToSafeGap(start, end, blockedRanges)
+      if (!safe) return
+      start = safe[0]
+      end = safe[1]
     }
 
     const length = end - start
@@ -134,7 +177,7 @@ export function useTextSelection(
     if (rect.width === 0 && rect.height === 0) return
 
     onPickRef.current({ text: sel.toString(), start, end, rect })
-  }, [ref, allowCrossSegment])
+  }, [ref, blockedRanges])
 
   useEffect(() => {
     if (!enabled) return

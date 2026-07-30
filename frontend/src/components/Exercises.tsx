@@ -1,6 +1,7 @@
-import { type ReactNode, useMemo, useRef } from 'react'
+import { type ReactNode, useMemo, useRef, useState } from 'react'
 import type { AttemptResult, Exercise } from '../types'
-import { useLookupOn } from './Lookup'
+import { FollowToggle, usePassageFollow } from './Follow'
+import { buildPieces, renderPieces, useLookupOn } from './Lookup'
 
 /** Everything an exercise component needs from its parent. */
 export interface ExerciseProps {
@@ -30,11 +31,32 @@ function Cloze({ ex, result, response, setResponse, play, onSubmit }: ExercisePr
   const values = (response as string[]) ?? blanks.map(() => '')
   const perBlank = result?.feedback.blanks ?? []
 
-  // Translation lookup on the passage. `allowCrossSegment: false` is important here: a
-  // selection dragged across a blank would otherwise ask the server to gloss a range that
-  // includes the hidden answer, printing it into the popup.
+  // Blank spans are off limits to a selection: dragging across one would otherwise ask the
+  // server to gloss a range containing the hidden answer, printing it into the popup.
+  const blankRanges = useMemo(() => blanks.map((b) => [b.char_start, b.char_end]), [blanks])
+
   const textRef = useRef<HTMLDivElement | null>(null)
-  useLookupOn(textRef, text, { allowCrossSegment: false })
+  useLookupOn(textRef, text, { blockedRanges: blankRanges })
+
+  // Follow the voice through the passage. Off by default here, unlike the transcript: this is a
+  // test, and seeing the words arrive is help some learners want and others would rather not
+  // have. It reveals nothing either way — the answer's characters are never rendered, and the
+  // per-blank replay button already gives away each blank's exact audio window.
+  const [follow, setFollow] = useState(false)
+  const { available, words, activeWord, lineSpan } = usePassageFollow(text, follow)
+
+  // Blank edges become piece boundaries, so no rendered piece can ever straddle a blank.
+  const pieces = useMemo(
+    () => buildPieces(text, { words, extraCuts: blanks.flatMap((b) => [b.char_start, b.char_end]) }),
+    [text, words, blanks],
+  )
+
+  /** Which blank the spoken word falls inside, or -1. */
+  const spokenBlank = useMemo(() => {
+    const w = activeWord >= 0 ? words[activeWord] : null
+    if (!w) return -1
+    return blanks.findIndex((b) => w.char_start < b.char_end && b.char_start < w.char_end)
+  }, [activeWord, words, blanks])
 
   const set = (i: number, v: string) => {
     const next = [...values]
@@ -61,17 +83,18 @@ function Cloze({ ex, result, response, setResponse, play, onSubmit }: ExercisePr
     }
   }
 
+  /** Pieces of the passage inside [from, to), as `[data-off]` spans — see useTextSelection. */
+  const chunk = (from: number, to: number) =>
+    renderPieces(
+      text,
+      pieces.filter((p) => p.start >= from && p.end <= to),
+      { activeWord, lineSpan },
+    )
+
   const nodes: ReactNode[] = []
   let cursor = 0
   blanks.forEach((b, i) => {
-    if (b.char_start > cursor) {
-      // data-off declares this chunk's offset in the logical passage — see useTextSelection.
-      nodes.push(
-        <span data-off={cursor} key={`t${i}`}>
-          {text.slice(cursor, b.char_start)}
-        </span>,
-      )
-    }
+    if (b.char_start > cursor) nodes.push(...chunk(cursor, b.char_start))
     const fb = perBlank.find((f) => f.index === i)
     const cls = !fb
       ? ''
@@ -82,7 +105,11 @@ function Cloze({ ex, result, response, setResponse, play, onSubmit }: ExercisePr
         : 'wrong'
 
     nodes.push(
-      <span className="blank-wrap" key={`b${i}`}>
+      // The spoken word landing inside a blank is the one moment the highlight cannot show
+      // anything — the answer's characters are deliberately not rendered. Ringing the input
+      // instead says "the missing word is being said right now", which is exactly the cue a
+      // listening drill wants, and gives away nothing the replay button doesn't already.
+      <span className={`blank-wrap ${spokenBlank === i ? 'now-blank' : ''}`} key={`b${i}`}>
         <span className="blank-num">{i + 1}</span>
         <input
           ref={(el) => {
@@ -111,17 +138,16 @@ function Cloze({ ex, result, response, setResponse, play, onSubmit }: ExercisePr
     )
     cursor = b.char_end
   })
-  if (cursor < text.length) {
-    nodes.push(
-      <span data-off={cursor} key="tail">
-        {text.slice(cursor)}
-      </span>,
-    )
-  }
+  if (cursor < text.length) nodes.push(...chunk(cursor, text.length))
 
   return (
     <>
-      <div className="cloze-text" ref={textRef}>
+      {available && (
+        <div className="follow-row">
+          <FollowToggle on={follow} onChange={setFollow} />
+        </div>
+      )}
+      <div className={`cloze-text ${follow ? 'following' : ''}`} ref={textRef}>
         {nodes}
       </div>
       {ex.payload.word_bank && (

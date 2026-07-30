@@ -499,6 +499,16 @@ select:focus, textarea:focus { outline: none; border-color: var(--accent); backg
 .selectable.seekable [data-w]:hover { background: var(--accent-soft); border-radius: 3px; }
 .selectable.seekable .now:hover { background: var(--accent-hover); box-shadow: 0 0 0 2px var(--accent-hover); }
 
+/* The spoken word is inside a blank, so there is nothing to light up. Ring the input instead:
+   "the missing word is being said right now". */
+.blank-wrap.now-blank .cloze-input {
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 2px var(--accent-border);
+}
+.blank-wrap.now-blank .blank-num { color: var(--accent); font-weight: 700; }
+
+.follow-row { display: flex; justify-content: flex-end; margin-bottom: 2px; }
+
 .follow-toggle {
   flex: 0 0 auto;
   padding: 3px 9px; border-radius: var(--radius-sm);

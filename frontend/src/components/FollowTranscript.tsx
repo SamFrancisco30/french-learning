@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Transcript } from '../types'
-import { groupWords, sentenceSpan, useFollowAlong } from '../useFollowAlong'
+import { FollowToggle, usePassageFollow } from './Follow'
 import { SelectableText } from './Lookup'
 
 /**
@@ -10,9 +10,8 @@ import { SelectableText } from './Lookup'
  * work of making it usable on fast material: the sentence being read is tinted, so the eye
  * can find its place again after glancing away, and clicking any word plays from there.
  *
- * The follow toggle exists because this is not always wanted. Reading ahead of the audio is
- * a legitimate way to use a transcript, and a highlight that keeps yanking the page is
- * hostile to it.
+ * Following is on by default here — a transcript exists to be read along with. The cloze
+ * passage makes the opposite default, for the opposite reason.
  */
 export function FollowTranscript({
   transcript,
@@ -20,37 +19,19 @@ export function FollowTranscript({
   expressionCount,
   language,
   playing,
-  subscribe,
-  toOriginal,
-  seekTo,
 }: {
   transcript: Transcript
   markSpans: number[][]
   expressionCount: number
   language: string
   playing: boolean
-  subscribe: (cb: (playbackSeconds: number) => void) => () => void
-  toOriginal: (playbackSeconds: number) => number
-  /** Seeks to a moment on the ORIGINAL-video timeline. */
-  seekTo: (originalSeconds: number) => void
 }) {
   const ref = useRef<HTMLDivElement | null>(null)
   const [follow, setFollow] = useState(true)
 
-  // Highlight whole words, not ASR fragments — see groupWords.
-  const words = useMemo(
-    () => groupWords(transcript.text, transcript.words),
-    [transcript.text, transcript.words],
-  )
-  const canFollow = words.length > 0
-  const activeWord = useFollowAlong(words, subscribe, toOriginal, follow && canFollow)
-
-  const lineSpan = useMemo<[number, number] | null>(
-    () =>
-      activeWord >= 0 && words[activeWord]
-        ? sentenceSpan(transcript.text, words[activeWord].char_start)
-        : null,
-    [activeWord, words, transcript.text],
+  const { available, words, activeWord, lineSpan, seekTo } = usePassageFollow(
+    transcript.text,
+    follow,
   )
 
   // Keep the lit word visible, but only nudge: `block: 'nearest'` is a no-op while the word
@@ -78,30 +59,18 @@ export function FollowTranscript({
           Transcript · {transcript.asr_backend}/{transcript.asr_model}
           {markSpans.length > 0 && ` · ${expressionCount} expressions marked`}
           {' · select any word to translate'}
-          {canFollow && ' · click to play from there'}
+          {available && ' · click to play from there'}
         </span>
-        {canFollow && (
-          <button
-            className={`follow-toggle ${follow ? 'on' : ''}`}
-            onClick={() => setFollow((f) => !f)}
-            title={
-              follow
-                ? 'Stop highlighting the word being spoken'
-                : 'Highlight the word being spoken'
-            }
-          >
-            {follow ? '◉ following' : '○ follow the voice'}
-          </button>
-        )}
+        {available && <FollowToggle on={follow} onChange={setFollow} />}
       </div>
       <SelectableText
         text={transcript.text}
         spans={markSpans}
-        words={canFollow ? words : []}
-        activeWord={follow ? activeWord : -1}
-        lineSpan={follow ? lineSpan : null}
+        words={words}
+        activeWord={activeWord}
+        lineSpan={lineSpan}
         onWordClick={
-          canFollow ? (i) => words[i] && seekTo(words[i].start) : undefined
+          available && seekTo ? (i) => words[i] && seekTo(words[i].start) : undefined
         }
         lang={language}
       />

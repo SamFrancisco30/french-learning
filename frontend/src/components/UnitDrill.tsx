@@ -15,6 +15,7 @@ import {
   isAnswered,
   toApiResponse,
 } from './Exercises'
+import { FollowProvider } from './Follow'
 import { FollowTranscript } from './FollowTranscript'
 import { LookupProvider, SelectableText } from './Lookup'
 
@@ -162,16 +163,22 @@ function Drill({
     [responses, player.replays, learnerKey, setBusy, setResults, setError],
   )
 
-  const revealTranscript = useCallback(async () => {
-    setShowTranscript(true)
-    if (!transcript) {
-      try {
-        setTranscript(await api.transcript(unit.id))
-      } catch (e) {
-        setError(String(e))
-      }
+  // Word timings are fetched up front, not on reveal, because the cloze passage wants to
+  // follow the voice too and it is visible from the start. This is not a new spoiler: the
+  // cloze exercise's own payload already carries the same text.
+  useEffect(() => {
+    let live = true
+    setTranscript(null)
+    api
+      .transcript(unit.id)
+      .then((t) => live && setTranscript(t))
+      .catch(() => undefined) // the drill works without it; only following is lost
+    return () => {
+      live = false
     }
-  }, [transcript, unit.id, setShowTranscript, setTranscript, setError])
+  }, [unit.id, setTranscript])
+
+  const revealTranscript = useCallback(() => setShowTranscript(true), [setShowTranscript])
 
   const done = unit.exercises.filter((e) => results[e.id])
   const totalScore = done.reduce((s, e) => s + results[e.id].score, 0)
@@ -185,6 +192,13 @@ function Drill({
       learnerKey={learnerKey}
       play={player.playWindow}
     >
+      <FollowProvider
+        text={transcript?.text ?? ''}
+        words={transcript?.words ?? []}
+        subscribe={player.subscribe}
+        toOriginal={player.toOriginal}
+        seekTo={player.seekTo}
+      >
       {error && <div className="error">{error}</div>}
 
       <div className="crumbs">
@@ -372,9 +386,6 @@ function Drill({
             expressionCount={exprSpans.length}
             language={language}
             playing={player.playing}
-            subscribe={player.subscribe}
-            toOriginal={player.toOriginal}
-            seekTo={player.seekTo}
           />
         ) : (
           <div className="transcript">
@@ -382,6 +393,7 @@ function Drill({
             Loading…
           </div>
         ))}
+      </FollowProvider>
     </LookupProvider>
   )
 }
