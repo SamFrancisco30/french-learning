@@ -99,7 +99,9 @@ def clip_key(provider_id: str, unit_idx: int) -> str:
 #       sample judge a run's core rather than its edges. v2 filled with digital zero (a
 #       pump on every pause) and a local sample that could contain quiet speech, which was
 #       audible as the same word spoken twice.
-VARIANT_VERSION = "v3"
+#   v4  time map carries word ends as well as starts, and pause length is capped at a
+#       natural 250ms (deepening the word stretch instead) rather than at the 1.2s hard cap
+VARIANT_VERSION = "v4"
 
 
 def variant_clip_key(provider_id: str, unit_idx: int, speed: float) -> str:

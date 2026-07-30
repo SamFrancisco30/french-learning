@@ -62,8 +62,20 @@ MAX_SILENCE_FLOOR = 0.030
 # a plosive closure is exactly the artifact this design exists to avoid.
 MIN_SILENCE_S = 0.030
 
-# No single pause should exceed this however the weights fall out.
+# Hard per-pause ceiling used by the water-fill.
 MAX_INSERT_S = 1.2
+
+# The length a single added pause may reach before it stops sounding like speech and starts
+# sounding like a gap. This — not MAX_INSERT_S — decides whether the clip's silence can
+# carry the time budget.
+#
+# Measured: a sparse clip has ~155 usable pauses and absorbs 0.75x at ~136ms each, which is
+# an ordinary phrase pause. A dense 226 wpm clip has only 37, so the same budget forced
+# ~655ms each, and one blank's replay window came out 36% speech — the word was present but
+# buried in room tone, which reads to a listener as the word never being said. Preferring a
+# deeper continuous stretch over conspicuous gaps is the same trade this design makes
+# everywhere else.
+NATURAL_INSERT_S = 0.25
 
 # Inserted pauses are filled with the clip's OWN room tone, not digital zero.
 #
@@ -349,11 +361,13 @@ def natural_slow(
     for _ in range(6):
         audio = _decode(src, factor)
         runs, threshold = _find_silences(audio)
-        capacity = len(runs) * MAX_INSERT_S
+        # Capacity is measured against a NATURAL pause, not the hard cap, so a clip with
+        # few gaps deepens the stretch instead of growing conspicuous holes.
+        capacity = len(runs) * NATURAL_INSERT_S
         needed = target_duration - len(audio) / SAMPLE_RATE
         if needed <= 0 or needed <= capacity or factor <= MIN_WORD_FACTOR + 1e-6:
             break
-        factor = max(MIN_WORD_FACTOR, factor - 0.03)
+        factor = max(MIN_WORD_FACTOR, factor - 0.02)
 
     scale = 1.0 / factor
     needed = max(0.0, target_duration - len(audio) / SAMPLE_RATE)
@@ -411,12 +425,34 @@ def natural_slow(
     _encode(out, dst)
 
     # Time map: playback time = stretched time + everything inserted before it.
+    #
+    # Breakpoints at word STARTS AND ENDS. With starts only, any time between two words —
+    # including every word's own end, and therefore every replay window's edges — was
+    # linearly interpolated across an interval that may contain an inserted pause. Since
+    # the true mapping steps at the insertion point, that misplaced intermediate times by
+    # up to the pause length, which is enough to clip a short word out of its own window.
+    marks = sorted({round(a, 3) for a, _, _ in ws} | {round(b, 3) for _, b, _ in ws})
+    prefix: list[tuple[int, int]] = []
+    running = 0
+    for at, n in sorted(insert_points):
+        running += n
+        prefix.append((at, running))
+
+    def added_before(pos: int) -> int:
+        # Binary search the cumulative insertion prefix rather than re-summing per mark.
+        lo, hi = 0, len(prefix)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if prefix[mid][0] <= pos:
+                lo = mid + 1
+            else:
+                hi = mid
+        return prefix[lo - 1][1] if lo else 0
+
     time_map: list[list[float]] = []
-    for a, _, _ in ws:
-        stretched = a * scale
-        pos = int(stretched * SAMPLE_RATE)
-        added = sum(n for at, n in insert_points if at <= pos)
-        time_map.append([round(a, 3), round((pos + added) / SAMPLE_RATE, 3)])
+    for t in marks:
+        pos = int(t * scale * SAMPLE_RATE)
+        time_map.append([t, round((pos + added_before(pos)) / SAMPLE_RATE, 3)])
 
     result = StretchResult(
         path=dst,
