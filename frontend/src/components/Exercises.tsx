@@ -146,7 +146,10 @@ function Cloze({ ex, result, response, setResponse, play, onSubmit }: ExercisePr
           <FollowToggle on={follow} onChange={setFollow} />
         </div>
       )}
-      <div className={`cloze-text ${follow ? 'following' : ''}`} ref={textRef}>
+      {/* `selectable` is what marks a passage rendered as [data-off] pieces, and it is what the
+          follow-along rules are scoped to. Without it the highlight class lands on the right
+          span and styles nothing. */}
+      <div className="cloze-text selectable" ref={textRef}>
         {nodes}
       </div>
       {ex.payload.word_bank && (
