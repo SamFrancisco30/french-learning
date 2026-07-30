@@ -1,7 +1,7 @@
 # Vocabulary Book and Identity Compatibility Design
 
 **Date:** 2026-07-30  
-**Status:** Approved in conversation; written-spec review in progress
+**Status:** Approved in conversation and independent written-spec review
 **Scope:** Vocabulary-book MVP plus an authentication-compatible learner identity boundary
 
 ## 1. Context
