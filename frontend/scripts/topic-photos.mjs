@@ -39,13 +39,28 @@ const QUALITY = 78
 const ALLOWED = new Set(['cc0', 'pdm'])
 const UA = 'french-learning-app/0.1 (topic card art; local dev)'
 
-async function fetchImage(url, dest) {
-  const res = await fetch(url, { headers: { 'User-Agent': UA }, redirect: 'follow' })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const type = res.headers.get('content-type') || ''
-  if (!type.startsWith('image/')) throw new Error(`content-type ${type}`)
-  await writeFile(dest, Buffer.from(await res.arrayBuffer()))
-  return type
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * Fetch with a short backoff on 429. Wikimedia in particular rate-limits a burst of full-size
+ * originals, and a whole build failing on the last image is not worth the simplicity.
+ */
+async function fetchImage(url, dest, attempts = 4) {
+  let last = ''
+  for (let i = 0; i < attempts; i++) {
+    const res = await fetch(url, { headers: { 'User-Agent': UA }, redirect: 'follow' })
+    if (res.status === 429 || res.status === 503) {
+      last = `HTTP ${res.status}`
+      await sleep(1500 * 2 ** i)
+      continue
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const type = res.headers.get('content-type') || ''
+    if (!type.startsWith('image/')) throw new Error(`content-type ${type}`)
+    await writeFile(dest, Buffer.from(await res.arrayBuffer()))
+    return type
+  }
+  throw new Error(`${last} after ${attempts} attempts`)
 }
 
 /** Scale-to-cover then centre-crop, so every card gets the same shape whatever came down. */
@@ -62,19 +77,25 @@ async function sheets() {
     const dir = join(SCRATCH, topic.slug)
     await mkdir(dir, { recursive: true })
     let n = 0
+    // Tile numbers must be contiguous for ffmpeg's sequence reader, but candidates drop out when
+    // a host rate-limits us — so tile 3 is not candidate 3. The map is written to disk rather
+    // than left to be guessed: picking by eye from a sheet and then looking the wrong row up
+    // would attach the wrong creator and the wrong LICENCE to a shipped asset.
+    const tiles = []
     for (const c of topic.candidates) {
       const raw = join(dir, `raw_${String(n).padStart(2, '0')}`)
       try {
         await fetchImage(c.url, raw)
-        // Numbered PNGs so ffmpeg's tile filter can read them as one sequence.
         await run('ffmpeg', ['-y', '-v', 'error', '-i', raw,
           '-vf', coverFilter(560, 315), join(dir, `cand_${String(n).padStart(2, '0')}.png`)])
         console.log(`  ${topic.slug} [${n}] ok  ${c.title.slice(0, 54)}`)
+        tiles.push({ tile: n, ...c })
         n++
       } catch (e) {
         console.log(`  ${topic.slug} [--] SKIP ${e.message}  ${c.url.slice(0, 70)}`)
       }
     }
+    await writeFile(join(dir, 'tiles.json'), JSON.stringify(tiles, null, 1))
     if (n === 0) {
       console.log(`  ${topic.slug}: no usable candidates`)
       continue
@@ -100,10 +121,23 @@ async function build() {
     process.exit(1)
   }
 
+  // Idempotent by default: an asset already on disk is left alone. Rebuilding every image on
+  // every run means re-downloading a dozen full-size originals to produce identical output, and
+  // it is how a single rate-limited host takes the whole build down. Pass --force to redo them.
+  const force = process.argv.includes('--force')
+
   const credits = []
   for (const p of picks) {
     const raw = join(SCRATCH, `pick_${p.slug}`)
     const out = join(ASSETS, `${p.slug}.webp`)
+    let existing = null
+    if (!force) existing = await stat(out).catch(() => null)
+
+    if (existing && existing.size > 0) {
+      console.log(`${p.slug.padEnd(12)} ${(existing.size / 1024).toFixed(0).padStart(4)} KB  (already built)`)
+      credits.push({ ...p, bytes: existing.size })
+      continue
+    }
     await fetchImage(p.url, raw)
     await run('ffmpeg', ['-y', '-v', 'error', '-i', raw,
       '-vf', coverFilter(OUT_W, OUT_H),

@@ -16,7 +16,7 @@
  */
 
 import { execFile } from 'node:child_process'
-import { readdir, mkdtemp, rm, readFile } from 'node:fs/promises'
+import { readdir, mkdtemp, rm, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -30,28 +30,28 @@ const ASSETS = join(ROOT, 'src/assets/topics')
 const TEXT = { r: 0x19, g: 0x1d, b: 0x23 } //  --text
 const DIM = { r: 0x5b, g: 0x66, b: 0x74 } //   --text-dim, used by the blurb
 const FILTER = { saturate: 0.5, contrast: 0.94, brightness: 1.05 }
-const STOPS = [
-  // [fraction from the BOTTOM, white alpha]
-  [0.0, 0.99],
-  [0.46, 0.97],
-  [0.66, 0.7],
-  [0.85, 0.26],
-  [1.0, 0.06],
-]
-/** The text block occupies roughly the bottom third of the card, plus padding. */
-const TEXT_BAND_FROM_BOTTOM = [0.04, 0.42]
+/**
+ * The text sits on an OPAQUE footer, so its contrast is fixed by the theme and no photograph can
+ * touch it. What is still worth checking is the footer's 18px top fade: text must never stray
+ * into it. FOOTER_H is measured from the rendered page, not guessed.
+ */
+const CARD_W = 292 // one grid column at 1280px viewport
+const CARD_H = 260 // .topic-card min-height
+const FOOTER_H = 145 // .topic-body height at a 292px card, measured in the browser
+const FADE_H = 18
+const OVERALL_WASH = 0.16
+const STOPS = null // the footer is not a gradient; alphaAt handles the fade directly
 const AA = 4.5
 
-function alphaAt(fracFromBottom) {
-  for (let i = 1; i < STOPS.length; i++) {
-    const [x0, a0] = STOPS[i - 1]
-    const [x1, a1] = STOPS[i]
-    if (fracFromBottom <= x1) {
-      const t = (fracFromBottom - x0) / (x1 - x0 || 1)
-      return a0 + t * (a1 - a0)
-    }
+/** White alpha at a given distance up from the card's bottom edge, in pixels. */
+function alphaAtPx(pxFromBottom) {
+  const solidTop = FOOTER_H - FADE_H
+  if (pxFromBottom <= solidTop) return 1
+  if (pxFromBottom <= FOOTER_H) {
+    const t = (pxFromBottom - solidTop) / FADE_H
+    return 1 - t * (1 - OVERALL_WASH)
   }
-  return STOPS[STOPS.length - 1][1]
+  return OVERALL_WASH
 }
 
 const clamp = (v) => Math.max(0, Math.min(255, v))
@@ -81,8 +81,8 @@ const ratio = (a, b) => {
 }
 
 async function check(file, tmp) {
-  const W = 292
-  const H = 196 // the real rendered card size, so bands land where they land on screen
+  const W = CARD_W
+  const H = CARD_H // the real rendered card size, so bands land where they land on screen
   const rawPath = join(tmp, `${basename(file, '.webp')}.rgb`)
   await run('ffmpeg', ['-y', '-v', 'error', '-i', join(ASSETS, file),
     '-vf', `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`,
@@ -93,12 +93,12 @@ async function check(file, tmp) {
   const dimLum = lum(DIM.r, DIM.g, DIM.b)
 
   let worst = { ratio: Infinity, dimRatio: Infinity, x: 0, y: 0 }
-  const yFrom = Math.round(H * (1 - TEXT_BAND_FROM_BOTTOM[1]))
-  const yTo = Math.round(H * (1 - TEXT_BAND_FROM_BOTTOM[0]))
+  // The solid part of the footer, where every glyph lives.
+  const yFrom = H - (FOOTER_H - FADE_H)
+  const yTo = H
 
   for (let y = yFrom; y < yTo; y++) {
-    const fracFromBottom = (H - 1 - y) / (H - 1)
-    const a = alphaAt(fracFromBottom)
+    const a = alphaAtPx(H - 1 - y)
     for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 3
       const [r, g, b] = applyFilter(buf[i], buf[i + 1], buf[i + 2])
@@ -112,6 +112,45 @@ async function check(file, tmp) {
     }
   }
   return worst
+}
+
+/**
+ * Render what a card actually looks like: photograph, CSS filter, scrim, all composited by the
+ * same code that computes the contrast above — so the picture and the number can never disagree.
+ * Exists because the numbers alone cannot tell you whether a photograph survives the scrim or is
+ * washed to nothing, and a browser screenshot is not always available.
+ */
+async function preview(files, tmp, dest) {
+  const W = CARD_W
+  const H = CARD_H
+  let i = 0
+  for (const f of files) {
+    const rawPath = join(tmp, `p_${basename(f, '.webp')}.rgb`)
+    await run('ffmpeg', ['-y', '-v', 'error', '-i', join(ASSETS, f),
+      '-vf', `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`,
+      '-pix_fmt', 'rgb24', '-f', 'rawvideo', rawPath])
+    const buf = await readFile(rawPath)
+    const out = Buffer.alloc(buf.length)
+    for (let y = 0; y < H; y++) {
+      const a = alphaAtPx(H - 1 - y)
+      for (let x = 0; x < W; x++) {
+        const k = (y * W + x) * 3
+        const [r, g, b] = applyFilter(buf[k], buf[k + 1], buf[k + 2])
+        out[k] = r * (1 - a) + 255 * a
+        out[k + 1] = g * (1 - a) + 255 * a
+        out[k + 2] = b * (1 - a) + 255 * a
+      }
+    }
+    const rgbOut = join(tmp, `c_${String(i).padStart(2, '0')}.rgb`)
+    await writeFile(rgbOut, out)
+    await run('ffmpeg', ['-y', '-v', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24',
+      '-s', `${W}x${H}`, '-i', rgbOut, join(tmp, `c_${String(i).padStart(2, '0')}.png`)])
+    i++
+  }
+  const cols = Math.min(4, i)
+  await run('ffmpeg', ['-y', '-v', 'error', '-i', join(tmp, 'c_%02d.png'),
+    '-vf', `tile=${cols}x${Math.ceil(i / cols)}:padding=8:color=0xf4f6f8`, dest])
+  console.log(`\npreview of the composited cards -> ${dest}`)
 }
 
 const files = (await readdir(ASSETS)).filter((f) => f.endsWith('.webp')).sort()
@@ -133,6 +172,9 @@ for (const f of files) {
       .toFixed(2)
       .padStart(11)}:1   ${ok ? 'pass' : `FAIL at (${w.x},${w.y})`}`,
   )
+}
+if (process.argv.includes('--preview')) {
+  await preview(files, tmp, join(ROOT, '.topic-photos', 'sheet_CARDS.png'))
 }
 await rm(tmp, { recursive: true, force: true })
 

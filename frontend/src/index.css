@@ -158,13 +158,16 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .topic-card, .topic-banner {
   position: relative; overflow: hidden;
   display: flex; align-items: flex-end;
-  /* Tall enough that the photograph has real presence above the text. A card this narrow
-     cannot do photo-beside-text: the blurb alone runs to 34ch, about 80% of the width, so a
-     side-by-side scrim would leave the picture a sliver. Text sits at the bottom over a
-     rising scrim instead, and the photograph gets the rest. */
-  min-height: 196px;
+  /* A card this narrow cannot do photo-beside-text: the blurb alone runs to 34ch, about 80% of
+     the width. So the photograph is full-bleed and the text sits in a solid footer beneath it.
+     Height is then set by how much picture that leaves. The footer measures 145px at a 292px
+     card — title, native name, two-line blurb, chips — so 260 leaves ~115px of photograph.
+     Measured in the browser rather than guessed: an earlier 210 left only 65px, and 25px on the
+     full-width tile. */
+  min-height: 260px;
   text-align: left;
-  padding: 15px 17px;
+  /* No padding on the card: the text block is a full-width footer that has to reach the edges. */
+  padding: 0;
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -178,11 +181,17 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 /* Span the full row when it is the last, odd card — the "Everything" tile. Shorter, because at
    full width the photograph has plenty of room without the height. */
-.topic-card.wide { grid-column: 1 / -1; min-height: 150px; }
+.topic-card.wide { grid-column: 1 / -1; min-height: 215px; }
 
-.topic-banner { min-height: 152px; margin-bottom: 16px; }
+.topic-banner { min-height: 190px; margin-bottom: 16px; }
 
-.topic-art { position: absolute; inset: 0; pointer-events: none; }
+/* Layer order is explicit, because it has to be. `::before` is generated as the card's FIRST
+   child, so with every layer merely `position: absolute` the later .topic-art element painted
+   OVER the scrim — invisible while the art was a 16%-opacity drawing, and glaring the moment it
+   became a full-bleed photograph: the blurb sat directly on the picture. */
+.topic-art { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.topic-card::before, .topic-banner::before { z-index: 1; }
+.topic-body { z-index: 2; }
 
 /* Base layer: the line-art motif, drawn in currentColor so the tint comes from `color` here.
    Always present, so a card is never an empty rectangle while its photograph loads — or if the
@@ -210,24 +219,23 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   transform: scale(1.04);
 }
 
-/* A scrim rising from the bottom, so the text block sits on near-solid white while the
-   photograph keeps the upper half. The stops are not decorative: the text region is scrimmed to
-   0.97+ alpha, which holds contrast against --text above WCAG AA no matter how dark or busy the
-   photograph underneath happens to be. Verified per image by scripts/check-contrast.mjs. */
+/* A gradient scrim was the first attempt and it was wrong. To hold the blurb — which uses
+   --text-dim, only ~5.9:1 on white to begin with — above AA over an arbitrary photograph, the
+   wash had to reach ~0.99 alpha across the whole text band. Rendering the composite showed the
+   result: the photographs were washed to almost nothing, which defeats the point of having them.
+   So the text gets a solid footer and the photograph keeps everything above it, undimmed. The
+   only gradient left is a short fade so the picture does not end on a hard line. */
 .topic-card.has-photo::before, .topic-banner.has-photo::before {
   content: ''; position: absolute; inset: 0;
-  background: linear-gradient(to top,
-    rgba(255, 255, 255, 0.99) 0%,
-    rgba(255, 255, 255, 0.97) 46%,
-    rgba(255, 255, 255, 0.70) 66%,
-    rgba(255, 255, 255, 0.26) 85%,
-    rgba(255, 255, 255, 0.06) 100%);
+  /* A whisper of white over the whole picture, so it sits in the silver palette rather than
+     shouting out of it. */
+  background: rgba(255, 255, 255, 0.16);
   pointer-events: none;
   transition: opacity .22s ease;
 }
-.topic-card.has-photo:hover::before { opacity: 0.93; }
+.topic-card.has-photo:hover::before { opacity: 0; }
 
-/* Line art needs far less help, and reads better with the drawing kept to the right. */
+/* Line art needs no footer — it is faint enough to sit behind the text directly. */
 .topic-card:not(.has-photo)::before, .topic-banner:not(.has-photo)::before {
   content: ''; position: absolute; inset: 0;
   background: linear-gradient(100deg,
@@ -235,7 +243,25 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   pointer-events: none;
 }
 
-.topic-body { position: relative; display: flex; flex-direction: column; gap: 5px; }
+/* The text footer. Solid, full-width, with a short fade at its top edge so the photograph above
+   does not stop on a hard line. Because it is opaque, the text's contrast is fixed by the theme
+   and cannot be affected by whatever photograph sits behind — no photo can make it unreadable. */
+.topic-body {
+  position: relative;
+  display: flex; flex-direction: column; gap: 5px;
+  width: 100%;
+  padding: 26px 17px 15px;
+  background: linear-gradient(to bottom,
+    rgba(255, 255, 255, 0) 0,
+    var(--bg-raised) 18px,
+    var(--bg-raised) 100%);
+}
+/* Line-art cards have no photograph to fade into, so they keep the plain inset text block. */
+.topic-card:not(.has-photo) .topic-body,
+.topic-banner:not(.has-photo) .topic-body {
+  padding: 15px 17px;
+  background: none;
+}
 .topic-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .topic-label { font-size: 16.5px; font-weight: 650; letter-spacing: -0.01em; }
 .topic-native { font-size: 12.5px; color: var(--text-faint); font-style: italic; }

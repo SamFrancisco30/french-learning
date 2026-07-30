@@ -1,11 +1,119 @@
 [
-  {
-    "slug": "geography",
-    "title": "Dokkadeltaet nord i Randsfjorden",
-    "url": "https://upload.wikimedia.org/wikipedia/commons/1/14/Dokkadeltaet_nord_i_Randsfjorden.jpg",
-    "creator": "Kjetil Ree",
-    "license": "cc0",
-    "provider": "wikimedia",
-    "foreign_landing_url": "https://commons.wikimedia.org/wiki/File:Dokkadeltaet_nord_i_Randsfjorden.jpg"
-  }
+ {
+  "title": "Free antenna image",
+  "url": "https://images.rawpixel.com/editor_1024/czNmcy1wcml2YXRlL3Jhd3BpeGVsX2ltYWdlcy93ZWJzaXRlX2NvbnRlbnQvbHIvcHg4ODE4MTgtaW1hZ2Uta3d2eGQxb3AuanBn.jpg",
+  "creator": "",
+  "license": "cc0",
+  "provider": "rawpixel",
+  "foreign_landing_url": "https://www.rawpixel.com/image/5920471/photo-image-public-domain-free-cc0",
+  "slug": "world_news"
+ },
+ {
+  "title": "Mist Fog",
+  "url": "https://cdn.stocksnap.io/img-thumbs/960w/MCQM9OZTXN.jpg",
+  "creator": "Bonnie Moreland",
+  "license": "cc0",
+  "provider": "stocksnap",
+  "foreign_landing_url": "https://stocksnap.io/photo/mist-fog-MCQM9OZTXN",
+  "slug": "environment"
+ },
+ {
+  "title": "Green Leaf",
+  "url": "https://cdn.stocksnap.io/img-thumbs/960w/YTDQRQJLGY.jpg",
+  "creator": "Nature Backgrounds",
+  "license": "cc0",
+  "provider": "stocksnap",
+  "foreign_landing_url": "https://stocksnap.io/photo/green-leaf-YTDQRQJLGY",
+  "slug": "biology"
+ },
+ {
+  "title": "An hour long exposure of some star trails above Utah, USA.",
+  "url": "https://pd.w.org/2022/02/546620fdbefa9dd40.97941924-2048x1365.jpg",
+  "creator": "Jeff Golenski",
+  "license": "cc0",
+  "provider": "wordpress",
+  "foreign_landing_url": "https://wordpress.org/photos/photo/546620fdbe/",
+  "slug": "science"
+ },
+ {
+  "title": "Computer Circuit",
+  "url": "https://cdn.stocksnap.io/img-thumbs/960w/G2DF3R79ZS.jpg",
+  "creator": "Lenharth Systems",
+  "license": "cc0",
+  "provider": "stocksnap",
+  "foreign_landing_url": "https://stocksnap.io/photo/computer-circuit-G2DF3R79ZS",
+  "slug": "technology"
+ },
+ {
+  "title": "Aerial view shipping-container port Miami",
+  "url": "https://images.rawpixel.com/editor_1024/cHJpdmF0ZS9sci9pbWFnZXMvd2Vic2l0ZS8yMDIyLTA5L2xvYzIwMjA3MjEwODYtaW1hZ2UuanBn.jpg",
+  "creator": "Carol M Highsmith",
+  "license": "cc0",
+  "provider": "rawpixel",
+  "foreign_landing_url": "https://www.rawpixel.com/image/8069979/photo-image-public-domain-united-states",
+  "slug": "economics"
+ },
+ {
+  "title": "Architecture Column",
+  "url": "https://cdn.stocksnap.io/img-thumbs/960w/01VGNXPYYL.jpg",
+  "creator": "The Building Envelope",
+  "license": "cc0",
+  "provider": "stocksnap",
+  "foreign_landing_url": "https://stocksnap.io/photo/architecture-column-01VGNXPYYL",
+  "slug": "politics"
+ },
+ {
+  "title": "Roman ruins with Vesuvius in the background, Pompeii, Italy",
+  "url": "https://pd.w.org/2022/01/35061dea31284a2b3.04972122-2048x1536.jpg",
+  "creator": "Michael Burridge",
+  "license": "cc0",
+  "provider": "wordpress",
+  "foreign_landing_url": "https://wordpress.org/photos/photo/35061dea31/",
+  "slug": "history"
+ },
+ {
+  "title": "Library filled bookshelves blurred light",
+  "url": "https://images.rawpixel.com/editor_1024/czNmcy1wcml2YXRlL3Jhd3BpeGVsX2ltYWdlcy93ZWJzaXRlX2NvbnRlbnQvbHIvdXB3azYxODA3MTcwLXdpa2ltZWRpYS1pbWFnZS1rb3drdW55dS5qcGc.jpg",
+  "creator": "",
+  "license": "cc0",
+  "provider": "rawpixel",
+  "foreign_landing_url": "https://www.rawpixel.com/image/3292459/free-photo-image-paris-background-academic",
+  "slug": "culture"
+ },
+ {
+  "title": "Architecture Building",
+  "url": "https://cdn.stocksnap.io/img-thumbs/960w/R9PC3I41W6.jpg",
+  "creator": "John O'Nolan",
+  "license": "cc0",
+  "provider": "stocksnap",
+  "foreign_landing_url": "https://stocksnap.io/photo/architecture-building-R9PC3I41W6",
+  "slug": "society"
+ },
+ {
+  "title": "Swimming pool",
+  "url": "https://images.rawpixel.com/editor_1024/cHJpdmF0ZS9sci9pbWFnZXMvd2Vic2l0ZS8yMDIyLTExL2ZsNTIwODcwNTIxMDMtaW1hZ2UuanBn.jpg",
+  "creator": "",
+  "license": "cc0",
+  "provider": "rawpixel",
+  "foreign_landing_url": "https://www.rawpixel.com/image/9657884/swimming-pool",
+  "slug": "sport"
+ },
+ {
+  "title": "stack old & vintage books",
+  "url": "https://images.rawpixel.com/editor_1024/cHJpdmF0ZS9sci9pbWFnZXMvd2Vic2l0ZS8yMDIyLTA0L3Vwd2s2MTc2Mjk0NS13aWtpbWVkaWEtaW1hZ2Uta293bDdwOWYuanBn.jpg",
+  "creator": "",
+  "license": "cc0",
+  "provider": "rawpixel",
+  "foreign_landing_url": "https://www.rawpixel.com/image/3292975/free-photo-image-book-bookcase-cc0",
+  "slug": "all"
+ },
+ {
+  "slug": "geography",
+  "title": "Dokkadeltaet nord i Randsfjorden",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/1/14/Dokkadeltaet_nord_i_Randsfjorden.jpg",
+  "creator": "Kjetil Ree",
+  "license": "cc0",
+  "provider": "wikimedia",
+  "foreign_landing_url": "https://commons.wikimedia.org/wiki/File:Dokkadeltaet_nord_i_Randsfjorden.jpg"
+ }
 ]
