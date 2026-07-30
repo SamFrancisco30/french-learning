@@ -82,7 +82,8 @@ rewritten when authentication arrives.
 - Resolve learner ownership in one backend component.
 - Remove `learner_key` and `user_id` from vocabulary business payloads.
 - Support an anonymous credential without mistaking it for secure authentication.
-- Prefer a verified Supabase user when a valid access token is present.
+- Preserve an interface that a later authentication phase can extend to prefer a verified
+  Supabase user.
 - Ensure every vocabulary read and mutation is scoped to the resolved identity.
 - Preserve a clear path for adopting anonymous data into an authenticated account.
 
@@ -110,7 +111,7 @@ creating it.
 Conceptually:
 
 ```text
-Request
+Vocabulary request
   |
   +-- Authorization present -------> 401 during vocabulary MVP
   |
@@ -119,9 +120,8 @@ Request
                                       v
                                LearnerIdentity
                                       |
-                   +------------------+------------------+
-                   |                  |                  |
-                 vocab            attempts           progress
+                                      v
+                               vocabulary queries
 ```
 
 During the MVP, vocabulary endpoints support anonymous identity only. The client sends the
@@ -192,8 +192,9 @@ lookup.
 
 ### 7.1 Vocabulary Normalization
 
-Add `normalized_headword` to `vocab_items`. It is derived on the server and is never trusted
-from client input.
+Add `normalized_headword` and `normalized_gloss` to `vocab_items`. They are derived on the
+server and are never trusted from client input. `normalized_headword` is required;
+`normalized_gloss` is a required text value that uses `""` when no gloss exists.
 
 Normalization is implemented once on the Python backend and reused by migration backfill
 and runtime writes in this exact order:
@@ -220,7 +221,14 @@ Required test vectors include:
 | `côte` | `côte` |
 | `cote` | `cote` |
 
-`côte` and `cote` must remain distinct.
+`côte` and `cote` must remain distinct. Glosses use the same normalization steps so search
+behavior is identical on PostgreSQL and SQLite.
+
+The runtime function is named and versioned as `normalize_vocab_v1`. The Alembic revision
+contains a frozen copy of the v1 algorithm rather than importing mutable application code.
+Shared test vectors verify that the frozen migration function and runtime function produce
+the same output when the migration is authored; future normalization changes require a new
+version and migration.
 
 ### 7.2 Ownership Uniqueness
 
@@ -252,11 +260,12 @@ Add indexes that support:
 
 The Alembic migration:
 
-1. Adds `normalized_headword` as nullable.
-2. Backfills it for existing rows using the same normalization implementation.
+1. Adds `normalized_headword` and `normalized_gloss` as nullable.
+2. Backfills both with the migration-local frozen v1 normalization algorithm; absent glosses
+   become `""`.
 3. Adds nullable `updated_at` and backfills it from `created_at`.
 4. Resolves normalization collisions deterministically.
-5. Uses Alembic batch operations on SQLite to make both new columns non-null and remove the
+5. Uses Alembic batch operations on SQLite to make all three new columns non-null and remove the
    named `uq_vocab_learner_word` constraint; PostgreSQL uses normal `ALTER TABLE`.
 6. Creates matching PostgreSQL and SQLite partial unique indexes.
 
@@ -264,7 +273,8 @@ For a collision, sort rows by `(updated_at DESC, id DESC)` and keep the first ro
 survivor. For each of `gloss_en`, `example`, and `unit_id`, retain the survivor's non-empty
 value or fill it from the first newer-to-older row with a non-empty value. Copy the complete
 SRS tuple (`reps`, `lapses`, `ease`, `interval_days`, `due_at`) only from the survivor; do
-not combine counters. Delete the remaining collision rows after the survivor is complete.
+not combine counters. Recompute `normalized_gloss` from the final chosen gloss, then delete
+the remaining collision rows after the survivor is complete.
 
 Although the verified cloud table is currently empty, the migration remains safe for local
 or newly-created data. Collision resolution follows the deterministic algorithm above.
@@ -346,7 +356,11 @@ Response:
 Rules:
 
 - `language` is optional; absence lists all learner languages.
-- `q` is at most 128 characters and searches normalized headword and gloss.
+- raw `q` is at most 128 Unicode code points
+- `q` is transformed with `normalize_vocab_v1`; an empty normalized query is treated as no
+  search filter
+- a non-empty query matches when it is a literal substring of `normalized_headword` or
+  `normalized_gloss`
 - `sort` supports `recent` and `alphabetical`.
 - `limit` defaults to 50 and must be between 1 and 100.
 - `total` is the count after ownership, language, and search filters.
@@ -358,8 +372,10 @@ Rules:
   rejected with `400`
 - malformed or unsupported cursor versions are rejected with `400`
 
-Search treats `%`, `_`, and `\` as literal characters. SQL `LIKE` patterns escape those
-characters with `\` and declare `ESCAPE '\'`; user input cannot introduce wildcards.
+Both databases search the stored normalized fields, so they do not depend on database
+collations or database-specific Unicode `LOWER` behavior. Search treats `%`, `_`, and `\`
+as literal characters. SQL `LIKE` patterns escape those characters with `\` and declare
+`ESCAPE '\'`; user input cannot introduce wildcards.
 
 ### 9.3 Saved Vocabulary Keys
 
@@ -401,8 +417,15 @@ Content-Type: application/json
 }
 ```
 
-`headword` is limited to 128 characters, `gloss_en` to 1,000 characters, and `example` to
-2,000 characters.
+Raw `headword` is limited to 128 Unicode code points before normalization, `gloss_en` to
+1,000, and `example` to 2,000. After v1 normalization, `normalized_headword` must contain
+1–128 code points; whitespace-only input or NFKC expansion beyond 128 is rejected with
+`422`. `normalized_gloss` is recomputed from every stored gloss.
+
+When `unit_id` is present, the referenced `ListeningUnit` must exist and its parent lesson's
+language must equal the request's validated vocabulary language. A missing or
+language-mismatched unit returns `422` before any insert/update; it is never silently
+ignored.
 
 Saving is idempotent for the resolved owner, language, and normalized headword. For an
 existing item:
@@ -419,6 +442,8 @@ If concurrent inserts race, the backend catches the unique-constraint failure, r
 that transaction, reloads the winning row under the same ownership predicate, applies the
 same fill-only rules, and returns it.
 
+Both a newly created item and an idempotently returned item use `200 OK`.
+
 ### 9.5 Edit Vocabulary
 
 ```http
@@ -434,7 +459,8 @@ Content-Type: application/json
 The MVP edits only learner-controlled gloss and example content. Each field is optional,
 but at least one must be present. `null` or an empty string clears that field. The same
 1,000/2,000 character limits apply. A successful edit updates `updated_at`. Renaming a
-headword is not part of the first release.
+headword is not part of the first release. Changing `gloss_en` also recomputes
+`normalized_gloss`. A successful edit returns `200 OK` with the full vocabulary item.
 
 ### 9.6 Delete Vocabulary
 
@@ -476,7 +502,7 @@ The lookup popup:
 - During the MVP, any bearer token on a vocabulary request: `401 Unauthorized` with
   authentication-not-enabled semantics.
 - In the later authentication phase, invalid or expired bearer token: `401 Unauthorized`.
-- Missing or malformed anonymous identity on learner-owned endpoints: `401 Unauthorized`.
+- Missing or malformed anonymous identity on vocabulary endpoints: `401 Unauthorized`.
 - Invalid language, cursor, sort, or payload: `400` or `422`.
 - Item absent or not owned by the requester: `404 Not Found`.
 - Duplicate races on save: resolve as an idempotent fetch/update, not a user-visible `409`.
@@ -496,8 +522,11 @@ Add automated tests for:
 - anonymous identity parsing and rejection of malformed credentials
 - ownership isolation between two anonymous learners
 - Unicode and apostrophe normalization
+- identical normalized headword/gloss search behavior on PostgreSQL and SQLite
+- raw and post-normalization length validation, including empty normalized headwords
 - case-insensitive idempotent save
 - repeated save preserving SRS fields
+- missing and language-mismatched source-unit rejection
 - language filtering, search, sorting, and cursor pagination
 - edit and delete scoped to the current owner
 - indistinguishable `404` behavior for absent and foreign items
