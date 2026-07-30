@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import tempfile
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
@@ -11,8 +14,10 @@ from sqlalchemy.orm import Session, selectinload
 from ..db import get_db
 from ..languages import supported_languages
 from ..models import Exercise, Lesson, ListeningUnit, Segment, Source, Transcript
-from ..storage import get_store
+from ..media.timestretch import TimeStretchError, natural_slow
+from ..storage import get_store, variant_clip_key, variant_map_key
 from ..schemas import (
+    ClipVariantOut,
     ExercisePublic,
     LanguageOut,
     LessonDetail,
@@ -167,6 +172,86 @@ def get_unit(unit_id: int, db: Session = Depends(get_db)) -> UnitDetail:
             for e in unit.exercises
         ],
     )
+
+
+@router.get("/units/{unit_id}/clip", response_model=ClipVariantOut)
+def get_unit_clip(
+    unit_id: int,
+    speed: float = Query(default=1.0, ge=0.4, le=1.0),
+    db: Session = Depends(get_db),
+) -> ClipVariantOut:
+    """Playable clip at `speed`, reshaped to sound like deliberate speech.
+
+    Below 1.0 this is not `playbackRate`. Uniform slowdown stretches the inside of every
+    phoneme, which is what makes it sound underwater; a speaker slowing down instead keeps
+    articulation near normal and inserts pauses. So the variant stretches the words only
+    slightly and puts the rest of the time into the gaps.
+
+    Generated on first request and cached in the object store, because it costs a decode,
+    a WSOLA pass and an encode — a few seconds — and the same unit is replayed constantly.
+    """
+    unit = db.get(ListeningUnit, unit_id)
+    if not unit:
+        raise HTTPException(404, f"unit {unit_id} not found")
+    if not unit.clip_key:
+        raise HTTPException(404, f"unit {unit_id} has no audio clip")
+
+    store = get_store()
+
+    if speed >= 0.999:
+        return ClipVariantOut(
+            unit_id=unit.id,
+            speed=1.0,
+            url=clip_url(unit),
+            duration_s=round(unit.duration_s, 3),
+            natural=True,
+            time_map=[],
+        )
+
+    provider_id = unit.lesson.source.provider_id
+    key = variant_clip_key(provider_id, unit.idx, speed)
+    map_key = variant_map_key(provider_id, unit.idx, speed)
+
+    # Serve the cached variant when both the audio and its time map are present. Without
+    # the map the client couldn't translate replay windows, so a half-written pair is
+    # treated as absent and regenerated.
+    if store.exists(key) and store.exists(map_key):
+        try:
+            meta = json.loads(store.get_bytes(map_key).decode("utf-8"))
+            return ClipVariantOut(unit_id=unit.id, speed=speed, url=store.url_for(key), **meta)
+        except Exception:  # noqa: BLE001 - corrupt cache, fall through and rebuild
+            log.warning("unreadable variant map %s; regenerating", map_key)
+
+    words = unit.words_json or []
+    if len(words) < 8:
+        raise HTTPException(
+            409,
+            "this unit has too few word timings to reshape; natural slow playback needs "
+            "word-level timestamps from ASR",
+        )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "original.m4a"
+        src.write_bytes(store.get_bytes(unit.clip_key))
+        out = Path(tmp) / f"slow_{speed:g}.m4a"
+        try:
+            res = natural_slow(
+                src, words, speed=speed, clip_start_s=unit.start_s, dst=out
+            )
+        except (TimeStretchError, ValueError) as exc:
+            raise HTTPException(500, f"could not reshape this clip: {exc}") from None
+
+        store.put_file(key, out, overwrite=True)
+        meta = {
+            "duration_s": res.new_duration_s,
+            "natural": False,
+            "word_factor": res.word_factor,
+            "inserted_silence_s": res.inserted_silence_s,
+            "time_map": res.time_map,
+        }
+        store.put_bytes(map_key, json.dumps(meta).encode("utf-8"), overwrite=True)
+
+    return ClipVariantOut(unit_id=unit.id, speed=speed, url=store.url_for(key), **meta)
 
 
 @router.get("/units/{unit_id}/transcript", response_model=TranscriptOut)

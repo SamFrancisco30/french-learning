@@ -301,3 +301,18 @@ export interface PracticeCheck {
   better_than_reference: boolean
   judged: boolean
 }
+
+// ---------------------------------------------------------------- natural slow playback
+
+export interface ClipVariant {
+  unit_id: number
+  speed: number
+  url: string | null
+  duration_s: number
+  /** True for the untouched original; false for a reshaped slow variant. */
+  natural: boolean
+  word_factor: number | null
+  inserted_silence_s: number | null
+  /** [[original_clip_s, stretched_clip_s], ...] at word starts. */
+  time_map: number[][]
+}

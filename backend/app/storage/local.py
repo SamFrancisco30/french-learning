@@ -50,6 +50,9 @@ class LocalStore:
     def exists(self, key: str) -> bool:
         return self._path(key).exists()
 
+    def get_bytes(self, key: str) -> bytes:
+        return self._path(key).read_bytes()
+
     def url_for(self, key: str) -> str:
         return f"/media/{key}"
 

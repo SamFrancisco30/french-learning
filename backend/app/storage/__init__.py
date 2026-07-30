@@ -13,6 +13,8 @@ from .base import (
     is_derived,
     source_key,
     transcript_key,
+    variant_clip_key,
+    variant_map_key,
 )
 from .local import LocalStore
 
@@ -39,6 +41,8 @@ __all__ = [
     "clip_key",
     "source_key",
     "transcript_key",
+    "variant_clip_key",
+    "variant_map_key",
     "content_type_for",
     "is_derived",
     "DERIVED_SUFFIXES",

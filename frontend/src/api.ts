@@ -82,3 +82,9 @@ export const grammar = {
     answer: string
   }) => post<import('./types').PracticeCheck>('/api/practice/check', body),
 }
+
+export const clips = {
+  /** Naturally-slowed variant of a unit's clip. speed 1.0 returns the original. */
+  variant: (unitId: number, speed: number) =>
+    get<import('./types').ClipVariant>(`/api/units/${unitId}/clip?speed=${speed}`),
+}

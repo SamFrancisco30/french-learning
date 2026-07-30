@@ -7,7 +7,7 @@ import type {
   UnitDetail,
   UnitExpressionSpan,
 } from '../types'
-import { fmt, useClipPlayer } from '../useClipPlayer'
+import { SPEEDS, fmt, useClipPlayer } from '../useClipPlayer'
 import {
   ExerciseBody,
   KIND_LABEL,
@@ -119,7 +119,9 @@ function Drill({
   error: string | null
   setError: (e: string | null) => void
 }) {
-  const player = useClipPlayer(unit.start_s, unit.end_s)
+  // The player owns its own source now: slow speeds load a reshaped variant rather
+  // than changing playbackRate.
+  const player = useClipPlayer(unit.id, unit.start_s, unit.end_s, unit.clip_url)
 
   // Known expression spans, so the transcript can mark them before anything is clicked.
   const [exprSpans, setExprSpans] = useState<UnitExpressionSpan[]>([])
@@ -214,12 +216,17 @@ function Drill({
             {fmt(player.position)} / {fmt(player.duration)}
           </span>
           <div className="rates">
-            {[0.75, 0.9, 1].map((r) => (
+            {SPEEDS.map((r) => (
               <button
                 key={r}
-                className={`rate-btn ${player.rate === r ? 'on' : ''}`}
-                onClick={() => player.setRate(r)}
-                title={`${r}× speed`}
+                className={`rate-btn ${player.speed === r ? 'on' : ''}`}
+                onClick={() => player.setSpeed(r)}
+                disabled={player.loadingSpeed}
+                title={
+                  r === 1
+                    ? 'Original speed'
+                    : `${r}× — words kept near normal, pauses lengthened`
+                }
               >
                 {r}×
               </button>
@@ -231,11 +238,19 @@ function Drill({
         </div>
         <div className="player-hint">
           {unit.cefr} · {unit.wpm?.toFixed(0)} words/min · {player.replays} replays
-          {' · '}slow it to 0.75× first, then confirm at 1×
+          {player.loadingSpeed && ' · preparing slower audio…'}
+          {!player.loadingSpeed && player.variant && !player.variant.natural && (
+            <>
+              {' · '}
+              {player.speed}×: words at {Math.round((player.variant.word_factor ?? 1) * 100)}%,
+              {' '}
+              +{(player.variant.inserted_silence_s ?? 0).toFixed(0)}s of added pauses
+            </>
+          )}
+          {!player.loadingSpeed && player.speed === 1 &&
+            ' · try 0.75× first, then confirm at full speed'}
         </div>
-        {unit.clip_url && (
-          <audio ref={player.ref} src={unit.clip_url} preload="auto" />
-        )}
+        {player.src && <audio ref={player.ref} src={player.src} preload="auto" />}
       </div>
 
       {unit.gist && (

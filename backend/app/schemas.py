@@ -333,3 +333,20 @@ class PracticeCheckOut(BaseModel):
     reference_fr: str
     better_than_reference: bool = False
     judged: bool
+
+
+# ---------------------------------------------------------------- natural slow playback
+
+
+class ClipVariantOut(BaseModel):
+    unit_id: int
+    speed: float
+    url: str | None
+    duration_s: float
+    # True for the untouched original (speed 1.0); False for a reshaped variant.
+    natural: bool
+    word_factor: float | None = None
+    inserted_silence_s: float | None = None
+    # [[original_clip_s, stretched_clip_s], ...] at word starts. The client interpolates
+    # through it so an exercise's replay window still lands on the right audio at 0.75x.
+    time_map: list[list[float]] = Field(default_factory=list)

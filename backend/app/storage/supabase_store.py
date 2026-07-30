@@ -116,6 +116,12 @@ class SupabaseStore:
             return False
         return any(e.get("name") == name for e in entries or [])
 
+    def get_bytes(self, key: str) -> bytes:
+        try:
+            return self._client.storage.from_(self.bucket).download(key)
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"could not download {key!r}: {exc}") from exc
+
     def size(self, key: str) -> int | None:
         folder, _, name = key.rpartition("/")
         try:

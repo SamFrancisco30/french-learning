@@ -62,6 +62,10 @@ class ObjectStore(Protocol):
     def exists(self, key: str) -> bool:
         ...
 
+    def get_bytes(self, key: str) -> bytes:
+        """Read an object back. Needed to derive variants from a stored original."""
+        ...
+
     def url_for(self, key: str) -> str:
         """A URL a browser can play. May be short-lived."""
         ...
@@ -85,6 +89,17 @@ def source_key(provider_id: str, suffix: str) -> str:
 
 def clip_key(provider_id: str, unit_idx: int) -> str:
     return f"clips/{provider_id}/unit_{unit_idx:03d}.m4a"
+
+
+def variant_clip_key(provider_id: str, unit_idx: int, speed: float) -> str:
+    """Naturally-slowed variant, e.g. clips/ID/unit_000@0.75.m4a."""
+    return f"clips/{provider_id}/unit_{unit_idx:03d}@{speed:g}.m4a"
+
+
+def variant_map_key(provider_id: str, unit_idx: int, speed: float) -> str:
+    """Original->stretched time map for a variant, stored beside it so replay windows
+    survive a speed change without regenerating the audio."""
+    return f"clips/{provider_id}/unit_{unit_idx:03d}@{speed:g}.map.json"
 
 
 def transcript_key(provider_id: str, backend: str) -> str:
