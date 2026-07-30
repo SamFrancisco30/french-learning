@@ -10,9 +10,9 @@ import { groupWords, sentenceSpan, useFollowAlong, type WordGroup } from '../use
  * it" once here and letting each passage decide whether to *display* it keeps the two in exact
  * agreement and means the frame loop has a single subscriber.
  *
- * Each passage keeps its own on/off switch, because the two are used differently: following
- * along while reading a transcript is the point, whereas during a fill-in-the-blank drill some
- * learners want it and others find it does too much of the work for them.
+ * Each passage keeps its own on/off switch, so a learner can follow along in one and not the
+ * other. Both start on: the highlight is the reason the feature exists, and in the cloze it
+ * gives nothing away — the blanked characters are never rendered.
  */
 
 interface FollowValue {

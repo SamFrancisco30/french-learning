@@ -38,11 +38,10 @@ function Cloze({ ex, result, response, setResponse, play, onSubmit }: ExercisePr
   const textRef = useRef<HTMLDivElement | null>(null)
   useLookupOn(textRef, text, { blockedRanges: blankRanges })
 
-  // Follow the voice through the passage. Off by default here, unlike the transcript: this is a
-  // test, and seeing the words arrive is help some learners want and others would rather not
-  // have. It reveals nothing either way — the answer's characters are never rendered, and the
-  // per-blank replay button already gives away each blank's exact audio window.
-  const [follow, setFollow] = useState(false)
+  // Follow the voice through the passage, on by default. It gives nothing away: the answer's
+  // characters are never rendered, and the per-blank replay button already hands over each
+  // blank's exact audio window. Anyone who would rather work without it has the switch.
+  const [follow, setFollow] = useState(true)
   const { available, words, activeWord, lineSpan } = usePassageFollow(text, follow)
 
   // Blank edges become piece boundaries, so no rendered piece can ever straddle a blank.
