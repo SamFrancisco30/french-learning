@@ -38,3 +38,6 @@ dist/
 Thumbs.db
 .idea/
 .vscode/
+
+# --- isolated implementation worktrees ---
+.worktrees/
