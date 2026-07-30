@@ -41,6 +41,7 @@ CHINESE = ChineseProfile(
     asr_code="zh",
     freq_code="zh",
     function_words=CHINESE_FUNCTION_WORDS,
+    filler_words=frozenset("""嗯 呃 啊 唉 哦 欸""".split()),
     elision_prefixes=(),
     needs_segmentation=True,
     # Mandarin news reads at roughly 240-260 characters/min.

@@ -16,6 +16,10 @@ dependencies = [
     "typer>=0.15",
     "rich>=13.9",
     "httpx>=0.28",
+    # Postgres driver. psycopg3 with the binary wheel — no local libpq needed.
+    "psycopg[binary]>=3.2",
+    "alembic>=1.14",
+    "supabase>=2.10",
 ]
 
 [project.optional-dependencies]

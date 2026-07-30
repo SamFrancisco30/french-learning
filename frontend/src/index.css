@@ -182,7 +182,10 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 /* ---------------- audio player ---------------- */
 
 .player {
-  position: sticky; top: 62px; z-index: 20;
+  /* Stick just below the masthead. Its height is published as --masthead-h by App,
+     because the nav wraps to a second row on narrow screens and any hardcoded offset
+     would let the player slide behind it there. */
+  position: sticky; top: calc(var(--masthead-h, 104px) + 8px); z-index: 20;
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius);

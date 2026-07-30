@@ -40,6 +40,9 @@ FRENCH = LanguageProfile(
     freq_code="fr",
     function_words=FRENCH_FUNCTION_WORDS,
     # French elides before vowels: l'eau, d'accord, j'ai, n'est, qu'il, s'il, m'a, t'as, jusqu'à
+    filler_words=frozenset(
+        """euh heu eh hé ben bein bah hein ouais mouais bof hum hm ouah""".split()
+    ),
     elision_prefixes=("l", "d", "j", "n", "c", "s", "m", "t", "qu", "jusqu", "lorsqu", "puisqu"),
     needs_segmentation=False,
     # French news/documentary narration typically runs 160-200 wpm.

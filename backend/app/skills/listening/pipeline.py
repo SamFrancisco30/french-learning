@@ -31,6 +31,9 @@ from ...languages import get_language
 from ...lexicon.extractor import extract_expressions
 from ...media import audio as audio_utils
 from ...media.youtube import download_audio
+from ...storage import clip_key as make_clip_key
+from ...storage import get_store, source_key, transcript_key
+from ...storage.cleanup import derived_paths, prune_after_upload
 from ...models import (
     EX_CLOZE,
     SKILL_LISTENING,
@@ -66,7 +69,8 @@ class PipelineReport:
     asr_model: str
     reused_transcript: bool
     llm_failures: int
-    audio_path: str
+    audio_key: str
+    local_mb_freed: float
 
     def to_dict(self) -> dict[str, Any]:
         return self.__dict__.copy()
@@ -95,14 +99,21 @@ def _upsert_source(db: Session, info, language: str, topic: str | None) -> Sourc
     src.license_name = info.license_name
     src.upload_date = info.upload_date
     src.description = info.description
-    src.audio_path = str(info.audio_path)
+    # Upload the source to object storage. ASR needs a local file to read, so the
+    # download stays on disk for this run and the store gets a copy under a stable key.
+    store = get_store()
+    key = source_key(info.provider_id, info.audio_path.suffix)
+    store.put_file(key, info.audio_path)
+    src.audio_key = key
+    src.audio_bytes = info.audio_path.stat().st_size
     db.flush()
     return src
 
 
 def _save_transcript(db: Session, src: Source, result: ASRResult) -> Transcript:
-    raw_path = settings.transcript_dir / f"{src.provider_id}.{result.backend}.json"
-    raw_path.write_text(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), "utf-8")
+    raw = json.dumps(result.to_dict(), ensure_ascii=False, indent=2).encode("utf-8")
+    raw_key = transcript_key(src.provider_id, result.backend)
+    get_store().put_bytes(raw_key, raw, overwrite=True)
 
     tr = Transcript(
         source_id=src.id,
@@ -112,7 +123,7 @@ def _save_transcript(db: Session, src: Source, result: ASRResult) -> Transcript:
         text=result.text,
         word_count=result.word_count,
         duration_s=result.duration_s,
-        raw_path=str(raw_path),
+        raw_key=raw_key,
     )
     db.add(tr)
     db.flush()
@@ -178,6 +189,7 @@ def build_listening_lesson(
     reuse_transcript: bool = True,
     make_clips: bool = True,
     extract_mwe: bool = True,
+    cleanup_local: bool | None = None,
 ) -> PipelineReport:
     lang = get_language(language)
     settings.ensure_dirs()
@@ -245,7 +257,13 @@ def build_listening_lesson(
     db.add(lesson)
     db.flush()
 
+    # One store for the whole run. `_upsert_source` has its own local handle for the source
+    # upload; the clip loop below needs one in this scope too.
+    store = get_store()
     clip_dir = settings.clip_dir / src.provider_id
+    # (object key, local file) for every upload this run, so cleanup can confirm each
+    # object is really in the store before removing its local copy.
+    uploaded: list[tuple[str, Path]] = [(src.audio_key or "", info.audio_path)]
     reports: list[difficulty_mod.DifficultyReport] = []
     total_exercises = 0
     total_expressions = 0
@@ -253,15 +271,20 @@ def build_listening_lesson(
     lesson_topic = lesson.topic
 
     for u in units:
-        report = difficulty_mod.analyze(u.text, u.duration_s, lang)
+        report = difficulty_mod.analyze(
+            u.text, u.duration_s, lang, words=[w.to_dict() for w in u.words]
+        )
         reports.append(report)
 
-        clip_rel: str | None = None
+        unit_clip_key: str | None = None
         if make_clips:
-            clip_path = clip_dir / f"unit_{u.idx:03d}.m4a"
-            if not clip_path.exists():
-                audio_utils.extract_clip(info.audio_path, u.start_s, u.end_s, clip_path)
-            clip_rel = str(clip_path.relative_to(settings.data_dir))
+            # Cut locally with ffmpeg, then hand the file to the store. The key format is
+            # identical under local and Supabase backends, so nothing downstream changes.
+            local_clip = clip_dir / f"unit_{u.idx:03d}.m4a"
+            if not local_clip.exists():
+                audio_utils.extract_clip(info.audio_path, u.start_s, u.end_s, local_clip)
+            unit_clip_key = store.put_file(make_clip_key(src.provider_id, u.idx), local_clip)
+            uploaded.append((unit_clip_key, local_clip))
 
         unit_row = ListeningUnit(
             lesson_id=lesson.id,
@@ -270,7 +293,7 @@ def build_listening_lesson(
             end_s=u.end_s,
             text=u.text,
             words_json=[w.to_dict() for w in u.words],
-            clip_path=clip_rel,
+            clip_key=unit_clip_key,
             wpm=report.wpm,
             cefr=report.cefr,
             difficulty_score=report.score,
@@ -364,6 +387,16 @@ def build_listening_lesson(
         src.topic = lesson_topic
     db.flush()
 
+    # Free the scratch files. Each is deleted only if its object is confirmed present in
+    # the store, so a failed upload leaves the local copy intact.
+    do_cleanup = settings.cleanup_local_after_upload if cleanup_local is None else cleanup_local
+    freed = 0.0
+    if do_cleanup:
+        files, dirs = derived_paths(settings.audio_dir, info.audio_path.stem)
+        report_cleanup = prune_after_upload(store, uploaded=uploaded, derived=files, dirs=dirs)
+        freed = report_cleanup.mb_freed
+        log.info("local cleanup: %s", report_cleanup.summary())
+
     return PipelineReport(
         lesson_id=lesson.id,
         source_id=src.id,
@@ -379,5 +412,6 @@ def build_listening_lesson(
         asr_model=tr.asr_model,
         reused_transcript=reused,
         llm_failures=llm_failures,
-        audio_path=str(info.audio_path),
+        audio_key=src.audio_key or "",
+        local_mb_freed=round(freed, 2),
     )

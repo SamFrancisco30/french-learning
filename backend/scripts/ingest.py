@@ -51,6 +51,12 @@ def add(
     ),
     clips: bool = typer.Option(True, "--clips/--no-clips", help="Extract per-unit audio clips"),
     require_cc: bool = typer.Option(False, help="Only accept Creative Commons sources"),
+    cleanup_local: bool | None = typer.Option(
+        None,
+        "--cleanup-local/--keep-local",
+        help="Delete local working files once their objects are confirmed uploaded "
+        "(defaults on for cloud storage, never applies to local storage)",
+    ),
 ) -> None:
     """Download, transcribe and build a listening lesson from a media URL."""
     init_db()
@@ -68,6 +74,7 @@ def add(
             use_llm=llm,
             reuse_transcript=reuse,
             make_clips=clips,
+            cleanup_local=cleanup_local,
         )
 
     console.print(
@@ -78,7 +85,8 @@ def add(
             f"level [magenta]{report.cefr}[/magenta] (difficulty {report.difficulty})  ·  "
             f"ASR {report.asr_backend}/{report.asr_model}"
             + ("  [dim](transcript reused)[/dim]" if report.reused_transcript else "")
-            + (f"\n[yellow]LLM failures: {report.llm_failures}[/yellow]" if report.llm_failures else ""),
+            + (f"\n[yellow]LLM failures: {report.llm_failures}[/yellow]" if report.llm_failures else "")
+            + (f"\n[dim]local disk freed: {report.local_mb_freed:.1f} MB[/dim]" if report.local_mb_freed else ""),
             title="lesson built",
             border_style="green",
         )
@@ -148,8 +156,8 @@ def show(lesson_id: int, unit: int | None = typer.Option(None, help="Only this u
             )
             if u.gist:
                 console.print(f"  [dim]gist:[/dim] {u.gist}")
-            if u.clip_path:
-                console.print(f"  [dim]clip:[/dim] /media/{u.clip_path}")
+            if u.clip_key:
+                console.print(f"  [dim]clip:[/dim] {u.clip_key}")
 
             for e in u.exercises:
                 console.print(f"\n  [yellow]{e.kind}[/yellow] #{e.order_idx}  {e.prompt}")
@@ -241,7 +249,7 @@ def rescore(
             reports = []
             for u in lesson.units:
                 old_cefr, old_score = u.cefr, u.difficulty_score or 0.0
-                r = diff.analyze(u.text, u.duration_s, lang)
+                r = diff.analyze(u.text, u.duration_s, lang, words=u.words_json or [])
                 reports.append(r)
                 before_levels[old_cefr or "?"] += 1
                 after_levels[r.cefr] += 1

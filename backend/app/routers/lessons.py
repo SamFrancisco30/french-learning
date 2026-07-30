@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -9,6 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 from ..db import get_db
 from ..languages import supported_languages
 from ..models import Exercise, Lesson, ListeningUnit, Segment, Source, Transcript
+from ..storage import get_store
 from ..schemas import (
     ExercisePublic,
     LanguageOut,
@@ -20,11 +23,24 @@ from ..schemas import (
     UnitSummary,
 )
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["lessons"])
 
 
 def clip_url(unit: ListeningUnit) -> str | None:
-    return f"/media/{unit.clip_path}" if unit.clip_path else None
+    """Playable URL for a unit's clip, or None.
+
+    Only called for a single unit at a time. Lesson listings deliberately leave this null:
+    on the Supabase backend each URL is a signed-URL request, so signing every unit of every
+    lesson in a library listing would be N network calls for links nobody clicks.
+    """
+    if not unit.clip_key:
+        return None
+    try:
+        return get_store().url_for(unit.clip_key)
+    except Exception:  # noqa: BLE001 - a signing failure must not break the whole response
+        log.warning("could not produce a URL for %s", unit.clip_key)
+        return None
 
 
 def _unit_summary(u: ListeningUnit, exercise_count: int) -> UnitSummary:
@@ -38,7 +54,8 @@ def _unit_summary(u: ListeningUnit, exercise_count: int) -> UnitSummary:
         wpm=u.wpm,
         difficulty_score=u.difficulty_score,
         gist=u.gist,
-        clip_url=clip_url(u),
+        # Left unsigned in listings — see clip_url's docstring.
+        clip_url=None,
         exercise_count=exercise_count,
     )
 
@@ -129,8 +146,10 @@ def get_unit(unit_id: int, db: Session = Depends(get_db)) -> UnitDetail:
     if not unit:
         raise HTTPException(404, f"unit {unit_id} not found")
 
+    summary = _unit_summary(unit, len(unit.exercises)).model_dump()
+    summary["clip_url"] = clip_url(unit)  # signed here, where it is actually played
     return UnitDetail(
-        **_unit_summary(unit, len(unit.exercises)).model_dump(),
+        **summary,
         difficulty_detail=unit.difficulty_detail or {},
         # NOTE: answers deliberately omitted — see schemas.ExercisePublic.
         exercises=[

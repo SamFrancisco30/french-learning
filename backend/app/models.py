@@ -32,15 +32,21 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import DeclarativeBase, Mapped, deferred, mapped_column, relationship
 
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# JSONB where the database supports it, JSON elsewhere, so the same models run against
+# both Supabase Postgres and a local SQLite file.
+JSON_TYPE = JSON().with_variant(JSONB, "postgresql")
+
+
 class Base(DeclarativeBase):
-    type_annotation_map = {dict[str, Any]: JSON, list[Any]: JSON}
+    type_annotation_map = {dict[str, Any]: JSON_TYPE, list[Any]: JSON_TYPE}
 
 
 # --- vocabulary of string enums (kept as plain strings for SQLite friendliness) ---
@@ -96,7 +102,11 @@ class Source(Base):
     license_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     upload_date: Mapped[str | None] = mapped_column(String(16), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    audio_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Object-store key (e.g. "sources/VIDEOID/original.m4a"), not a filesystem path —
+    # identical under local and Supabase storage.
+    audio_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Bytes, so storage growth can be reported without touching the store.
+    audio_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     transcripts: Mapped[list["Transcript"]] = relationship(
@@ -118,7 +128,7 @@ class Transcript(Base):
     text: Mapped[str] = mapped_column(Text)
     word_count: Mapped[int] = mapped_column(Integer, default=0)
     duration_s: Mapped[float] = mapped_column(Float, default=0.0)
-    raw_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     source: Mapped[Source] = relationship(back_populates="transcripts")
@@ -140,7 +150,7 @@ class Segment(Base):
     end_s: Mapped[float] = mapped_column(Float)
     text: Mapped[str] = mapped_column(Text)
     # [{"word": "bonjour", "start": 1.2, "end": 1.6, "probability": 0.98}, ...]
-    words_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    words_json: Mapped[list[Any]] = deferred(mapped_column(JSON_TYPE, default=list))
     avg_logprob: Mapped[float | None] = mapped_column(Float, nullable=True)
     no_speech_prob: Mapped[float | None] = mapped_column(Float, nullable=True)
 
@@ -179,12 +189,12 @@ class ListeningUnit(Base):
     start_s: Mapped[float] = mapped_column(Float)
     end_s: Mapped[float] = mapped_column(Float)
     text: Mapped[str] = mapped_column(Text)
-    words_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
-    clip_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    words_json: Mapped[list[Any]] = deferred(mapped_column(JSON_TYPE, default=list))
+    clip_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     wpm: Mapped[float | None] = mapped_column(Float, nullable=True)
     cefr: Mapped[str | None] = mapped_column(String(4), nullable=True)
     difficulty_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    difficulty_detail: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    difficulty_detail: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, default=dict)
     # Short gist so the UI can preview a unit without spoiling the answers.
     gist: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -209,15 +219,21 @@ class Exercise(Base):
     order_idx: Mapped[int] = mapped_column(Integer, default=0)
     prompt: Mapped[str] = mapped_column(Text)
     # Everything the client needs to render, minus the answer.
-    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, default=dict)
     # Withheld from the client until an attempt is submitted.
-    answer: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    answer: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, default=dict)
     explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Replay window for "listen to this bit again".
     audio_start_s: Mapped[float | None] = mapped_column(Float, nullable=True)
     audio_end_s: Mapped[float | None] = mapped_column(Float, nullable=True)
     cefr: Mapped[str | None] = mapped_column(String(4), nullable=True)
     generator: Mapped[str] = mapped_column(String(32), default="llm")
+    # auto (generated, unreviewed) | approved | rejected
+    review_state: Mapped[str] = mapped_column(String(16), default="auto", index=True)
+    reviewed_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     unit: Mapped[ListeningUnit] = relationship(back_populates="exercises")
@@ -234,10 +250,12 @@ class Attempt(Base):
     exercise_id: Mapped[int] = mapped_column(ForeignKey("exercises.id", ondelete="CASCADE"))
     # Anonymous learner identity for now; swap for a real user FK when auth lands.
     learner_key: Mapped[str] = mapped_column(String(64), default="anonymous", index=True)
-    response: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # Set once Supabase Auth is wired up; learner_key remains the anonymous fallback.
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    response: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, default=dict)
     is_correct: Mapped[bool] = mapped_column(Boolean, default=False)
     score: Mapped[float] = mapped_column(Float, default=0.0)
-    feedback: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    feedback: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, default=dict)
     replays: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -252,6 +270,8 @@ class VocabItem(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     learner_key: Mapped[str] = mapped_column(String(64), default="anonymous", index=True)
+    # Set once Supabase Auth is wired up; learner_key remains the anonymous fallback.
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     language: Mapped[str] = mapped_column(String(8), index=True)
     headword: Mapped[str] = mapped_column(String(128))
     gloss_en: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -306,7 +326,7 @@ class Expression(Base):
 
     char_start: Mapped[int] = mapped_column(Integer)  # envelope, for ordering
     char_end: Mapped[int] = mapped_column(Integer)
-    component_spans: Mapped[list[Any]] = mapped_column(JSON, default=list)  # [[s,e],...]
+    component_spans: Mapped[list[Any]] = mapped_column(JSON_TYPE, default=list)  # [[s,e],...]
     confidence: Mapped[float] = mapped_column(Float, default=1.0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -334,9 +354,9 @@ class SentenceAnalysis(Base):
     register: Mapped[str | None] = mapped_column(String(24), nullable=True)
     # [{key, schema_form, name_en, meaning_en, why_opaque, literal_trap,
     #   in_this_sentence, char_start, char_end, marker_spans, cefr, source}]
-    structures: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    structures: Mapped[list[Any]] = mapped_column(JSON_TYPE, default=list)
     # [{construction_key, schema_form, prompt_en, reference_fr, alternatives, hint_en}]
-    practices: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    practices: Mapped[list[Any]] = mapped_column(JSON_TYPE, default=list)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     hits: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -365,7 +385,7 @@ class GlossCache(Base):
     pos: Mapped[str | None] = mapped_column(String(32), nullable=True)
     gloss_en: Mapped[str] = mapped_column(Text)
     # Other senses this word can carry, so the learner sees the word isn't one-to-one.
-    senses: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    senses: Mapped[list[Any]] = mapped_column(JSON_TYPE, default=list)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     zipf: Mapped[float | None] = mapped_column(Float, nullable=True)
     hits: Mapped[int] = mapped_column(Integer, default=1)

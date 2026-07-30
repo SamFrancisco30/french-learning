@@ -30,6 +30,7 @@ RUSSIAN = LanguageProfile(
     asr_code="ru",
     freq_code="ru",
     function_words=RUSSIAN_FUNCTION_WORDS,
+    filler_words=frozenset("""э эм ну ага угу мда типа""".split()),
     elision_prefixes=(),
     needs_segmentation=False,
     baseline_wpm=140.0,

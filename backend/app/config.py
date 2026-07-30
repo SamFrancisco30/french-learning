@@ -33,6 +33,21 @@ class Settings(BaseSettings):
     data_dir: Path = BACKEND_ROOT / "data"
     database_url: str = "sqlite:///./data/polyglot.sqlite"
 
+    # --- object storage ---
+    # "local" keeps audio under data_dir and serves it from /media (offline dev).
+    # "supabase" uploads to a private bucket and serves short-lived signed URLs.
+    storage_backend: str = "local"
+    supabase_url: str | None = None
+    # service_role key: bypasses RLS, full access. Server-side only, never the frontend.
+    supabase_service_key: str | None = None
+    supabase_bucket: str = "audio"
+    # Signed URLs are minted per request. An hour outlives any single listening session
+    # while keeping links from being shareable indefinitely.
+    signed_url_ttl_s: int = 3600
+    # Delete local working files once their objects are confirmed in the store. Only ever
+    # applies to a cloud backend — under local storage those files ARE the library.
+    cleanup_local_after_upload: bool = True
+
     # --- api ---
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 

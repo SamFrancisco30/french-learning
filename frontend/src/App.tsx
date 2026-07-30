@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { api } from './api'
 import { ListeningPage } from './pages/ListeningPage'
 import { ReadingPage } from './pages/ReadingPage'
@@ -18,6 +18,7 @@ function learnerKey(): string {
 
 export default function App() {
   const { segments, navigate } = useHashRoute()
+  const mastheadRef = useRef<HTMLElement | null>(null)
   const [languages, setLanguages] = useState<Language[]>([])
   const [language, setLanguage] = useState('fr')
   const [key] = useState(learnerKey)
@@ -26,12 +27,27 @@ export default function App() {
     api.languages().then(setLanguages).catch(() => undefined)
   }, [])
 
+  // Publish the masthead's real height so the sticky audio player sits flush beneath it.
+  // Measured every render via offsetHeight (border-box) rather than with a ResizeObserver:
+  // the observer reports the content box and fired before the language buttons loaded, so
+  // the published value stayed stale at 56px for a 103px masthead and the player tucked
+  // behind the nav. A layout-effect read is cheap and can't go stale.
+  useLayoutEffect(() => {
+    const el = mastheadRef.current
+    if (!el) return
+    const publish = () =>
+      document.documentElement.style.setProperty('--masthead-h', `${el.offsetHeight}px`)
+    publish()
+    window.addEventListener('resize', publish)
+    return () => window.removeEventListener('resize', publish)
+  })
+
   const skill = skillFromPath(segments)
   const active = languages.find((l) => l.code === language)
 
   return (
     <div className="shell">
-      <header className="masthead">
+      <header className="masthead" ref={mastheadRef}>
         <div className="masthead-inner">
           <div className="brand">
             {/* Title is the current skill's name in the target language, so it tracks both

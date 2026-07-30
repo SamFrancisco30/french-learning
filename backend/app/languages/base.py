@@ -29,6 +29,11 @@ class LanguageProfile:
     # Contraction/elision prefixes to split off when tokenizing ("l'eau" -> "l", "eau").
     elision_prefixes: tuple[str, ...] = ()
 
+    # Hesitation markers and discourse fillers. Individually these appear in careful
+    # speech too; it is their *density* that distinguishes unscripted delivery, so they
+    # feed a rate rather than a boolean.
+    filler_words: frozenset[str] = field(default_factory=frozenset)
+
     # True for scripts without whitespace word boundaries (zh, ja, th).
     needs_segmentation: bool = False
 
