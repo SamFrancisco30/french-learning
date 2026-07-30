@@ -31,6 +31,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, deferred, mapped_column, relationship
@@ -265,7 +266,40 @@ class Attempt(Base):
 class VocabItem(Base):
     __tablename__ = "vocab_items"
     __table_args__ = (
-        UniqueConstraint("learner_key", "language", "headword", name="uq_vocab_learner_word"),
+        Index(
+            "uq_vocab_anon_word",
+            "learner_key",
+            "language",
+            "normalized_headword",
+            unique=True,
+            postgresql_where=text("user_id IS NULL"),
+            sqlite_where=text("user_id IS NULL"),
+        ),
+        Index(
+            "uq_vocab_user_word",
+            "user_id",
+            "language",
+            "normalized_headword",
+            unique=True,
+            postgresql_where=text("user_id IS NOT NULL"),
+            sqlite_where=text("user_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_vocab_anon_recent",
+            "learner_key",
+            "created_at",
+            "id",
+            postgresql_where=text("user_id IS NULL"),
+            sqlite_where=text("user_id IS NULL"),
+        ),
+        Index(
+            "ix_vocab_user_recent",
+            "user_id",
+            "created_at",
+            "id",
+            postgresql_where=text("user_id IS NOT NULL"),
+            sqlite_where=text("user_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -274,7 +308,9 @@ class VocabItem(Base):
     user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     language: Mapped[str] = mapped_column(String(8), index=True)
     headword: Mapped[str] = mapped_column(String(128))
+    normalized_headword: Mapped[str] = mapped_column(String(128))
     gloss_en: Mapped[str | None] = mapped_column(Text, nullable=True)
+    normalized_gloss: Mapped[str] = mapped_column(Text, default="")
     example: Mapped[str | None] = mapped_column(Text, nullable=True)
     zipf: Mapped[float | None] = mapped_column(Float, nullable=True)
     unit_id: Mapped[int | None] = mapped_column(
@@ -287,6 +323,9 @@ class VocabItem(Base):
     interval_days: Mapped[float] = mapped_column(Float, default=0.0)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
 
 
 class Expression(Base):

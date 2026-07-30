@@ -7,9 +7,9 @@ from app.lexicon.normalize import normalize_vocab_v1
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
-        (" Écouter ", "écouter"),
-        ("L’EAU", "l'eau"),
-        ("lʼeau", "l'eau"),
+        (" \u00c9couter ", "\u00e9couter"),
+        ("L\u2019EAU", "l'eau"),
+        ("l\u02bceau", "l'eau"),
         ("mise   en œuvre", "mise en œuvre"),
         ("côte", "côte"),
         ("cote", "cote"),
