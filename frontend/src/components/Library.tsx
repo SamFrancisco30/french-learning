@@ -1,90 +1,102 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { ALL, TopicArt, topicMeta } from '../topics'
 import type { LessonDetail, LessonSummary, Progress } from '../types'
 import { fmt } from '../useClipPlayer'
 
-const TOPIC_LABEL: Record<string, string> = {
-  world_news: 'world news',
-  geography: 'geography',
-  biology: 'biology',
-  science: 'science',
-  environment: 'environment',
-  economics: 'economics',
-  politics: 'politics',
-  technology: 'technology',
-  history: 'history',
-  culture: 'culture',
-  society: 'society',
-  sport: 'sport',
+export function ProgressSummary({ progress }: { progress: Progress | null }) {
+  if (!progress || progress.attempts === 0) return null
+  return (
+    <div className="summary">
+      <div className="stat">
+        <div className="n">{progress.attempts}</div>
+        <div className="l">attempts</div>
+      </div>
+      <div className="stat">
+        <div className="n">{Math.round(progress.accuracy * 100)}%</div>
+        <div className="l">accuracy</div>
+      </div>
+      <div className="stat">
+        <div className="n">{Math.round(progress.mean_score * 100)}%</div>
+        <div className="l">mean score</div>
+      </div>
+      <div className="stat">
+        <div className="n">{progress.units_touched}</div>
+        <div className="l">units studied</div>
+      </div>
+      <div style={{ flex: 1, minWidth: 220 }}>
+        <div className="bars">
+          {Object.entries(progress.by_kind).map(([kind, s]) => (
+            <div className="bar-row" key={kind}>
+              <span className="bar-label">{kind}</span>
+              <span className="bar-track">
+                <span className="bar-fill" style={{ width: `${s.mean_score * 100}%` }} />
+              </span>
+              <span className="bar-val">{Math.round(s.mean_score * 100)}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
 }
 
+/**
+ * The lessons inside one topic. `topic` is a slug, or ALL.slug for the whole library.
+ *
+ * Lessons arrive as a prop rather than being fetched here: the topic grid needs the same list
+ * to count by subject, so fetching once in the page keeps the two views consistent and makes
+ * going back to the grid instant.
+ */
 export function LessonLibrary({
+  lessons,
+  topic,
   language,
-  learnerKey,
   onOpen,
+  onBack,
 }: {
+  lessons: LessonSummary[]
+  topic: string
   language: string
-  learnerKey: string
   onOpen: (lesson: LessonSummary) => void
+  onBack: () => void
 }) {
-  const [lessons, setLessons] = useState<LessonSummary[] | null>(null)
-  const [progress, setProgress] = useState<Progress | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    api.lessons(language).then(setLessons).catch((e) => setError(String(e)))
-    api.progress(learnerKey).then(setProgress).catch(() => undefined)
-  }, [language, learnerKey])
-
-  if (error) return <div className="error">{error}</div>
-  if (!lessons) return <div className="empty">Loading library…</div>
-  if (lessons.length === 0) {
-    return (
-      <div className="empty">
-        No lessons yet. Add one with:
-        <br />
-        <code>python scripts/ingest.py add "&lt;youtube-url&gt;" --topic world_news</code>
-      </div>
-    )
-  }
+  const meta = topicMeta(topic)
+  const shown =
+    topic === ALL.slug ? lessons : lessons.filter((l) => (l.topic || 'other') === topic)
 
   return (
     <>
-      {progress && progress.attempts > 0 && (
-        <div className="summary">
-          <div className="stat">
-            <div className="n">{progress.attempts}</div>
-            <div className="l">attempts</div>
-          </div>
-          <div className="stat">
-            <div className="n">{Math.round(progress.accuracy * 100)}%</div>
-            <div className="l">accuracy</div>
-          </div>
-          <div className="stat">
-            <div className="n">{Math.round(progress.mean_score * 100)}%</div>
-            <div className="l">mean score</div>
-          </div>
-          <div className="stat">
-            <div className="n">{progress.units_touched}</div>
-            <div className="l">units studied</div>
-          </div>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <div className="bars">
-              {Object.entries(progress.by_kind).map(([kind, s]) => (
-                <div className="bar-row" key={kind}>
-                  <span className="bar-label">{kind}</span>
-                  <span className="bar-track">
-                    <span className="bar-fill" style={{ width: `${s.mean_score * 100}%` }} />
-                  </span>
-                  <span className="bar-val">{Math.round(s.mean_score * 100)}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
+      <div className="crumbs">
+        <button onClick={onBack}>← Topics</button>
+        <span>/</span>
+        <span>{meta.label}</span>
+      </div>
+
+      <div className="topic-banner">
+        <span className="topic-art" aria-hidden="true">
+          <TopicArt slug={topic} />
+        </span>
+        <span className="topic-body">
+          <span className="topic-head">
+            <span className="topic-label">{meta.label}</span>
+            <span className="topic-native" lang={language}>
+              {meta.native}
+            </span>
+          </span>
+          <span className="topic-blurb">{meta.blurb}</span>
+        </span>
+      </div>
+
+      {shown.length === 0 && (
+        <div className="empty">
+          Nothing ingested under this topic yet. Add one with:
+          <br />
+          <code>python scripts/ingest.py add "&lt;youtube-url&gt;" --topic {topic}</code>
         </div>
       )}
 
-      {lessons.map((l) => (
+      {shown.map((l) => (
         <div className="card clickable" key={l.id} onClick={() => onOpen(l)}>
           <h3>{l.title}</h3>
           <div className="sub">
@@ -98,7 +110,7 @@ export function LessonLibrary({
                 {l.difficulty_score !== null && ` · ${l.difficulty_score.toFixed(0)}`}
               </span>
             )}
-            {l.topic && <span className="chip topic">{TOPIC_LABEL[l.topic] ?? l.topic}</span>}
+            {l.topic && <span className="chip topic">{topicMeta(l.topic).label}</span>}
             <span className="chip">{l.unit_count} units</span>
             <span className="chip">{l.exercise_count} exercises</span>
           </div>
@@ -112,10 +124,12 @@ export function LessonView({
   lessonId,
   onOpenUnit,
   onBack,
+  backLabel = 'Library',
 }: {
   lessonId: number
   onOpenUnit: (unitId: number) => void
   onBack: () => void
+  backLabel?: string
 }) {
   const [lesson, setLesson] = useState<LessonDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -130,7 +144,7 @@ export function LessonView({
   return (
     <>
       <div className="crumbs">
-        <button onClick={onBack}>← Library</button>
+        <button onClick={onBack}>← {backLabel}</button>
         <span>/</span>
         <span>{lesson.title}</span>
       </div>
@@ -145,7 +159,7 @@ export function LessonView({
         </div>
         <div className="meta-row">
           {lesson.cefr && <span className="chip level">{lesson.cefr}</span>}
-          {lesson.topic && <span className="chip topic">{TOPIC_LABEL[lesson.topic] ?? lesson.topic}</span>}
+          {lesson.topic && <span className="chip topic">{topicMeta(lesson.topic).label}</span>}
           <span className="chip">{lesson.unit_count} units</span>
           <span className="chip">{lesson.exercise_count} exercises</span>
           <span className="chip">licence: {lesson.source.license_name ?? 'standard YouTube'}</span>

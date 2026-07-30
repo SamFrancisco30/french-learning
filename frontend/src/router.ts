@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react'
  * is a shareable URL.
  *
  *   #/listening
+ *   #/listening/topic/geography      (or /topic/all)
  *   #/listening/lesson/2
  *   #/listening/lesson/2/unit/5
  *   #/reading  #/writing  #/speaking  #/dictation
@@ -40,4 +41,11 @@ export function paramAfter(segments: string[], key: string): number | null {
   if (i === -1 || i + 1 >= segments.length) return null
   const n = Number(segments[i + 1])
   return Number.isFinite(n) ? n : null
+}
+
+/** String route param, or null when absent. Decoded, since topics arrive in the URL. */
+export function slugAfter(segments: string[], key: string): string | null {
+  const i = segments.indexOf(key)
+  if (i === -1 || i + 1 >= segments.length) return null
+  return decodeURIComponent(segments[i + 1]) || null
 }
