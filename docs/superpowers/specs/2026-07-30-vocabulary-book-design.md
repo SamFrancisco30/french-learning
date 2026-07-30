@@ -1,7 +1,7 @@
 # Vocabulary Book and Identity Compatibility Design
 
 **Date:** 2026-07-30  
-**Status:** Approved in conversation; pending written-spec review  
+**Status:** Approved in conversation; written-spec review in progress
 **Scope:** Vocabulary-book MVP plus an authentication-compatible learner identity boundary
 
 ## 1. Context
@@ -112,9 +112,9 @@ Conceptually:
 ```text
 Request
   |
-  +-- valid Supabase bearer token --> authenticated user_id
+  +-- Authorization present -------> 401 during vocabulary MVP
   |
-  +-- no bearer token -------------> anonymous learner_key
+  +-- X-Learner-Key ---------------> anonymous learner_key
                                       |
                                       v
                                LearnerIdentity
@@ -124,14 +124,24 @@ Request
                  vocab            attempts           progress
 ```
 
-During the MVP, the normal path is anonymous. The client sends the anonymous credential in
-a dedicated request header, not a URL or business payload. A malformed or missing anonymous
-credential is rejected for learner-owned endpoints.
+During the MVP, vocabulary endpoints support anonymous identity only. The client sends the
+anonymous credential in `X-Learner-Key`, not a URL or business payload. A malformed or
+missing credential is rejected with `401`. If an `Authorization` header is present during
+the MVP, the vocabulary identity dependency returns `401` with a generic
+"authentication is not enabled" response; it must not decode, trust, or silently ignore an
+unverified bearer token.
 
-When authentication is added, the dependency verifies the bearer token server-side and
-derives `user_id` from its subject claim. A client-provided `user_id` is never trusted. A
-valid authenticated identity takes precedence over an anonymous identity for ordinary
-queries.
+Attempts and progress retain their existing contracts during this MVP: attempts continue to
+accept `learner_key` in their request body and progress continues to accept it in the query
+string. The application continues passing the same anonymous value to those legacy calls.
+Moving attempts and progress onto the identity dependency belongs to the authentication
+phase. This temporary difference is explicit so the vocabulary work does not accidentally
+expand into an application-wide authentication refactor.
+
+When authentication is added in a separate phase, the dependency will verify the bearer
+token server-side and derive `user_id` from its subject claim. A client-provided `user_id`
+is never trusted. A valid authenticated identity will then take precedence over an
+anonymous identity for ordinary queries.
 
 Business routers call identity-aware query helpers rather than duplicating ownership
 conditions. The helper produces exactly one ownership predicate:
@@ -143,12 +153,16 @@ anonymous:     vocab_items.user_id IS NULL
 ```
 
 The same abstraction will later be applied to attempts and progress. The vocabulary MVP
-must not require that broader refactor to be completed first.
+does not change those routers.
 
 ### 6.2 Anonymous Credential
 
 New anonymous credentials use `crypto.randomUUID()` instead of `Math.random()`. Existing
 short `learner_key` values remain readable so current development progress is not orphaned.
+The stored/header form remains prefixed as `learner_<token>`. The backend accepts only
+`^learner_[A-Za-z0-9-]{1,48}$` and a maximum total length of 56 characters, which covers
+both the legacy base-36 suffix and the new UUID suffix. Values outside this format receive
+`401`.
 
 The anonymous key acts as a bearer credential: anyone who possesses it can access that
 anonymous learner's data. It must therefore:
@@ -164,8 +178,10 @@ commercial user data.
 ### 6.3 Frontend State
 
 Add a frontend identity provider that owns the anonymous key today and can own the
-Supabase session later. API helpers obtain identity headers from this provider rather than
-accepting `learnerKey` arguments at each call site.
+Supabase session later. Vocabulary API helpers obtain `X-Learner-Key` from this provider
+rather than accepting `learnerKey` in each vocabulary payload. Attempts and progress may
+still read the raw key from the provider and pass it through their legacy contracts until
+the authentication phase.
 
 Add a vocabulary provider that caches lightweight saved-word identities for the active
 language. It updates that cache after save and delete operations, allowing the lookup popup
@@ -179,21 +195,37 @@ lookup.
 Add `normalized_headword` to `vocab_items`. It is derived on the server and is never trusted
 from client input.
 
-Normalization must:
+Normalization is implemented once on the Python backend and reused by migration backfill
+and runtime writes in this exact order:
 
-- trim surrounding whitespace
-- normalize Unicode consistently
-- lowercase using language-appropriate behavior
-- normalize supported apostrophe variants
-- preserve the original `headword` for display
+1. Apply Unicode NFKC normalization with `unicodedata.normalize("NFKC", value)`.
+2. Map U+2019 RIGHT SINGLE QUOTATION MARK, U+02BC MODIFIER LETTER APOSTROPHE,
+   U+FF07 FULLWIDTH APOSTROPHE, U+0060 GRAVE ACCENT, and U+00B4 ACUTE ACCENT to ASCII
+   U+0027 APOSTROPHE.
+3. Trim leading/trailing whitespace and collapse every internal Unicode-whitespace run to
+   one ASCII space using `" ".join(value.split())`.
+4. Apply Python `str.casefold()`.
 
-The normalization function is a focused, independently tested unit. It must not remove
-accents or collapse words that are distinct in the target language.
+It does not remove accents or punctuation other than the declared apostrophe mapping.
+The original `headword` remains unchanged for display.
+
+Required test vectors include:
+
+| Input | Normalized |
+|---|---|
+| ` Écouter ` | `écouter` |
+| `L’EAU` | `l'eau` |
+| `lʼeau` | `l'eau` |
+| `mise   en œuvre` | `mise en œuvre` |
+| `côte` | `côte` |
+| `cote` | `cote` |
+
+`côte` and `cote` must remain distinct.
 
 ### 7.2 Ownership Uniqueness
 
-Replace the current anonymous-only uniqueness rule with two PostgreSQL partial unique
-indexes:
+The MVP migration replaces the current anonymous-only uniqueness rule with both partial
+unique indexes:
 
 ```text
 (learner_key, language, normalized_headword)
@@ -203,10 +235,13 @@ WHERE user_id IS NULL
 WHERE user_id IS NOT NULL
 ```
 
-SQLite development must receive equivalent behavior. If SQLite partial-index support in
-the supported runtime is sufficient, use matching partial indexes. Otherwise, enforce the
-authenticated constraint transactionally in application code and document the local-only
-difference.
+The supported SQLite minimum is 3.8.0, which supports partial indexes. SQLAlchemy declares
+matching predicates with `postgresql_where` and `sqlite_where`; local development and
+PostgreSQL therefore enforce the same ownership uniqueness. No application-only uniqueness
+fallback is permitted.
+
+Add `updated_at`, initialized from `created_at` during migration and changed whenever
+learner content or review state changes.
 
 Add indexes that support:
 
@@ -215,53 +250,84 @@ Add indexes that support:
 
 ### 7.3 Migration Safety
 
-The migration:
+The Alembic migration:
 
 1. Adds `normalized_headword` as nullable.
 2. Backfills it for existing rows using the same normalization implementation.
-3. Resolves any normalization collisions deterministically.
-4. Makes the column non-null.
-5. Replaces the old unique constraint with the partial unique indexes.
+3. Adds nullable `updated_at` and backfills it from `created_at`.
+4. Resolves normalization collisions deterministically.
+5. Uses Alembic batch operations on SQLite to make both new columns non-null and remove the
+   named `uq_vocab_learner_word` constraint; PostgreSQL uses normal `ALTER TABLE`.
+6. Creates matching PostgreSQL and SQLite partial unique indexes.
+
+For a collision, sort rows by `(updated_at DESC, id DESC)` and keep the first row as the
+survivor. For each of `gloss_en`, `example`, and `unit_id`, retain the survivor's non-empty
+value or fill it from the first newer-to-older row with a non-empty value. Copy the complete
+SRS tuple (`reps`, `lapses`, `ease`, `interval_days`, `due_at`) only from the survivor; do
+not combine counters. Delete the remaining collision rows after the survivor is complete.
 
 Although the verified cloud table is currently empty, the migration remains safe for local
-or newly-created data. Collision resolution keeps one vocabulary item, preferring the most
-recent non-empty learner content and preserving the most recent SRS state.
+or newly-created data. Collision resolution follows the deterministic algorithm above.
 
 No production migration is executed as part of design or planning. Applying it is an
 explicit implementation and deployment step.
 
-## 8. Anonymous-to-Account Adoption
+## 8. Authentication-phase Compatibility Contract
 
-Account adoption runs only after a Supabase access token has been verified. It runs in one
-database transaction and is idempotent.
+Full account adoption is a separate authentication-phase feature and requires its own
+design. The vocabulary MVP provides only the stable compatibility points that feature will
+need:
 
-For the current anonymous identity and verified user:
+- every vocabulary row has `learner_key`, nullable `user_id`, and deterministic
+  `normalized_headword`
+- both anonymous and authenticated ownership uniqueness indexes already exist
+- vocabulary ownership is resolved through one replaceable backend dependency
+- the frontend identity provider is the only owner of identity state
+- attempts retain their existing anonymous key so a later transaction can associate them
+  with a verified account
 
-1. Load anonymous vocabulary and attempt rows.
-2. For every anonymous vocabulary item, look for an account item with the same language and
-   normalized headword.
-3. If none exists, assign the item to the authenticated user.
-4. If one exists, merge into the account item:
-   - prefer a non-empty learner-edited gloss and example
-   - retain a valid source unit when the account item has none
-   - use the most recently updated review state rather than adding counters
-5. Set `user_id` on anonymous attempt rows while retaining `learner_key` for provenance.
-6. Mark adoption complete for that anonymous credential and user.
-7. Commit all changes together, or roll back all changes on failure.
-
-The exact mechanism used to mark adoption as complete belongs to the authentication design.
-It may be a dedicated adoption table or another auditable server-side record. A client-only
-flag is insufficient as the source of truth.
-
-Existing short development keys may be adopted during controlled testing. Before public
-beta, all newly issued anonymous credentials must use the stronger generator.
+The later authentication design must specify bearer-token verification, replay-safe and
+idempotent adoption, collision merging, an auditable server-side adoption record, and
+transactional rollback. No account-adoption endpoint or bearer-token decoder is implemented
+in this MVP.
 
 ## 9. API
 
 All endpoints resolve ownership from the request identity. They do not accept
 `learner_key` or `user_id` in query parameters or JSON bodies.
 
-### 9.1 List Vocabulary
+### 9.1 Vocabulary Item Representation
+
+List, save, and edit responses use the same vocabulary item shape:
+
+```json
+{
+  "id": 42,
+  "language": "fr",
+  "headword": "écouter",
+  "normalized_headword": "écouter",
+  "gloss_en": "to listen",
+  "example": "J'écoute la radio.",
+  "zipf": 5.1,
+  "reps": 0,
+  "due_at": null,
+  "created_at": "2026-07-30T18:00:00Z",
+  "updated_at": "2026-07-30T18:00:00Z",
+  "source": {
+    "lesson_id": 7,
+    "lesson_title": "Une émission de radio",
+    "unit_id": 12,
+    "unit_index": 2
+  }
+}
+```
+
+`source` is `null` when `unit_id` is absent or its source unit no longer exists. The API
+joins `ListeningUnit` and `Lesson` to build it. The client constructs
+`#/listening/lesson/{lesson_id}/unit/{unit_id}` from these IDs; routes are not stored in the
+database.
+
+### 9.2 List Vocabulary
 
 ```http
 GET /api/vocab?language=fr&q=écouter&sort=recent&limit=50&cursor=...
@@ -280,25 +346,47 @@ Response:
 Rules:
 
 - `language` is optional; absence lists all learner languages.
-- `q` searches normalized headword and gloss.
+- `q` is at most 128 characters and searches normalized headword and gloss.
 - `sort` supports `recent` and `alphabetical`.
-- `limit` is bounded by the server.
-- cursors are opaque to the client and stable for the selected sort.
+- `limit` defaults to 50 and must be between 1 and 100.
+- `total` is the count after ownership, language, and search filters.
+- `recent` orders by `(created_at DESC, id DESC)`.
+- `alphabetical` orders by `(normalized_headword ASC, id ASC)`.
+- the opaque base64url cursor contains a version, sort, language, normalized search text,
+  the last row's sort value, and last row ID
+- a cursor whose sort, language, or search text does not match the current request is
+  rejected with `400`
+- malformed or unsupported cursor versions are rejected with `400`
 
-### 9.2 Saved Vocabulary Keys
+Search treats `%`, `_`, and `\` as literal characters. SQL `LIKE` patterns escape those
+characters with `\` and declare `ESCAPE '\'`; user input cannot introduce wildcards.
 
-Provide a lightweight endpoint or equivalent list projection for the active language:
+### 9.3 Saved Vocabulary Keys
+
+Register this static route before `/api/vocab/{item_id}`:
 
 ```http
-GET /api/vocab/keys?language=fr
+GET /api/vocab/saved-keys?language=fr
 ```
 
-It returns IDs and normalized headwords needed for saved-state synchronization, without
-shipping all examples. The concrete URL may be replaced by a `fields` projection if that
-keeps the router simpler, but the client must not load the full collection for every
-lookup.
+Response:
 
-### 9.3 Save Vocabulary
+```json
+{
+  "language": "fr",
+  "items": [
+    {
+      "id": 42,
+      "normalized_headword": "écouter"
+    }
+  ]
+}
+```
+
+`language` is required and validated. The endpoint returns every active saved key for that
+owner and language without examples or glosses.
+
+### 9.4 Save Vocabulary
 
 ```http
 POST /api/vocab
@@ -313,10 +401,25 @@ Content-Type: application/json
 }
 ```
 
-Saving is idempotent for the resolved owner, language, and normalized headword. Re-saving
-may fill non-empty content but must not reset SRS fields.
+`headword` is limited to 128 characters, `gloss_en` to 1,000 characters, and `example` to
+2,000 characters.
 
-### 9.4 Edit Vocabulary
+Saving is idempotent for the resolved owner, language, and normalized headword. For an
+existing item:
+
+- a non-empty incoming gloss fills `gloss_en` only when the stored gloss is empty
+- a non-empty incoming example fills `example` only when the stored example is empty
+- a valid incoming `unit_id` fills the source only when the stored source is absent
+- empty incoming fields never clear stored fields
+- the displayed `headword` and the complete SRS tuple remain unchanged
+- `updated_at` changes only if a stored field was actually filled
+
+Learner edits use `PATCH`; a repeated lookup save never overwrites those edits.
+If concurrent inserts race, the backend catches the unique-constraint failure, rolls back
+that transaction, reloads the winning row under the same ownership predicate, applies the
+same fill-only rules, and returns it.
+
+### 9.5 Edit Vocabulary
 
 ```http
 PATCH /api/vocab/{id}
@@ -328,17 +431,19 @@ Content-Type: application/json
 }
 ```
 
-The MVP edits only learner-controlled gloss and example content. Renaming a headword is not
-part of the first release.
+The MVP edits only learner-controlled gloss and example content. Each field is optional,
+but at least one must be present. `null` or an empty string clears that field. The same
+1,000/2,000 character limits apply. A successful edit updates `updated_at`. Renaming a
+headword is not part of the first release.
 
-### 9.5 Delete Vocabulary
+### 9.6 Delete Vocabulary
 
 ```http
 DELETE /api/vocab/{id}
 ```
 
 Returns `204 No Content`. A missing item and an item owned by another learner both return
-`404 Not Found`.
+`404 Not Found`. Deletion is permanent in the MVP; confirmation is the safeguard.
 
 ## 10. User Experience
 
@@ -366,12 +471,11 @@ The lookup popup:
 - shows a visible retryable error when saving fails
 - does not silently swallow network failures
 
-After deletion, the page offers a short undo action. Undo re-saves the captured item through
-the normal idempotent save endpoint.
-
 ## 11. Error Handling and Security
 
-- Invalid or expired bearer token: `401 Unauthorized`.
+- During the MVP, any bearer token on a vocabulary request: `401 Unauthorized` with
+  authentication-not-enabled semantics.
+- In the later authentication phase, invalid or expired bearer token: `401 Unauthorized`.
 - Missing or malformed anonymous identity on learner-owned endpoints: `401 Unauthorized`.
 - Invalid language, cursor, sort, or payload: `400` or `422`.
 - Item absent or not owned by the requester: `404 Not Found`.
@@ -398,8 +502,9 @@ Add automated tests for:
 - edit and delete scoped to the current owner
 - indistinguishable `404` behavior for absent and foreign items
 - collision-safe migration behavior
-- authenticated identity precedence once the authentication path exists
-- transactional and idempotent account adoption in the later auth phase
+- matching ownership constraints on PostgreSQL and SQLite
+- a vocabulary request carrying `Authorization` is rejected during the MVP
+- existing attempts and progress still use their legacy learner-key contracts
 
 ### 12.2 Frontend
 
@@ -408,7 +513,7 @@ Verify:
 - the global route and navigation entry
 - loading, empty, populated, and failed list states
 - language filter, search, and sort behavior
-- inline edit, delete confirmation, and undo
+- inline edit and delete confirmation
 - saved state synchronization between popup and vocabulary page
 - visible retry behavior on save failures
 - mobile and desktop layout behavior
@@ -421,7 +526,7 @@ The vocabulary MVP is complete when:
 1. An anonymous learner can save a word from Listening or Reading and see it in My Words.
 2. Re-saving the same normalized word does not create a duplicate or reset review state.
 3. Two anonymous identities cannot read or mutate each other's vocabulary through the API.
-4. A learner can filter, search, sort, edit, delete, and undo deletion.
+4. A learner can filter, search, sort, edit, and permanently delete after confirmation.
 5. The lookup popup and vocabulary page agree on whether a word is saved.
 6. Existing anonymous attempt records remain readable.
 7. The backend has one reusable learner identity boundary ready for Supabase Auth.
@@ -438,6 +543,6 @@ Before public beta, the project must complete:
 - Supabase Auth registration and login
 - backend bearer-token verification
 - anonymous-to-account adoption
-- authenticated ownership indexes and enforcement
+- activation and verification of authenticated ownership queries using the indexes already
+  created by the MVP migration
 - a security review of learner-owned endpoints
-
