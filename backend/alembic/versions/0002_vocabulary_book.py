@@ -43,6 +43,17 @@ def _require_online_migration() -> None:
         raise RuntimeError("revision 0002 is data-dependent and cannot run in offline SQL mode")
 
 
+def _preflight_normalized_headword_lengths(connection: Any) -> None:
+    rows = connection.execute(
+        sa.text("SELECT id, headword FROM vocab_items ORDER BY id")
+    ).mappings()
+    for row in rows:
+        if len(_normalize_vocab_v1(row["headword"])) > 128:
+            raise RuntimeError(
+                f"vocab_items row {row['id']} has normalized_headword longer than 128 characters"
+            )
+
+
 def _backfill_normalized_values(connection: Any) -> None:
     vocab_items = sa.table(
         "vocab_items",
@@ -103,11 +114,19 @@ def _merge_normalized_collisions(connection: Any) -> None:
 
         survivor = group[0]
         final_values: dict[str, Any] = {}
-        for field in ("gloss_en", "example", "unit_id"):
+        for field in ("gloss_en", "example"):
             final_values[field] = next(
-                (row[field] for row in group if row[field] not in (None, "")),
+                (
+                    row[field]
+                    for row in group
+                    if row[field] is not None and _normalize_vocab_v1(row[field])
+                ),
                 survivor[field],
             )
+        final_values["unit_id"] = next(
+            (row["unit_id"] for row in group if row["unit_id"] is not None),
+            survivor["unit_id"],
+        )
         final_values["normalized_gloss"] = _normalize_vocab_v1(
             final_values["gloss_en"] or ""
         )
@@ -206,6 +225,7 @@ def _create_owner_indexes() -> None:
 def upgrade() -> None:
     _require_online_migration()
     connection = op.get_bind()
+    _preflight_normalized_headword_lengths(connection)
 
     op.add_column(
         "vocab_items",

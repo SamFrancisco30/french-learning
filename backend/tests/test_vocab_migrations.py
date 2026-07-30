@@ -274,7 +274,7 @@ def test_upgrade_0002_merges_collisions_and_preserves_unrelated_rows(tmp_path: P
                     (1, 'learner-a', NULL, 'fr', 'L’EAU', 'water', 'older example',
                      5.0, 77, 2, 1, 2.4, 3.0, '2026-01-03 00:00:00',
                      '2026-01-01 00:00:00'),
-                    (2, 'learner-a', NULL, 'fr', 'lʼeau', NULL, '',
+                    (2, 'learner-a', NULL, 'fr', 'lʼeau', '   ', '   ',
                      5.1, NULL, 8, 3, 2.1, 12.0, '2026-02-12 00:00:00',
                      '2026-02-01 00:00:00'),
                     (3, 'learner-a', NULL, 'fr', 'côte', 'coast', 'unrelated',
@@ -372,6 +372,77 @@ def test_upgrade_0002_merges_collisions_and_preserves_unrelated_rows(tmp_path: P
         assert "WHERE user_id IS NULL" in index_sql["ix_vocab_anon_recent"]
         assert "WHERE user_id IS NOT NULL" in index_sql["ix_vocab_user_recent"]
 
+    engine.dispose()
+
+
+def test_upgrade_0002_rejects_overlong_normalized_headword_before_ddl(
+    tmp_path: Path,
+) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'overlong_normalized.sqlite'}")
+    with engine.begin() as connection:
+        _run_migration(connection, "0001_initial")
+        connection.execute(
+            text(
+                """
+                INSERT INTO vocab_items (
+                    id, learner_key, user_id, language, headword, gloss_en, example,
+                    zipf, unit_id, reps, lapses, ease, interval_days, due_at, created_at
+                ) VALUES (
+                    801, 'learner-a', NULL, 'de', :headword, 'street', NULL,
+                    NULL, NULL, 0, 0, 2.5, 0.0, NULL, '2026-01-01 00:00:00'
+                )
+                """
+            ),
+            {"headword": "ß" * 65},
+        )
+        schema_before = connection.execute(
+            text(
+                """
+                SELECT type, name, tbl_name, sql
+                FROM sqlite_master
+                WHERE name NOT LIKE 'sqlite_%'
+                ORDER BY type, name
+                """
+            )
+        ).all()
+        row_before = dict(
+            connection.execute(
+                text("SELECT * FROM vocab_items WHERE id = 801")
+            ).mappings().one()
+        )
+        revision_before = connection.execute(
+            text("SELECT version_num FROM alembic_version")
+        ).scalar_one()
+
+        for _attempt in range(2):
+            with pytest.raises(
+                RuntimeError,
+                match=r"vocab_items row 801.*normalized_headword.*128",
+            ):
+                _run_migration(connection, "head")
+
+            schema_after = connection.execute(
+                text(
+                    """
+                    SELECT type, name, tbl_name, sql
+                    FROM sqlite_master
+                    WHERE name NOT LIKE 'sqlite_%'
+                    ORDER BY type, name
+                    """
+                )
+            ).all()
+            row_after = dict(
+                connection.execute(
+                    text("SELECT * FROM vocab_items WHERE id = 801")
+                ).mappings().one()
+            )
+            assert schema_after == schema_before
+            assert row_after == row_before
+            assert (
+                connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+                == revision_before
+                == "0001_initial"
+            )
     engine.dispose()
 
 
