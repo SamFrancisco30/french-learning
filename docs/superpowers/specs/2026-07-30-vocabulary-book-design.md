@@ -186,7 +186,9 @@ the authentication phase.
 Add a vocabulary provider that caches lightweight saved-word identities for the active
 language. It updates that cache after save and delete operations, allowing the lookup popup
 and vocabulary page to show the same saved state without fetching all examples on every
-lookup.
+lookup. The frontend never reimplements `normalize_vocab_v1`. Each word and expression
+candidate returned by `/api/lookup` includes its backend-computed `normalized_headword`,
+which is compared directly with the saved-key cache.
 
 ## 7. Data Model
 
@@ -257,6 +259,23 @@ Add indexes that support:
 - ownership plus language plus normalized word lookup
 
 ### 7.3 Migration Safety
+
+The existing `0001_initial_schema.py` is not a frozen migration: it imports the current
+application `Base.metadata` when it runs. If left unchanged, a fresh database would receive
+future ORM fields during revision 0001 and a later revision would try to add them again.
+
+Before changing the vocabulary ORM, freeze revision 0001:
+
+1. Add an Alembic-owned schema snapshot containing the table definitions that revision 0001
+   represented immediately before this vocabulary change.
+2. Change `0001_initial_schema.py` to import that frozen metadata instead of
+   `app.models.Base`.
+3. Keep the snapshot independent of application models; later ORM edits cannot change it.
+4. Verify the snapshot creates the same pre-change schema on both SQLite and PostgreSQL.
+
+The new vocabulary revision then always starts from that frozen baseline and can use normal,
+deterministic Alembic operations. It does not use column-existence checks to compensate for
+dynamic revision behavior.
 
 The Alembic migration:
 
@@ -402,7 +421,38 @@ Response:
 `language` is required and validated. The endpoint returns every active saved key for that
 owner and language without examples or glosses.
 
-### 9.4 Save Vocabulary
+### 9.4 Lookup Saved-state Contract
+
+The existing `/api/lookup` response is extended without changing lookup resolution. Every
+saveable candidate carries its backend-derived key:
+
+```json
+{
+  "word": {
+    "lemma": "L’EAU",
+    "gloss_en": "water",
+    "normalized_headword": "l'eau"
+  },
+  "expressions": [
+    {
+      "canonical": "mettre de côté",
+      "gloss_en": "to set aside",
+      "normalized_headword": "mettre de côté"
+    }
+  ]
+}
+```
+
+For a word, the backend derives the key from the exact headword the save button will submit:
+`word.lemma` when non-empty, otherwise the snapped selection. For an expression, it derives
+the key from `expression.canonical`. The field is present on online, cached, inferred, and
+offline lookup paths.
+
+The frontend determines saved state only by exact comparison of this response field with
+the `normalized_headword` values from `/api/vocab/saved-keys`. It does not lowercase,
+normalize Unicode, or transform apostrophes itself.
+
+### 9.5 Save Vocabulary
 
 ```http
 POST /api/vocab
@@ -444,7 +494,7 @@ same fill-only rules, and returns it.
 
 Both a newly created item and an idempotently returned item use `200 OK`.
 
-### 9.5 Edit Vocabulary
+### 9.6 Edit Vocabulary
 
 ```http
 PATCH /api/vocab/{id}
@@ -462,7 +512,7 @@ but at least one must be present. `null` or an empty string clears that field. T
 headword is not part of the first release. Changing `gloss_en` also recomputes
 `normalized_gloss`. A successful edit returns `200 OK` with the full vocabulary item.
 
-### 9.6 Delete Vocabulary
+### 9.7 Delete Vocabulary
 
 ```http
 DELETE /api/vocab/{id}
@@ -532,8 +582,11 @@ Add automated tests for:
 - indistinguishable `404` behavior for absent and foreign items
 - collision-safe migration behavior
 - matching ownership constraints on PostgreSQL and SQLite
+- frozen revision 0001 followed by the vocabulary revision on a fresh database
+- vocabulary revision upgrade from a populated pre-change schema
 - a vocabulary request carrying `Authorization` is rejected during the MVP
 - existing attempts and progress still use their legacy learner-key contracts
+- lookup candidates expose the same normalized keys returned by the saved-keys endpoint
 
 ### 12.2 Frontend
 
