@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 
 /**
- * The speed track's whole texture: a grid of white blocks with blue sparkles travelling through it.
+ * The speed track's whole texture: flat grey blocks on a grid whose SEPARATORS are tinted blue at
+ * the left and fade out past the knob, with blue sparkles travelling through the blocks.
  *
  * ONE RENDERER DRAWS BOTH, and that is the entire reason this file looks the way it does. The grid
  * used to be a CSS repeating-gradient with the sparkles on a canvas above — two independent
@@ -42,26 +43,24 @@ const PITCH = 5 // block plus its 1px seam
 // Speeds must stay under PITCH * 60 = 300 px/s. Above that a block advances more than one cell per
 // frame and the quantised hop turns into skipping, which reads as flicker rather than movement.
 
-/** The tiles are a gradient in their own right: FULL blue at the very left edge, fading to the plain
- *  tile grey a little past the knob. So the base carries the same left-to-right reading as the
- *  sparkles, and moving the knob moves where the colour runs out — the whole control ends up
- *  describing its own setting rather than only the animated layer doing it.
+/** Tiles are a flat grey. The gradient belongs to the GRID LINES, not to the blocks. */
+const BLOCK = '#cdd5dd' // --border-strong
+
+/** The 1px separators between adjacent blocks — the grid itself — carry the gradient: the accent
+ *  blue at the very left edge, fading out a little past the knob.
  *
- *  One consequence worth naming rather than hiding: at the far left the base is the same blue the
- *  sparkles are, so sparkles there blend into it and only separate out as the base lightens. That is
- *  unavoidable with a blue base and blue sparkles, and it reads well — the left is a solid mass of
- *  colour and individual blocks emerge from it — but it does mean the animation is least visible in
- *  the first few columns.
+ *  Painted by filling the whole canvas with the gradient and then covering it with the blocks, so
+ *  the only thing left showing is the one-pixel lattice between them. Drawing the lines
+ *  individually would be ~50 strokes a frame and would land on half-pixels; letting the blocks
+ *  mask a single fill keeps the lines exactly where the block edges put them.
  *
- *  The gaps are left transparent so the track's own pale gradient shows through as the seams —
- *  painting them a dark colour gave the grid a black cast, which was not wanted. */
-const BASE_FROM = [58, 110, 165] // --accent, at the very left edge
-const BASE_TO = [205, 213, 221] //  --border-strong, once the fade is done
-/** Quantised so the per-column colour is a lookup rather than a string built every frame. */
-const BASE_STEPS = 48
+ *  It fades to the same hue at zero alpha rather than to a grey, so past the fade the seams return
+ *  to the track's own background with no colour boundary of their own. */
+const SEAM_FROM = 'rgba(58, 110, 165, 0.95)' // --accent at the left edge
+const SEAM_TO = 'rgba(58, 110, 165, 0)' //     the same blue, gone
 /** The fade ends this far past the knob, as a fraction of the track. Ending exactly AT the knob put
  *  a hard stop under it; carrying on a little lets the colour die away behind the thumb instead. */
-const BASE_OVERSHOOT = 0.12
+const SEAM_OVERSHOOT = 0.12
 
 // Deliberately dense. Past roughly 40/sec the field exceeds one sparkle per cell at Normal, so some
 // get overwritten — that is a denser blue, not a lost sparkle, and density is the point here.
@@ -77,15 +76,6 @@ const SPEED_MAX = 112
 const VICINITY = 0.2
 const FADE_IN = 10
 const FADE_OUT = 14
-
-/** Base tile colours, left to right, as a lookup table. */
-function baseRamp(): string[] {
-  return Array.from({ length: BASE_STEPS }, (_, i) => {
-    const t = i / (BASE_STEPS - 1)
-    const c = BASE_FROM.map((from, k) => Math.round(from + (BASE_TO[k] - from) * t))
-    return `rgb(${c[0]}, ${c[1]}, ${c[2]})`
-  })
-}
 
 function palette(): string[] {
   return Array.from({ length: STEPS }, (_, i) => {
@@ -121,7 +111,6 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
     if (!ctx) return
 
     const colours = palette()
-    const base = baseRamp()
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     let particles: Particle[] = []
     let raf = 0
@@ -182,17 +171,22 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
     }
 
     const draw = () => {
-      // Clear rather than fill: the untouched gaps let the track's pale gradient through, which is
-      // what makes the seams read as light.
       ctx.clearRect(0, 0, w, h)
 
-      // The base grid, tinted per column: full blue at the left, reaching the plain grey a little
-      // past the knob. One fillStyle change per column, ~42 of them, which is nothing.
+      // 1. THE GRID LINES. The gradient goes down first across the whole canvas; the blocks then
+      //    cover it, so the only thing left visible is the 1px lattice between them. Blue at the
+      //    left edge, faded to nothing a little past the knob.
       const knob = (pctRef.current / 100) * w
-      const fadeEnd = Math.max(PITCH, knob + BASE_OVERSHOOT * w)
+      const fadeEnd = Math.max(PITCH, knob + SEAM_OVERSHOOT * w)
+      const seam = ctx.createLinearGradient(0, 0, fadeEnd, 0)
+      seam.addColorStop(0, SEAM_FROM)
+      seam.addColorStop(1, SEAM_TO)
+      ctx.fillStyle = seam
+      ctx.fillRect(0, 0, w, h)
+
+      // 2. The blocks, flat grey, masking everything but the separators.
+      ctx.fillStyle = BLOCK
       for (let c = 0; c < cols; c++) {
-        const t = Math.min(1, (c * PITCH) / fadeEnd)
-        ctx.fillStyle = base[Math.min(BASE_STEPS - 1, (t * BASE_STEPS) | 0)]
         for (let r = 0; r < rows; r++) ctx.fillRect(c * PITCH, r * PITCH, CELL, CELL)
       }
 
