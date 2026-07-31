@@ -731,8 +731,31 @@ select:focus, textarea:focus { outline: none; border-color: var(--accent); backg
 .stat .n { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .stat .l { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-faint); }
 
-.bars { display: flex; flex-direction: column; gap: 7px; margin-top: 4px; }
-.bar-row { display: grid; grid-template-columns: 78px 1fr 34px; gap: 9px; align-items: center; font-size: 12px; }
+/* ONE grid for every row, not a grid per row, so the three columns line up across rows AND the
+   label column can size itself to the longest name in the set.
+
+   It used to be a fixed 78px per row, which silently truncated nothing and instead let the text
+   run out of its cell and under the track — the track is the next element, so it painted straight
+   over "dictation_sentence" (101px of text in a 78px cell, 14px of it hidden). A wider fixed number
+   would have moved the problem to the next kind name someone adds; `max-content` cannot overflow by
+   construction, because the column is defined as whatever the longest label needs.
+
+   `display: contents` on the row is what makes it possible: the row box disappears and its three
+   spans become items of this grid, so they share its column tracks. The track keeps a floor of 48px
+   so a long label can never squeeze the bar out of existence on a narrow screen.
+
+   The percentage column stays a fixed 34px rather than sizing to content: it never needs more than
+   "100%", and leaving it automatic makes the whole bar twitch a few pixels wider the moment a score
+   crosses from 9% to 10%. */
+.bars {
+  display: grid;
+  grid-template-columns: max-content minmax(48px, 1fr) 34px;
+  gap: 7px 9px;
+  align-items: center;
+  margin-top: 4px;
+  font-size: 12px;
+}
+.bar-row { display: contents; }
 /* display:block is load-bearing — these are <span>s, and an inline element ignores
    height, so the fill would render as a zero-height sliver. */
 .bar-track {
