@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 
 class LanguageOut(BaseModel):
@@ -153,6 +153,7 @@ class SenseOut(BaseModel):
 class WordGlossOut(BaseModel):
     surface: str
     lemma: str | None = None
+    normalized_headword: str
     pos: str | None = None
     gloss_en: str
     other_senses: list[SenseOut] = Field(default_factory=list)
@@ -164,6 +165,7 @@ class ExpressionOut(BaseModel):
     id: int | None = None
     canonical: str
     surface: str
+    normalized_headword: str
     kind: str
     gloss_en: str
     literal_en: str | None = None
@@ -215,25 +217,74 @@ class UnitExpressionsOut(BaseModel):
 
 
 class VocabSaveIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     language: str = "fr"
-    headword: str = Field(min_length=1, max_length=128)
-    gloss_en: str | None = None
-    example: str | None = None
+    headword: str = Field(max_length=128)
+    gloss_en: str | None = Field(default=None, max_length=1000)
+    example: str | None = Field(default=None, max_length=2000)
     unit_id: int | None = None
-    learner_key: str = "anonymous"
+
+
+class VocabEditIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    gloss_en: str | None = Field(default=None, max_length=1000)
+    example: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def require_edit(self) -> VocabEditIn:
+        if not ({"gloss_en", "example"} & self.model_fields_set):
+            raise ValueError("at least one editable field is required")
+        return self
+
+
+class VocabSourceOut(BaseModel):
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+    lesson_id: int
+    lesson_title: str
+    unit_id: int
+    unit_index: int
 
 
 class VocabItemOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
 
     id: int
     language: str
     headword: str
+    normalized_headword: str
     gloss_en: str | None
     example: str | None
     zipf: float | None
     reps: int
     due_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    source: VocabSourceOut | None
+
+
+class VocabListOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[VocabItemOut]
+    next_cursor: str | None
+    total: int
+
+
+class VocabSavedKeyOut(BaseModel):
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+    id: int
+    normalized_headword: str
+
+
+class VocabSavedKeysOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    language: str
+    items: list[VocabSavedKeyOut]
 
 
 # ---------------------------------------------------------------- sentence grammar

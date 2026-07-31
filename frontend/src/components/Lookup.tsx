@@ -17,8 +17,10 @@ import type {
   Practice,
   PracticeCheck,
   SentenceAnalysis,
+  VocabSaveInput,
 } from '../types'
 import { useTextSelection, type Picked } from '../useTextSelection'
+import { useVocab, type SavedStatus } from '../vocab/VocabContext'
 
 /* ------------------------------------------------------------------ context */
 
@@ -81,32 +83,58 @@ export function LookupProvider({
   children,
   language,
   unitId,
-  learnerKey,
   play,
 }: {
   children: ReactNode
   language: string
   unitId?: number | null
-  learnerKey: string
   /** Plays an ORIGINAL-video-timeline window, when a player is available. */
   play?: (from: number, to: number) => void
 }) {
+  const { ensureKeys } = useVocab()
   const [anchor, setAnchor] = useState<DOMRect | null>(null)
   const [pendingText, setPendingText] = useState<string | null>(null)
   const [selection, setSelection] = useState<string>('')
   const [result, setResult] = useState<LookupResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [requestScope, setRequestScope] = useState<string | null>(null)
   const reqId = useRef(0)
+  const mounted = useRef(true)
+  const scopeKey = `${language}\u0000${unitId ?? ''}`
+  const previousScope = useRef(scopeKey)
+
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      reqId.current += 1
+    }
+  }, [])
+
+  useEffect(() => {
+    // VocabProvider records failures for visible retry UI. Consuming the rejection keeps
+    // mount and language-change loads safe in StrictMode.
+    void ensureKeys(language).catch(() => undefined)
+  }, [ensureKeys, language])
 
   const close = useCallback(() => {
+    reqId.current += 1
     setAnchor(null)
     setResult(null)
     setError(null)
     setPendingText(null)
+    setSelection('')
     setLoading(false)
+    setRequestScope(null)
     window.getSelection()?.removeAllRanges()
   }, [])
+
+  useEffect(() => {
+    if (previousScope.current === scopeKey) return
+    previousScope.current = scopeKey
+    close()
+  }, [close, scopeKey])
 
   const request = useCallback(
     ({ text, start, end, rect }: LookupRequest) => {
@@ -114,6 +142,7 @@ export function LookupProvider({
       setAnchor(rect)
       setSelection(text.slice(start, end) || text)
       setPendingText(text)
+      setRequestScope(scopeKey)
       setResult(null)
       setError(null)
       setLoading(true)
@@ -121,19 +150,19 @@ export function LookupProvider({
       lexicon
         .lookup({ language, text, char_start: start, char_end: end, unit_id: unitId ?? null })
         .then((r) => {
-          if (id !== reqId.current) return // a newer selection superseded this one
+          if (!mounted.current || id !== reqId.current) return
           setResult(r)
           setSelection(r.selection)
         })
         .catch((e) => {
-          if (id !== reqId.current) return
+          if (!mounted.current || id !== reqId.current) return
           setError(String(e))
         })
         .finally(() => {
-          if (id === reqId.current) setLoading(false)
+          if (mounted.current && id === reqId.current) setLoading(false)
         })
     },
-    [language, unitId],
+    [language, scopeKey, unitId],
   )
 
   // Dismiss on Escape, on a click outside, and on a *substantial* scroll.
@@ -179,6 +208,7 @@ export function LookupProvider({
     <LookupContext.Provider value={value}>
       {children}
       {anchor &&
+        requestScope === scopeKey &&
         createPortal(
           <Popup
             anchor={anchor}
@@ -188,7 +218,6 @@ export function LookupProvider({
             loading={loading}
             language={language}
             unitId={unitId}
-            learnerKey={learnerKey}
             play={play}
             onClose={close}
           />,
@@ -205,6 +234,77 @@ export function LookupProvider({
 
 const POPUP_W = 340
 const GAP = 10
+type CandidateKind = 'expression' | 'word'
+type SaveAttempt = {
+  input: VocabSaveInput
+  busy: boolean
+  error: string | null
+}
+
+function errorMessage(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason)
+}
+
+function SaveControl({
+  kind,
+  status,
+  attempt,
+  onSave,
+}: {
+  kind: CandidateKind
+  status: SavedStatus
+  attempt?: SaveAttempt
+  onSave: () => void
+}) {
+  const className = kind === 'expression' ? 'tr-save' : 'tr-btn'
+
+  // The shared normalized-key cache is authoritative. A stale local failure or an older
+  // pending request must never mask a save confirmed through another candidate.
+  if (status === 'saved') {
+    return (
+      <button className={className} aria-label={`${kind} saved`} disabled>
+        ✓ saved
+      </button>
+    )
+  }
+
+  if (attempt?.busy) {
+    return (
+      <button className={className} aria-label={`saving ${kind}`} disabled>
+        Saving…
+      </button>
+    )
+  }
+
+  if (attempt?.error) {
+    return (
+      <div className="tr-error" role="alert">
+        Save failed. {attempt.error}{' '}
+        <button className="tr-btn" onClick={onSave} aria-label={`retry save ${kind}`}>
+          Retry
+        </button>
+      </div>
+    )
+  }
+
+  if (status === 'unknown') {
+    return (
+      <button
+        className={className}
+        aria-label={`checking saved status for ${kind}`}
+        disabled
+      >
+        checking saved words…
+      </button>
+    )
+  }
+
+  return (
+    <button className={className} onClick={onSave} aria-label={`save ${kind}`}>
+      + save {kind}
+    </button>
+  )
+}
 
 function Popup({
   anchor,
@@ -214,7 +314,6 @@ function Popup({
   loading,
   language,
   unitId,
-  learnerKey,
   play,
   onClose,
 }: {
@@ -225,11 +324,17 @@ function Popup({
   loading: boolean
   language: string
   unitId?: number | null
-  learnerKey: string
   play?: (from: number, to: number) => void
   onClose: () => void
 }) {
-  const [saved, setSaved] = useState<string | null>(null)
+  const vocab = useVocab()
+  const [attempts, setAttempts] = useState<Partial<Record<CandidateKind, SaveAttempt>>>({})
+  const mounted = useRef(true)
+  const activeResult = useRef(result)
+  activeResult.current = result
+  const pendingSaves = useRef<
+    Partial<Record<CandidateKind, { token: object; result: LookupResult }>>
+  >({})
   const ref = useRef<HTMLDivElement | null>(null)
   const [flip, setFlip] = useState(false)
   // Measured height must live in state, not be read from the ref during render: on the
@@ -239,11 +344,22 @@ function Popup({
   const [height, setHeight] = useState(0)
 
   useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+
+  useEffect(() => {
     const h = ref.current?.offsetHeight ?? 0
     setHeight(h)
     // Flip above the selection when there isn't room below and there is room above.
     setFlip(anchor.bottom + GAP + h > window.innerHeight && anchor.top - GAP - h > 0)
   }, [anchor, result, loading])
+
+  useEffect(() => {
+    setAttempts({})
+  }, [result])
 
   const left = Math.min(
     Math.max(GAP, anchor.left + anchor.width / 2 - POPUP_W / 2),
@@ -272,21 +388,83 @@ function Popup({
   const others = result?.expressions?.slice(1) ?? []
   const word = result?.word
 
-  const save = async (headword: string, gloss: string | null) => {
+  const save = async (
+    kind: CandidateKind,
+    normalizedHeadword: string,
+    input: VocabSaveInput,
+  ) => {
+    const candidateResult = result
+    if (!candidateResult) return
+    if (pendingSaves.current[kind]?.result === candidateResult) return
+
+    const token = {}
+    pendingSaves.current[kind] = { token, result: candidateResult }
+    setAttempts((current) => ({
+      ...current,
+      [kind]: { input, busy: true, error: null },
+    }))
     try {
-      await lexicon.saveVocab({
-        language,
-        headword,
-        gloss_en: gloss,
-        example: result?.context ?? null,
-        unit_id: unitId ?? null,
-        learner_key: learnerKey,
+      await vocab.save(input)
+      if (!mounted.current || activeResult.current !== candidateResult) return
+      setAttempts((current) => {
+        const active = current[kind]
+        if (!active || active.input !== input) return current
+        const next = { ...current }
+        delete next[kind]
+        return next
       })
-      setSaved(headword)
-    } catch {
-      setSaved(null)
+    } catch (reason: unknown) {
+      if (!mounted.current || activeResult.current !== candidateResult) return
+      setAttempts((current) => {
+        const active = current[kind]
+        if (!active || active.input !== input) return current
+        if (vocab.savedStatus(language, normalizedHeadword) === 'saved') {
+          const next = { ...current }
+          delete next[kind]
+          return next
+        }
+        return {
+          ...current,
+          [kind]: { input, busy: false, error: errorMessage(reason) },
+        }
+      })
+    } finally {
+      if (pendingSaves.current[kind]?.token === token) {
+        delete pendingSaves.current[kind]
+      }
     }
   }
+
+  const retryKeys = () => {
+    void vocab.ensureKeys(language).catch(() => undefined)
+  }
+  const keyState = vocab.keyState(language)
+  const expressionStatus = headline
+    ? vocab.savedStatus(language, headline.normalized_headword)
+    : 'unknown'
+  const wordStatus = word
+    ? vocab.savedStatus(language, word.normalized_headword)
+    : 'unknown'
+  const expressionInput: VocabSaveInput | null =
+    headline && result
+      ? {
+          language,
+          headword: headline.canonical,
+          gloss_en: headline.gloss_en,
+          example: result.context,
+          unit_id: unitId ?? null,
+        }
+      : null
+  const wordInput: VocabSaveInput | null =
+    word && result
+      ? {
+          language,
+          headword: word.lemma || selection,
+          gloss_en: word.gloss_en,
+          example: result.context,
+          unit_id: unitId ?? null,
+        }
+      : null
 
   const canPlay =
     !!play && result?.audio_start_s != null && result?.audio_end_s != null
@@ -305,6 +483,15 @@ function Popup({
       {loading && <div className="tr-loading">Looking up…</div>}
 
       {error && <div className="tr-error">Lookup failed. {error}</div>}
+
+      {keyState.status === 'error' && (
+        <div className="tr-error" role="alert">
+          Saved words unavailable. {keyState.error?.message ?? 'Please try again.'}{' '}
+          <button className="tr-btn" onClick={retryKeys} aria-label="retry saved words">
+            Retry
+          </button>
+        </div>
+      )}
 
       {result && (
         <>
@@ -330,13 +517,18 @@ function Popup({
               )}
               {headline.note && <div className="tr-note">{headline.note}</div>}
               <div className="tr-provenance">{SOURCE_NOTE[headline.source]}</div>
-              <button
-                className="tr-save"
-                onClick={() => save(headline.canonical, headline.gloss_en)}
-                disabled={saved === headline.canonical}
-              >
-                {saved === headline.canonical ? '✓ saved' : '+ save expression'}
-              </button>
+              <SaveControl
+                kind="expression"
+                status={expressionStatus}
+                attempt={attempts.expression}
+                onSave={() =>
+                  void save(
+                    'expression',
+                    headline.normalized_headword,
+                    attempts.expression?.input ?? expressionInput!,
+                  )
+                }
+              />
             </div>
           )}
 
@@ -397,13 +589,18 @@ function Popup({
               </button>
             )}
             {word && (
-              <button
-                className="tr-btn"
-                onClick={() => save(word.lemma || selection, word.gloss_en)}
-                disabled={saved === (word.lemma || selection)}
-              >
-                {saved === (word.lemma || selection) ? '✓ saved' : '+ save word'}
-              </button>
+              <SaveControl
+                kind="word"
+                status={wordStatus}
+                attempt={attempts.word}
+                onSave={() =>
+                  void save(
+                    'word',
+                    word.normalized_headword,
+                    attempts.word?.input ?? wordInput!,
+                  )
+                }
+              />
             )}
             {result.source === 'offline' && <span className="tr-badge">offline</span>}
             {result.source === 'cache' && <span className="tr-badge">cached</span>}

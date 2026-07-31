@@ -4,25 +4,18 @@ import { DictationPage } from './pages/DictationPage'
 import { ListeningPage } from './pages/ListeningPage'
 import { ReadingPage } from './pages/ReadingPage'
 import { SkillStatusPage } from './pages/SkillStatusPage'
+import { VocabularyPage } from './pages/VocabularyPage'
+import { useIdentity } from './identity/IdentityContext'
 import { useHashRoute } from './router'
 import { SKILLS, skillFromPath, skillTitle } from './skills'
 import type { Language } from './types'
 
-// Anonymous, device-local identity. Replace with real auth when accounts land.
-function learnerKey(): string {
-  const existing = localStorage.getItem('learner_key')
-  if (existing) return existing
-  const key = `learner_${Math.random().toString(36).slice(2, 10)}`
-  localStorage.setItem('learner_key', key)
-  return key
-}
-
 export default function App() {
+  const { learnerKey } = useIdentity()
   const { segments, navigate } = useHashRoute()
   const mastheadRef = useRef<HTMLElement | null>(null)
   const [languages, setLanguages] = useState<Language[]>([])
   const [language, setLanguage] = useState('fr')
-  const [key] = useState(learnerKey)
 
   useEffect(() => {
     api.languages().then(setLanguages).catch(() => undefined)
@@ -44,6 +37,7 @@ export default function App() {
   })
 
   const skill = skillFromPath(segments)
+  const isVocabulary = segments[0] === 'vocabulary'
   const active = languages.find((l) => l.code === language)
 
   return (
@@ -54,9 +48,12 @@ export default function App() {
             {/* Title is the current skill's name in the target language, so it tracks both
                 the page and the chosen language rather than sitting on "Écoute" (which
                 means "listening" and is wrong everywhere else). */}
-            <h1 lang={language}>{skillTitle(skill, language)}</h1>
+            <h1 lang={isVocabulary ? 'en' : language}>
+              {isVocabulary ? 'My Words' : skillTitle(skill, language)}
+            </h1>
             <span className="tagline">
-              {active ? active.name_native : language} · {skill.label.toLowerCase()}
+              {active ? active.name_native : language} ·{' '}
+              {isVocabulary ? 'vocabulary' : skill.label.toLowerCase()}
             </span>
           </div>
 
@@ -68,9 +65,10 @@ export default function App() {
                   className={`rate-btn ${l.code === language ? 'on' : ''}`}
                   onClick={() => {
                     setLanguage(l.code)
-                    navigate(`/${skill.key}`)
+                    navigate(isVocabulary ? '/vocabulary' : `/${skill.key}`)
                   }}
                   title={l.name_en}
+                  aria-label={l.name_en}
                 >
                   {l.code}
                 </button>
@@ -78,19 +76,28 @@ export default function App() {
             </div>
           )}
 
+          <nav className="utilitynav" aria-label="Utilities">
+            <button
+              className={`utilitytab ${isVocabulary ? 'on' : ''}`}
+              onClick={() => navigate('/vocabulary')}
+              aria-current={isVocabulary ? 'page' : undefined}
+            >
+              My Words
+            </button>
+          </nav>
           <nav className="skillnav" aria-label="Skills">
             {SKILLS.map((s) => (
               <button
                 key={s.key}
-                className={`skilltab ${s.key === skill.key ? 'on' : ''}`}
+                className={`skilltab ${!isVocabulary && s.key === skill.key ? 'on' : ''}`}
                 onClick={() => navigate(s.route)}
-                aria-current={s.key === skill.key ? 'page' : undefined}
+                aria-current={!isVocabulary && s.key === skill.key ? 'page' : undefined}
                 title={
                   s.status === 'live'
-                    ? `${s.label} — ready`
+                    ? `${s.label}: ready`
                     : s.status === 'partial'
-                      ? `${s.label} — partly built`
-                      : `${s.label} — not built yet`
+                      ? `${s.label}: partly built`
+                      : `${s.label}: not built yet`
                 }
               >
                 <span className={`dot ${s.status}`} />
@@ -102,22 +109,32 @@ export default function App() {
         </div>
       </header>
 
-      {skill.key === 'listening' && (
+      {!isVocabulary && skill.key === 'listening' && (
         <ListeningPage
           segments={segments}
           navigate={navigate}
           language={language}
-          learnerKey={key}
+          learnerKey={learnerKey}
         />
       )}
 
-      {skill.key === 'reading' && <ReadingPage language={language} learnerKey={key} />}
+      {!isVocabulary && skill.key === 'reading' && (
+        <ReadingPage language={language} />
+      )}
 
-      {skill.key === 'dictation' && <DictationPage language={language} learnerKey={key} />}
+      {/* Dictation is built now, so it renders its own page rather than the "not built yet"
+          placeholder this branch had it pointing at. The learner key comes from the shared
+          identity context — the local useState(learnerKey) this used to read was replaced by
+          IdentityContext, which is the one source of the key for every skill. */}
+      {!isVocabulary && skill.key === 'dictation' && (
+        <DictationPage language={language} learnerKey={learnerKey} />
+      )}
 
-      {(skill.key === 'writing' || skill.key === 'speaking') && (
+      {!isVocabulary && (skill.key === 'writing' || skill.key === 'speaking') && (
         <SkillStatusPage skill={skill} onGoListening={() => navigate('/listening')} />
       )}
+
+      {isVocabulary && <VocabularyPage language={language} navigate={navigate} />}
     </div>
   )
 }

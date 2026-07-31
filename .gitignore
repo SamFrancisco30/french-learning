@@ -26,6 +26,7 @@ backend/data/
 node_modules/
 dist/
 .vite/
+coverage/
 *.tsbuildinfo
 
 # --- db ---
@@ -41,3 +42,7 @@ Thumbs.db
 
 # scratch dir for the topic photo pipeline (downloads + contact sheets)
 frontend/.topic-photos/
+
+# --- isolated implementation worktrees ---
+.worktrees/
+.tmp/

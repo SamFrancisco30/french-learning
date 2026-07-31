@@ -6,14 +6,18 @@ Run:  uvicorn app.main:app --reload --port 8000
 from __future__ import annotations
 
 import logging
+import re
+from pathlib import PurePosixPath
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.engine import make_url
 
 from .config import settings
 from .db import init_db
-from .routers import dictation, attempts, ingest, lessons, lexicon
+from .errors import register_database_error_handler
+from .routers import attempts, dictation, ingest, lessons, lexicon, vocab
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,11 +42,38 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+register_database_error_handler(app)
 app.include_router(lessons.router)
 app.include_router(attempts.router)
 app.include_router(ingest.router)
 app.include_router(lexicon.router)
 app.include_router(dictation.router)
+app.include_router(vocab.router)
+
+
+def _safe_log_token(value: str | None, fallback: str) -> str:
+    if not value:
+        return fallback
+    cleaned = re.sub(r"[^A-Za-z0-9._:+-]+", "_", value).strip("_")
+    return cleaned or fallback
+
+
+def safe_database_label(database_url: str) -> str:
+    """Return a startup-log label with no credentials, query, port, or local path."""
+    try:
+        url = make_url(database_url)
+    except (TypeError, ValueError):
+        return "database"
+
+    driver = _safe_log_token(url.drivername, "database")
+    database = url.database or ":memory:"
+    if url.get_backend_name() == "sqlite":
+        filename = PurePosixPath(database.replace("\\", "/")).name
+        return f"{driver} {_safe_log_token(filename, 'database')}"
+
+    hostname = _safe_log_token(url.host, "local")
+    database_name = PurePosixPath(database.replace("\\", "/")).name
+    return f"{driver} {hostname}/{_safe_log_token(database_name, 'database')}"
 
 
 @app.on_event("startup")
@@ -53,7 +84,7 @@ def _startup() -> None:
         "ready — asr=%s llm=%s db=%s",
         settings.asr_backend,
         settings.llm_model,
-        settings.resolved_database_url(),
+        safe_database_label(settings.resolved_database_url()),
     )
 
 

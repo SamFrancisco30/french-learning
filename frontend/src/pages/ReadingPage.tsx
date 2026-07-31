@@ -44,18 +44,12 @@ const SAMPLES: { label: string; text: string }[] = [
   },
 ]
 
-export function ReadingPage({
-  language,
-  learnerKey,
-}: {
-  language: string
-  learnerKey: string
-}) {
+export function ReadingPage({ language }: { language: string }) {
   const [draft, setDraft] = useState('')
   const [text, setText] = useState('')
 
   return (
-    <LookupProvider language={language} learnerKey={learnerKey}>
+    <LookupProvider language={language}>
       <div className="pagehead">
         <h2>Reading</h2>
         <p>

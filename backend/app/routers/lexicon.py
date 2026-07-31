@@ -1,20 +1,21 @@
-"""Smart-translation endpoints: selection lookup, unit expression spans, vocab saving."""
+"""Smart-translation endpoints: selection lookup and unit expression spans."""
 
 from __future__ import annotations
 
 import logging
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import get_db
 from ..languages import get_language
+from ..lexicon.normalize import normalize_vocab_v1
 from ..lexicon.practice import grade_practice
 from ..lexicon.resolver import expression_spans_for_unit, resolve_selection
 from ..lexicon.sentence import LLMError, analyze_sentence
-from ..models import ListeningUnit, VocabItem
+from ..models import ListeningUnit
 from ..schemas import (
     LookupIn,
     LookupOut,
@@ -24,12 +25,24 @@ from ..schemas import (
     SentenceIn,
     SentenceOut,
     UnitExpressionsOut,
-    VocabItemOut,
-    VocabSaveIn,
 )
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["lexicon"])
+
+
+def _with_vocab_keys(result: dict[str, Any]) -> dict[str, Any]:
+    """Return a decorated top-level payload copy with save-compatible vocabulary keys."""
+    word = dict(result["word"])
+    lemma = word.get("lemma")
+    headword = lemma if isinstance(lemma, str) and lemma.strip() else result["selection"]
+    word["normalized_headword"] = normalize_vocab_v1(headword)
+    expressions = []
+    for candidate in result["expressions"]:
+        expression = dict(candidate)
+        expression["normalized_headword"] = normalize_vocab_v1(expression["canonical"])
+        expressions.append(expression)
+    return {**result, "word": word, "expressions": expressions}
 
 
 @router.post("/lookup", response_model=LookupOut)
@@ -55,8 +68,9 @@ def lookup(payload: LookupIn, db: Session = Depends(get_db)) -> LookupOut:
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from None
 
+    response = LookupOut(**_with_vocab_keys(result))
     db.commit()  # persist any newly cached gloss
-    return LookupOut(**result)
+    return response
 
 
 @router.post("/sentence", response_model=SentenceOut)
@@ -152,57 +166,3 @@ def unit_expressions(unit_id: int, db: Session = Depends(get_db)) -> UnitExpress
     return UnitExpressionsOut(
         unit_id=unit_id, expressions=expression_spans_for_unit(db, unit_id)
     )
-
-
-@router.post("/vocab", response_model=VocabItemOut)
-def save_vocab(payload: VocabSaveIn, db: Session = Depends(get_db)) -> VocabItemOut:
-    """Add a word or expression to the learner's review queue.
-
-    Idempotent per (learner, language, headword): saving twice updates the gloss rather
-    than creating a duplicate or resetting review progress.
-    """
-    lang = get_language(payload.language)
-    headword = payload.headword.strip()
-
-    existing = db.scalar(
-        select(VocabItem).where(
-            VocabItem.learner_key == payload.learner_key,
-            VocabItem.language == lang.code,
-            VocabItem.headword == headword,
-        )
-    )
-    if existing:
-        if payload.gloss_en:
-            existing.gloss_en = payload.gloss_en
-        if payload.example:
-            existing.example = payload.example
-        db.commit()
-        db.refresh(existing)
-        return VocabItemOut.model_validate(existing)
-
-    item = VocabItem(
-        learner_key=payload.learner_key,
-        language=lang.code,
-        headword=headword,
-        gloss_en=payload.gloss_en,
-        example=payload.example,
-        zipf=round(lang.zipf(headword), 2),
-        unit_id=payload.unit_id,
-    )
-    db.add(item)
-    db.commit()
-    db.refresh(item)
-    return VocabItemOut.model_validate(item)
-
-
-@router.get("/vocab", response_model=list[VocabItemOut])
-def list_vocab(
-    db: Session = Depends(get_db),
-    learner_key: str = Query(default="anonymous"),
-    language: str | None = None,
-) -> list[VocabItemOut]:
-    stmt = select(VocabItem).where(VocabItem.learner_key == learner_key)
-    if language:
-        stmt = stmt.where(VocabItem.language == language)
-    rows = db.scalars(stmt.order_by(VocabItem.created_at.desc())).all()
-    return [VocabItemOut.model_validate(r) for r in rows]

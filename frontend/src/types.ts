@@ -176,6 +176,7 @@ export interface Sense {
 
 export interface WordGloss {
   surface: string
+  normalized_headword: string
   lemma: string | null
   pos: string | null
   gloss_en: string
@@ -195,6 +196,7 @@ export type ExpressionKind =
 export interface ExpressionHit {
   id: number | null
   canonical: string
+  normalized_headword: string
   surface: string
   kind: ExpressionKind
   gloss_en: string
@@ -239,16 +241,58 @@ export interface UnitExpressionSpan {
   char_end: number
 }
 
-export interface SavedVocab {
+export interface VocabSource {
+  lesson_id: number
+  lesson_title: string
+  unit_id: number
+  unit_index: number
+}
+
+export interface VocabItem {
   id: number
   language: string
   headword: string
+  normalized_headword: string
   gloss_en: string | null
   example: string | null
   zipf: number | null
   reps: number
   due_at: string | null
+  created_at: string
+  updated_at: string
+  source: VocabSource | null
 }
+
+export interface VocabList {
+  items: VocabItem[]
+  next_cursor: string | null
+  total: number
+}
+
+export interface VocabSavedKey {
+  id: number
+  normalized_headword: string
+}
+
+export interface VocabSavedKeys {
+  language: string
+  items: VocabSavedKey[]
+}
+
+export interface VocabSaveInput {
+  language: string
+  headword: string
+  gloss_en?: string | null
+  example?: string | null
+  unit_id?: number | null
+}
+
+export interface VocabEditInput {
+  gloss_en?: string | null
+  example?: string | null
+}
+
+export type SavedVocab = VocabItem
 
 // ---------------------------------------------------------------- sentence grammar
 

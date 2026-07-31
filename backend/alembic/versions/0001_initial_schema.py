@@ -18,8 +18,7 @@ Every migration after this one is a normal autogenerate against Postgres.
 from __future__ import annotations
 
 from alembic import op
-
-from app.models import Base
+from alembic_schema_0001 import metadata
 
 revision = "0001_initial"
 down_revision = None
@@ -28,8 +27,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    Base.metadata.create_all(bind=op.get_bind())
+    metadata.create_all(bind=op.get_bind())
 
 
 def downgrade() -> None:
-    Base.metadata.drop_all(bind=op.get_bind())
+    metadata.drop_all(bind=op.get_bind())
