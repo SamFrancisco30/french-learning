@@ -142,7 +142,7 @@ describe('API request boundaries', () => {
     expect(noContent.json).not.toHaveBeenCalled()
   })
 
-  it('rejects non-success responses with status and path but not response secrets', async () => {
+  it('rejects non-success responses with status and pathname but not response secrets', async () => {
     const failed = response({ detail: 'private database secret' }, {
       ok: false,
       status: 503,
@@ -153,6 +153,28 @@ describe('API request boundaries', () => {
     await expect(
       vocab.remove(42, { 'X-Learner-Key': 'learner_delete' }),
     ).rejects.toThrow('503 Unavailable — /api/vocab/42')
+    expect(failed.json).not.toHaveBeenCalled()
+  })
+
+  it('redacts query parameters and learner identity from request errors', async () => {
+    const failed = response({ detail: 'private response body' }, {
+      ok: false,
+      status: 503,
+      statusText: 'Unavailable',
+    })
+    fetchMock.mockResolvedValue(failed)
+
+    const error = await api.progress('learner_secret&admin=true').catch((reason: unknown) => reason)
+    expect(error).toBeInstanceOf(Error)
+    const message = error instanceof Error ? error.message : String(error)
+    expect(message).toBe('503 Unavailable — /api/progress')
+    const [, init] = requestAt()
+    expect(requestAt()[0]).toBe('/api/progress?learner_key=learner_secret%26admin%3Dtrue')
+    expect(init).toBeUndefined()
+    expect(message).not.toContain('learner_secret')
+    expect(message).not.toContain('learner_key')
+    expect(message).not.toContain('?')
+    expect(message).not.toContain('private response body')
     expect(failed.json).not.toHaveBeenCalled()
   })
 

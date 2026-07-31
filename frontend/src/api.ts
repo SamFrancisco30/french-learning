@@ -13,13 +13,23 @@ import type {
   VocabSaveInput,
 } from './types'
 
+function requestPathname(path: string): string {
+  try {
+    return new URL(path, 'http://local.invalid').pathname
+  } catch {
+    return path.split(/[?#]/, 1)[0] || '/'
+  }
+}
+
 async function request<T>(
   path: string,
   init?: RequestInit,
   expectsJson = true,
 ): Promise<T> {
   const res = await fetch(path, init)
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText} — ${path}`)
+  if (!res.ok) {
+    throw new Error(`${res.status} ${res.statusText} — ${requestPathname(path)}`)
+  }
   if (
     !expectsJson ||
     res.status === 204 ||

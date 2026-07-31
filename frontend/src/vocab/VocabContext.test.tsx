@@ -95,6 +95,29 @@ describe('VocabProvider key synchronization', () => {
     expect(result.current.keyState('en').status).toBe('idle')
   })
 
+  it('returns isolated key-state snapshots that cannot mutate the cache', async () => {
+    apiMocks.savedKeys.mockResolvedValue(savedKeys('fr', 'écouter'))
+    const { result } = renderHook(() => useVocab(), { wrapper })
+    await act(() => result.current.ensureKeys('fr'))
+
+    const snapshot = result.current.keyState('fr')
+    snapshot.keys.clear()
+    snapshot.localAdds.add('injected-add')
+    snapshot.localDeletes.add('écouter')
+    snapshot.status = 'error'
+    snapshot.error = new Error('injected error')
+
+    expect(result.current.savedStatus('fr', 'écouter')).toBe('saved')
+    expect(result.current.savedStatus('fr', 'injected-add')).toBe('not-saved')
+    expect(result.current.keyState('fr')).toMatchObject({
+      status: 'ready',
+      error: null,
+    })
+    expect(result.current.keyState('fr').keys).toEqual(new Set(['écouter']))
+    expect(result.current.keyState('fr').localAdds).toEqual(new Set())
+    expect(result.current.keyState('fr').localDeletes).toEqual(new Set())
+  })
+
   it('deduplicates concurrent loads and independently loads another language', async () => {
     const fr = deferred<VocabSavedKeys>()
     apiMocks.savedKeys.mockImplementation((language: string) =>

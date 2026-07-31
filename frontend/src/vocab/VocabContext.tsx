@@ -48,6 +48,15 @@ function asError(reason: unknown): Error {
   return reason instanceof Error ? reason : new Error(String(reason))
 }
 
+function stateSnapshot(state: KeyState): KeyState {
+  return {
+    ...state,
+    keys: new Set(state.keys),
+    localAdds: new Set(state.localAdds),
+    localDeletes: new Set(state.localDeletes),
+  }
+}
+
 export function VocabProvider({ children }: { children: ReactNode }) {
   const { vocabHeaders } = useIdentity()
   const [states, setStates] = useState<Map<string, KeyState>>(() => new Map())
@@ -123,7 +132,8 @@ export function VocabProvider({ children }: { children: ReactNode }) {
   )
 
   const keyState = useCallback(
-    (language: string): KeyState => statesRef.current.get(language) ?? idleState(),
+    (language: string): KeyState =>
+      stateSnapshot(statesRef.current.get(language) ?? idleState()),
     [],
   )
 
