@@ -1,7 +1,9 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -70,7 +72,7 @@ function generateLearnerKey(): string {
   return `learner_${pseudonymousFallback()}`
 }
 
-function getOrCreateLearnerKey(): string {
+function getInitialLearnerKey(): string {
   let existing: string | null = null
   try {
     existing = globalThis.localStorage.getItem(STORAGE_KEY)
@@ -79,17 +81,12 @@ function getOrCreateLearnerKey(): string {
   }
   if (existing !== null && LEARNER_KEY_PATTERN.test(existing)) return existing
 
-  const learnerKey = generateLearnerKey()
-  try {
-    globalThis.localStorage.setItem(STORAGE_KEY, learnerKey)
-  } catch {
-    // Storage can be unavailable in privacy modes; retain this key in provider state.
-  }
-  return learnerKey
+  return generateLearnerKey()
 }
 
 export function IdentityProvider({ children }: { children: ReactNode }) {
-  const [learnerKey] = useState(getOrCreateLearnerKey)
+  const [learnerKey] = useState(getInitialLearnerKey)
+  const persistenceAttempted = useRef(false)
   const vocabHeaders = useMemo<VocabHeaders>(
     () => Object.freeze({ 'X-Learner-Key': learnerKey }),
     [learnerKey],
@@ -98,6 +95,23 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
     () => ({ learnerKey, vocabHeaders }),
     [learnerKey, vocabHeaders],
   )
+
+  useEffect(() => {
+    if (persistenceAttempted.current) return
+    persistenceAttempted.current = true
+
+    try {
+      if (globalThis.localStorage.getItem(STORAGE_KEY) === learnerKey) return
+    } catch {
+      // A failed read does not prevent an independent write attempt.
+    }
+
+    try {
+      globalThis.localStorage.setItem(STORAGE_KEY, learnerKey)
+    } catch {
+      // Storage can be unavailable in privacy modes; retain this key in provider state.
+    }
+  }, [learnerKey])
 
   return <IdentityContext value={identity}>{children}</IdentityContext>
 }

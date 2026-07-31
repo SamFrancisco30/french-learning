@@ -37,11 +37,13 @@ describe('IdentityProvider', () => {
 
   it('creates and stores a learner key from crypto.randomUUID when storage is empty', () => {
     vi.spyOn(crypto, 'randomUUID').mockReturnValue(GENERATED_UUID)
+    const setItem = vi.spyOn(Storage.prototype, 'setItem')
 
     const { result } = renderHook(() => useIdentity(), { wrapper })
 
     expect(result.current.learnerKey).toBe(`learner_${GENERATED_UUID}`)
     expect(localStorage.getItem('learner_key')).toBe(`learner_${GENERATED_UUID}`)
+    expect(setItem).toHaveBeenCalledTimes(1)
   })
 
   it('writes once and keeps the key and vocab headers stable across StrictMode rerenders', () => {
@@ -97,6 +99,7 @@ describe('IdentityProvider', () => {
   ])('replaces a %s stored value with one compatible key for all API contracts', (_, stored) => {
     localStorage.setItem('learner_key', stored)
     vi.spyOn(crypto, 'randomUUID').mockReturnValue(GENERATED_UUID)
+    const setItem = vi.spyOn(Storage.prototype, 'setItem')
 
     const { result } = renderHook(() => useIdentity(), { wrapper })
 
@@ -104,6 +107,49 @@ describe('IdentityProvider', () => {
     expect(result.current.learnerKey).toBe(expected)
     expect(result.current.vocabHeaders).toEqual({ 'X-Learner-Key': expected })
     expect(localStorage.getItem('learner_key')).toBe(expected)
+    expect(setItem).toHaveBeenCalledTimes(1)
+  })
+
+  it('persists only the retained StrictMode key when reads fail but writes succeed', () => {
+    let persisted: string | null = null
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('Blocked', 'SecurityError')
+    })
+    const setItem = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation((_, value) => {
+        persisted = value
+      })
+    vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce(GENERATED_UUID)
+      .mockReturnValueOnce(STRICT_MODE_UUID)
+
+    const { rerender } = render(
+      <StrictMode>
+        <IdentityProvider>
+          <IdentityProbe />
+        </IdentityProvider>
+      </StrictMode>,
+    )
+    const retainedKey = screen.getByTestId('learner-key').textContent
+
+    expect(retainedKey).toMatch(LEARNER_KEY_PATTERN)
+    expect(persisted).toBe(retainedKey)
+    expect(setItem).toHaveBeenCalledTimes(1)
+    expect(setItem).toHaveBeenLastCalledWith('learner_key', retainedKey)
+    expect(screen.getByTestId('vocab-header')).toHaveTextContent(retainedKey!)
+
+    rerender(
+      <StrictMode>
+        <IdentityProvider>
+          <IdentityProbe />
+        </IdentityProvider>
+      </StrictMode>,
+    )
+
+    expect(screen.getByTestId('learner-key')).toHaveTextContent(retainedKey!)
+    expect(persisted).toBe(retainedKey)
+    expect(setItem).toHaveBeenCalledTimes(1)
   })
 
   it('uses a stable in-memory identity when reading storage throws', () => {
