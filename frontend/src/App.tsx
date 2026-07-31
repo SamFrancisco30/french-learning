@@ -3,6 +3,7 @@ import { api } from './api'
 import { ListeningPage } from './pages/ListeningPage'
 import { ReadingPage } from './pages/ReadingPage'
 import { SkillStatusPage } from './pages/SkillStatusPage'
+import { VocabularyPage } from './pages/VocabularyPage'
 import { useIdentity } from './identity/IdentityContext'
 import { useHashRoute } from './router'
 import { SKILLS, skillFromPath, skillTitle } from './skills'
@@ -35,6 +36,7 @@ export default function App() {
   })
 
   const skill = skillFromPath(segments)
+  const isVocabulary = segments[0] === 'vocabulary'
   const active = languages.find((l) => l.code === language)
 
   return (
@@ -45,9 +47,12 @@ export default function App() {
             {/* Title is the current skill's name in the target language, so it tracks both
                 the page and the chosen language rather than sitting on "Écoute" (which
                 means "listening" and is wrong everywhere else). */}
-            <h1 lang={language}>{skillTitle(skill, language)}</h1>
+            <h1 lang={isVocabulary ? 'en' : language}>
+              {isVocabulary ? 'My Words' : skillTitle(skill, language)}
+            </h1>
             <span className="tagline">
-              {active ? active.name_native : language} · {skill.label.toLowerCase()}
+              {active ? active.name_native : language} ·{' '}
+              {isVocabulary ? 'vocabulary' : skill.label.toLowerCase()}
             </span>
           </div>
 
@@ -59,9 +64,10 @@ export default function App() {
                   className={`rate-btn ${l.code === language ? 'on' : ''}`}
                   onClick={() => {
                     setLanguage(l.code)
-                    navigate(`/${skill.key}`)
+                    navigate(isVocabulary ? '/vocabulary' : `/${skill.key}`)
                   }}
                   title={l.name_en}
+                  aria-label={l.name_en}
                 >
                   {l.code}
                 </button>
@@ -69,13 +75,22 @@ export default function App() {
             </div>
           )}
 
+          <nav className="utilitynav" aria-label="Utilities">
+            <button
+              className={`utilitytab ${isVocabulary ? 'on' : ''}`}
+              onClick={() => navigate('/vocabulary')}
+              aria-current={isVocabulary ? 'page' : undefined}
+            >
+              My Words
+            </button>
+          </nav>
           <nav className="skillnav" aria-label="Skills">
             {SKILLS.map((s) => (
               <button
                 key={s.key}
-                className={`skilltab ${s.key === skill.key ? 'on' : ''}`}
+                className={`skilltab ${!isVocabulary && s.key === skill.key ? 'on' : ''}`}
                 onClick={() => navigate(s.route)}
-                aria-current={s.key === skill.key ? 'page' : undefined}
+                aria-current={!isVocabulary && s.key === skill.key ? 'page' : undefined}
                 title={
                   s.status === 'live'
                     ? `${s.label} — ready`
@@ -93,7 +108,7 @@ export default function App() {
         </div>
       </header>
 
-      {skill.key === 'listening' && (
+      {!isVocabulary && skill.key === 'listening' && (
         <ListeningPage
           segments={segments}
           navigate={navigate}
@@ -102,13 +117,16 @@ export default function App() {
         />
       )}
 
-      {skill.key === 'reading' && (
+      {!isVocabulary && skill.key === 'reading' && (
         <ReadingPage language={language} learnerKey={learnerKey} />
       )}
 
-      {(skill.key === 'writing' || skill.key === 'speaking' || skill.key === 'dictation') && (
+      {!isVocabulary &&
+        (skill.key === 'writing' || skill.key === 'speaking' || skill.key === 'dictation') && (
         <SkillStatusPage skill={skill} onGoListening={() => navigate('/listening')} />
       )}
+
+      {isVocabulary && <VocabularyPage language={language} navigate={navigate} />}
     </div>
   )
 }

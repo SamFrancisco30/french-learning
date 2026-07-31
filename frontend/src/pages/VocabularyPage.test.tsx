@@ -1,0 +1,389 @@
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import App from '../App'
+import { IdentityProvider } from '../identity/IdentityContext'
+import type { VocabItem, VocabList } from '../types'
+import { VocabularyPage } from './VocabularyPage'
+
+const apiMocks = vi.hoisted(() => ({
+  languages: vi.fn(),
+}))
+
+const vocabMocks = vi.hoisted(() => ({
+  list: vi.fn(),
+  edit: vi.fn(),
+  remove: vi.fn(),
+}))
+
+vi.mock('../api', () => ({ api: apiMocks }))
+vi.mock('../vocab/VocabContext', () => ({
+  useVocab: () => vocabMocks,
+}))
+vi.mock('./ListeningPage', () => ({
+  ListeningPage: () => <div>Listening library</div>,
+}))
+vi.mock('./ReadingPage', () => ({
+  ReadingPage: () => <div>Reading page</div>,
+}))
+vi.mock('./SkillStatusPage', () => ({
+  SkillStatusPage: () => <div>Skill status</div>,
+}))
+
+function word(overrides: Partial<VocabItem> = {}): VocabItem {
+  return {
+    id: 7,
+    language: 'fr',
+    headword: 'écouter',
+    normalized_headword: 'écouter',
+    gloss_en: 'to listen',
+    example: 'Écoutez bien.',
+    zipf: 4.3,
+    reps: 0,
+    due_at: null,
+    created_at: '2026-07-28T10:00:00Z',
+    updated_at: '2026-07-28T10:00:00Z',
+    source: {
+      lesson_id: 12,
+      lesson_title: 'Morning news',
+      unit_id: 34,
+      unit_index: 2,
+    },
+    ...overrides,
+  }
+}
+
+function page(items: VocabItem[] = [], nextCursor: string | null = null): VocabList {
+  return { items, next_cursor: nextCursor, total: items.length }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
+function renderPage(language = 'fr', navigate = vi.fn()) {
+  return {
+    navigate,
+    ...render(<VocabularyPage language={language} navigate={navigate} />),
+  }
+}
+
+function renderApp() {
+  return render(
+    <IdentityProvider>
+      <App />
+    </IdentityProvider>,
+  )
+}
+
+describe('My Words route and navigation', () => {
+  beforeEach(() => {
+    apiMocks.languages.mockReset()
+    vocabMocks.list.mockReset()
+    vocabMocks.edit.mockReset()
+    vocabMocks.remove.mockReset()
+    apiMocks.languages.mockResolvedValue([
+      { code: 'fr', name_en: 'French', name_native: 'Français' },
+      { code: 'ru', name_en: 'Russian', name_native: 'Русский' },
+    ])
+    vocabMocks.list.mockResolvedValue(page())
+    window.location.hash = '#/vocabulary'
+  })
+
+  it('renders the utility route with exact branding and no active skill', async () => {
+    renderApp()
+
+    expect(screen.getByRole('heading', { level: 1, name: 'My Words' })).toBeInTheDocument()
+    expect(screen.queryByText('Listening library')).not.toBeInTheDocument()
+    const utility = screen.getByRole('button', { name: 'My Words' })
+    expect(utility).toHaveAttribute('aria-current', 'page')
+    for (const skill of ['Listening', 'Dictation', 'Reading', 'Writing', 'Speaking']) {
+      expect(screen.getByRole('button', { name: new RegExp(`^${skill}`) })).not.toHaveAttribute(
+        'aria-current',
+      )
+    }
+  })
+
+  it('enters My Words from a skill and follows hash history changes', async () => {
+    window.location.hash = '#/listening'
+    renderApp()
+
+    expect(screen.getByText('Listening library')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'My Words' }))
+    await act(async () => window.dispatchEvent(new HashChangeEvent('hashchange')))
+    expect(window.location.hash).toBe('#/vocabulary')
+    expect(screen.getByRole('heading', { level: 1, name: 'My Words' })).toBeInTheDocument()
+
+    window.location.hash = '#/listening'
+    await act(async () => window.dispatchEvent(new HashChangeEvent('hashchange')))
+    expect(screen.getByText('Listening library')).toBeInTheDocument()
+
+    window.location.hash = '#/vocabulary'
+    await act(async () => window.dispatchEvent(new HashChangeEvent('hashchange')))
+    expect(screen.getByRole('heading', { level: 1, name: 'My Words' })).toBeInTheDocument()
+  })
+
+  it('keeps the utility route when switching language and reloads that language', async () => {
+    renderApp()
+    await screen.findByRole('button', { name: 'Russian' })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Russian' }))
+
+    expect(window.location.hash).toBe('#/vocabulary')
+    await waitFor(() =>
+      expect(vocabMocks.list).toHaveBeenLastCalledWith({
+        language: 'ru',
+        sort: 'recent',
+        limit: 50,
+      }),
+    )
+  })
+})
+
+describe('VocabularyPage', () => {
+  beforeEach(() => {
+    vocabMocks.list.mockReset()
+    vocabMocks.edit.mockReset()
+    vocabMocks.remove.mockReset()
+  })
+
+  it('shows loading, empty, and initial error states with retry', async () => {
+    const initial = deferred<VocabList>()
+    vocabMocks.list.mockReturnValueOnce(initial.promise)
+    const view = renderPage()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading saved words')
+
+    initial.resolve(page())
+    expect(await screen.findByText('No saved words yet')).toBeInTheDocument()
+
+    view.unmount()
+    vocabMocks.list.mockRejectedValueOnce(new Error('Words unavailable')).mockResolvedValueOnce(page())
+    renderPage()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Words unavailable')
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByText('No saved words yet')).toBeInTheDocument()
+    expect(vocabMocks.list).toHaveBeenCalledTimes(3)
+  })
+
+  it('renders word details, saved date, and navigates to its source', async () => {
+    const navigate = vi.fn()
+    vocabMocks.list.mockResolvedValue(page([word()]))
+    renderPage('fr', navigate)
+
+    expect(await screen.findByRole('heading', { name: 'écouter' })).toBeInTheDocument()
+    expect(screen.getByText('to listen')).toBeInTheDocument()
+    expect(screen.getByText('Écoutez bien.')).toBeInTheDocument()
+    expect(screen.getByText(/Saved/)).toBeInTheDocument()
+    const source = screen.getByRole('link', { name: /Morning news.*Unit 2/ })
+    expect(source).toHaveAttribute('href', '#/listening/lesson/12/unit/34')
+    await userEvent.click(source)
+    expect(navigate).toHaveBeenCalledWith('/listening/lesson/12/unit/34')
+  })
+
+  it('loads the current language by default and replaces rows when it changes', async () => {
+    vocabMocks.list
+      .mockResolvedValueOnce(page([word()]))
+      .mockResolvedValueOnce(
+        page([word({ id: 8, language: 'ru', headword: 'слушать', normalized_headword: 'слушать' })]),
+      )
+    const view = renderPage('fr')
+    expect(await screen.findByText('écouter')).toBeInTheDocument()
+    expect(vocabMocks.list).toHaveBeenNthCalledWith(1, {
+      language: 'fr',
+      sort: 'recent',
+      limit: 50,
+    })
+
+    view.rerender(<VocabularyPage language="ru" navigate={view.navigate} />)
+    expect(await screen.findByText('слушать')).toBeInTheDocument()
+    expect(screen.queryByText('écouter')).not.toBeInTheDocument()
+  })
+
+  it('debounces controlled search and changes sort as a fresh query', async () => {
+    vi.useFakeTimers()
+    try {
+      vocabMocks.list.mockResolvedValue(page())
+      renderPage()
+      await act(async () => Promise.resolve())
+      expect(vocabMocks.list).toHaveBeenCalledTimes(1)
+
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search saved words' }), {
+        target: { value: 'écou' },
+      })
+      expect(screen.getByRole('searchbox')).toHaveValue('écou')
+      await act(async () => vi.advanceTimersByTimeAsync(299))
+      expect(vocabMocks.list).toHaveBeenCalledTimes(1)
+      await act(async () => vi.advanceTimersByTimeAsync(1))
+      expect(vocabMocks.list).toHaveBeenLastCalledWith({
+        language: 'fr',
+        q: 'écou',
+        sort: 'recent',
+        limit: 50,
+      })
+
+      fireEvent.change(screen.getByRole('combobox', { name: 'Sort saved words' }), {
+        target: { value: 'alphabetical' },
+      })
+      await act(async () => Promise.resolve())
+      expect(vocabMocks.list).toHaveBeenLastCalledWith({
+        language: 'fr',
+        q: 'écou',
+        sort: 'alphabetical',
+        limit: 50,
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('appends next pages and retries a failed load more without losing its cursor', async () => {
+    vocabMocks.list
+      .mockResolvedValueOnce(page([word()], 'next-page'))
+      .mockRejectedValueOnce(new Error('More unavailable'))
+      .mockResolvedValueOnce(
+        page([word({ id: 8, headword: 'parler', normalized_headword: 'parler' })]),
+      )
+    renderPage()
+    await screen.findByText('écouter')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Load more' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('More unavailable')
+    expect(screen.getByText('écouter')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry loading more' }))
+    expect(await screen.findByText('parler')).toBeInTheDocument()
+    expect(screen.getByText('écouter')).toBeInTheDocument()
+    expect(vocabMocks.list).toHaveBeenLastCalledWith({
+      language: 'fr',
+      sort: 'recent',
+      limit: 50,
+      cursor: 'next-page',
+    })
+  })
+
+  it('clears the old cursor immediately and replaces rather than appends on a new query', async () => {
+    vi.useFakeTimers()
+    try {
+      const search = deferred<VocabList>()
+      vocabMocks.list
+        .mockResolvedValueOnce(page([word()], 'old-cursor'))
+        .mockReturnValueOnce(search.promise)
+      renderPage()
+      await act(async () => Promise.resolve())
+      expect(screen.getByText('écouter')).toBeInTheDocument()
+
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'par' } })
+      expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument()
+      await act(async () => vi.advanceTimersByTimeAsync(300))
+      expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument()
+
+      search.resolve(page([word({ id: 8, headword: 'parler', normalized_headword: 'parler' })]))
+      await act(async () => search.promise)
+      expect(screen.getByText('parler')).toBeInTheDocument()
+      expect(screen.queryByText('écouter')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('ignores a slower stale search response', async () => {
+    vi.useFakeTimers()
+    try {
+      const oldSearch = deferred<VocabList>()
+      const newSearch = deferred<VocabList>()
+      vocabMocks.list
+        .mockResolvedValueOnce(page())
+        .mockReturnValueOnce(oldSearch.promise)
+        .mockReturnValueOnce(newSearch.promise)
+      renderPage()
+      await act(async () => Promise.resolve())
+
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'old' } })
+      await act(async () => vi.advanceTimersByTimeAsync(300))
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'new' } })
+      await act(async () => vi.advanceTimersByTimeAsync(300))
+
+      newSearch.resolve(page([word({ headword: 'new result' })]))
+      await act(async () => newSearch.promise)
+      oldSearch.resolve(page([word({ headword: 'stale result' })]))
+      await act(async () => oldSearch.promise)
+      expect(screen.getByText('new result')).toBeInTheDocument()
+      expect(screen.queryByText('stale result')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps successful rows visible when a refresh fails and retries contextually', async () => {
+    vocabMocks.list
+      .mockResolvedValueOnce(page([word()]))
+      .mockRejectedValueOnce(new Error('Refresh unavailable'))
+      .mockResolvedValueOnce(page([word({ gloss_en: 'hear carefully' })]))
+    renderPage()
+    await screen.findByText('écouter')
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'alphabetical' } })
+    expect(await screen.findByRole('alert')).toHaveTextContent('Refresh unavailable')
+    expect(screen.getByText('écouter')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByText('hear carefully')).toBeInTheDocument()
+  })
+
+  it('updates an edited row only after success and preserves its draft on failure', async () => {
+    const saving = deferred<VocabItem>()
+    vocabMocks.list.mockResolvedValue(page([word()]))
+    vocabMocks.edit.mockReturnValueOnce(saving.promise)
+    renderPage()
+    await screen.findByText('écouter')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit écouter' }))
+    const gloss = screen.getByRole('textbox', { name: 'Gloss' })
+    await userEvent.clear(gloss)
+    await userEvent.type(gloss, 'hear carefully')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(screen.getByRole('button', { name: 'Saving' })).toBeDisabled()
+    expect(screen.queryByText('hear carefully')).not.toBeInTheDocument()
+
+    saving.resolve(word({ gloss_en: 'hear carefully' }))
+    expect(await screen.findByText('hear carefully')).toBeInTheDocument()
+
+    vocabMocks.edit.mockRejectedValueOnce(new Error('Edit unavailable'))
+    await userEvent.click(screen.getByRole('button', { name: 'Edit écouter' }))
+    const example = screen.getByRole('textbox', { name: 'Example' })
+    await userEvent.clear(example)
+    await userEvent.type(example, 'Draft stays here')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    const row = screen.getByRole('article', { name: 'écouter' })
+    expect(await within(row).findByRole('alert')).toHaveTextContent('Edit unavailable')
+    expect(within(row).getByRole('textbox', { name: 'Example' })).toHaveValue('Draft stays here')
+  })
+
+  it('confirms deletion and removes a row only after success while retaining failures', async () => {
+    const removing = deferred<void>()
+    vocabMocks.list.mockResolvedValue(page([word()]))
+    vocabMocks.remove.mockReturnValueOnce(removing.promise)
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    renderPage()
+    await screen.findByText('écouter')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete écouter' }))
+    expect(confirm).toHaveBeenCalled()
+    expect(screen.getByText('écouter')).toBeInTheDocument()
+    removing.resolve()
+    await waitFor(() => expect(screen.queryByText('écouter')).not.toBeInTheDocument())
+
+    vocabMocks.list.mockResolvedValueOnce(page([word({ id: 9, headword: 'rester' })]))
+    vocabMocks.remove.mockRejectedValueOnce(new Error('Delete unavailable'))
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'alphabetical' } })
+    await screen.findByText('rester')
+    await userEvent.click(screen.getByRole('button', { name: 'Delete rester' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Delete unavailable')
+    expect(screen.getByText('rester')).toBeInTheDocument()
+  })
+})
