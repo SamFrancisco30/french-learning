@@ -25,10 +25,17 @@ import { useEffect, useRef } from 'react'
 /** Six steps from the accent blue toward a blue-grey, deliberately never reaching the seam colour:
  *  a step that matches the background would be a wasted sixth of the palette. */
 const PALETTE_FROM = [58, 110, 165] // --accent #3a6ea5
-const PALETTE_TO = [156, 178, 200]
+// Stops well short of the tile grey (#cdd5dd). The palest step used to be close enough to the tile
+// that those sparkles read as blank cells rather than pale blue ones — there is no point spending a
+// sixth of the palette on a colour indistinguishable from the background.
+const PALETTE_TO = [124, 154, 189]
 const STEPS = 6
-/** Skews the pick toward index 0, so blue dominates rather than merely appearing. */
-const BLUE_BIAS = 1.8
+/**
+ * Skews the pick toward index 0. `Math.random() ** BLUE_BIAS` compresses the distribution toward 0,
+ * and the exponent controls how hard: at 1.8 the ramp ran 37/18/14/12/11/9%, at 2.6 it runs
+ * roughly 50/15/11/9/8/7 — half the sparkles are the strongest blue and the palest is rare.
+ */
+const BLUE_BIAS = 2.6
 
 const CELL = 4 // a block
 const PITCH = 5 // block plus its 1px seam
@@ -38,7 +45,9 @@ const PITCH = 5 // block plus its 1px seam
  *  was not wanted — the seams should be lighter than the tiles, not darker. */
 const BLOCK = '#cdd5dd' // --border-strong
 
-const SPAWN_PER_SEC = 32
+// Deliberately dense. Past roughly 40/sec the field exceeds one sparkle per cell at Normal, so some
+// get overwritten — that is a denser blue, not a lost sparkle, and density is the point here.
+const SPAWN_PER_SEC = 46
 const SPEED_MIN = 24 // css px/sec
 const SPEED_MAX = 52
 /** How far either side of the knob a sparkle may choose to die, as a fraction of the track. */
