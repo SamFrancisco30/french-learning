@@ -941,28 +941,74 @@ kbd {
      rail made the dither read as noise instead of as a ramp. */
   height: 18px; border-radius: 999px; overflow: hidden;
   background: linear-gradient(90deg,
-    var(--accent-border) 0%, var(--accent-soft) 42%, var(--bg-sunken) 74%, var(--bg-sunken) 100%);
+    var(--accent-soft) 0%, var(--bg-sunken) 46%, var(--bg-sunken) 100%);
   border: 1px solid var(--border);
 }
 
 /* The dither. A repeating-conic checkerboard gives crisp 3px squares; the mask fades them out
    toward the right so density carries the meaning rather than colour alone. */
+/* THE TRACK, IN FOUR LAYERS.
+   
+   The brief, in the user's words: the left side always shines and it dilutes to the right, with
+   blue sparkle arriving continuously from the left. So the blue is permanent — it is not a band
+   that crosses and leaves grey behind — and the motion is a stream, not a single sweep.
+   
+   1. grey tiles, uniform, the whole width — the texture that is always there
+   2. a density mask, opaque at the left and transparent by the right — this is what "dilutes"
+   3. permanent blue tiles inside that mask, so the left end is blue even when nothing moves
+   4. brighter blue crests inside the same mask, marching right forever
+   
+   Layer 4 is why this reads as sparkle rather than as a conveyor: the tile grid never moves. Only
+   a repeating mask travels across it, so individual squares brighten and fade in place. */
+
 .speed-dither {
+  position: absolute; inset: 0;
+  /* --border-strong rather than --border-hover: a lighter grey widens the gap to the accent, so
+     the blue separates from the tiles it sits among. */
+  background-image: repeating-conic-gradient(var(--border-strong) 0% 25%, transparent 0% 50%);
+  background-size: 6px 6px;
+  opacity: .95;
+}
+
+/* Layer 2: the dilution. Everything blue lives inside this, so the fade applies to the permanent
+   blue and to the moving crests together and they can never disagree about where "right" is. */
+.speed-ramp {
+  position: absolute; inset: 0; overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, rgba(0,0,0,.9) 22%, rgba(0,0,0,.45) 52%, rgba(0,0,0,.12) 76%, transparent 92%);
+  mask-image: linear-gradient(90deg, #000 0%, rgba(0,0,0,.9) 22%, rgba(0,0,0,.45) 52%, rgba(0,0,0,.12) 76%, transparent 92%);
+}
+
+/* Layer 3: the left always shines, animation or not. Without this the bar goes flat grey between
+   crests, which is what "not what I meant" was about. */
+.speed-base {
   position: absolute; inset: 0;
   background-image: repeating-conic-gradient(var(--accent) 0% 25%, transparent 0% 50%);
   background-size: 6px 6px;
-  /* Near-full opacity with the ramp carried entirely by the mask. At .55 the squares blurred into
-     the background and the whole control read grey — the direction of the ramp has to be obvious
-     at a glance, since it is the only thing saying which way is slower. */
-  opacity: .9;
-  -webkit-mask-image: linear-gradient(90deg, #000 0%, rgba(0,0,0,.85) 26%, rgba(0,0,0,.35) 55%, transparent 82%);
-  mask-image: linear-gradient(90deg, #000 0%, rgba(0,0,0,.85) 26%, rgba(0,0,0,.35) 55%, transparent 82%);
-  /* Drifts one tile per cycle, so the texture breathes without ever appearing to move. */
-  animation: speed-drift 9s linear infinite;
+  /* Held below the crests on purpose: the gap between this and layer 4 IS the sparkle, so a base
+     at full strength would leave the moving crests with nowhere to brighten from. */
+  opacity: .6;
 }
-@keyframes speed-drift {
-  from { background-position: 0 0; }
-  to   { background-position: 6px 0; }
+
+/* Layer 4: the stream. A REPEATING mask tile, translated by exactly its own width, which is what
+   makes it endless — a single no-repeat band would cross once and leave the left grey behind it. */
+.speed-spark {
+  position: absolute; inset: 0;
+  background-image: repeating-conic-gradient(var(--accent-hover) 0% 25%, transparent 0% 50%);
+  background-size: 6px 6px;
+  /* Not a multiple of the 6px tile, so crests keep landing on different squares instead of
+     lighting the same ones every cycle. */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 38%, transparent 74%);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 38%, transparent 74%);
+  -webkit-mask-size: 82px 100%;
+  mask-size: 82px 100%;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  animation: speed-sparkle 2.4s linear infinite;
+}
+/* Exactly one tile of travel per cycle, so the loop is seamless. */
+@keyframes speed-sparkle {
+  from { -webkit-mask-position: 0 0; mask-position: 0 0; }
+  to   { -webkit-mask-position: 82px 0; mask-position: 82px 0; }
 }
 
 /* Brighter behind the thumb: the setting you are on should feel active. */
@@ -1020,12 +1066,13 @@ kbd {
 .speed-hint { font-size: 11.5px; color: var(--text-dim); margin-top: 4px; max-width: 46ch; }
 
 .speed.is-busy .speed-track { opacity: .6; }
-/* While a slower variant is being generated the dither speeds up — the one place the animation
+/* While a slower variant is being generated the sweep accelerates — the one place this animation
    carries information rather than decoration. */
-.speed.is-busy .speed-dither { animation-duration: 1.1s; }
+.speed.is-busy .speed-spark { animation-duration: 1s; }
 
 @media (prefers-reduced-motion: reduce) {
-  .speed-dither { animation: none; }
+  /* The sparkle is decoration; the ramp underneath still carries all the meaning. */
+  .speed-spark { animation: none; opacity: 0; }
   .speed-track::after, .speed-input::-webkit-slider-thumb { transition: none; }
 }
 

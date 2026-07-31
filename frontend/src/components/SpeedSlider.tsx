@@ -50,6 +50,12 @@ export function SpeedSlider({
       <div className="speed-rail" style={{ ['--pos' as string]: `${pct}%` }}>
         <span className="speed-track" aria-hidden="true">
           <span className="speed-dither" />
+          {/* Everything blue sits inside .speed-ramp, which is what dilutes it to the right: the
+              permanent glow and the travelling crests then fade together. See index.css. */}
+          <span className="speed-ramp">
+            <span className="speed-base" />
+            <span className="speed-spark" />
+          </span>
         </span>
         <input
           id={id}
