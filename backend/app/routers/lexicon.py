@@ -32,9 +32,11 @@ router = APIRouter(prefix="/api", tags=["lexicon"])
 
 
 def _with_vocab_keys(result: dict[str, Any]) -> dict[str, Any]:
-    """Add save-compatible vocabulary keys without mutating resolver-owned payloads."""
+    """Return a decorated top-level payload copy with save-compatible vocabulary keys."""
     word = dict(result["word"])
-    word["normalized_headword"] = normalize_vocab_v1(word.get("lemma") or result["selection"])
+    lemma = word.get("lemma")
+    headword = lemma if isinstance(lemma, str) and lemma.strip() else result["selection"]
+    word["normalized_headword"] = normalize_vocab_v1(headword)
     expressions = []
     for candidate in result["expressions"]:
         expression = dict(candidate)
@@ -66,9 +68,9 @@ def lookup(payload: LookupIn, db: Session = Depends(get_db)) -> LookupOut:
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from None
 
-    result = _with_vocab_keys(result)
+    response = LookupOut(**_with_vocab_keys(result))
     db.commit()  # persist any newly cached gloss
-    return LookupOut(**result)
+    return response
 
 
 @router.post("/sentence", response_model=SentenceOut)
