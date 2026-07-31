@@ -50,9 +50,9 @@ export function SpeedSlider({
 
       <div className="speed-rail" style={{ ['--pos' as string]: `${pct}%` }}>
         <span className="speed-track" aria-hidden="true">
-          <span className="speed-dither" />
-          {/* Colour arrives as individual sparkles, each with its own hue, speed and despawn point
-              near the knob — which is why this is a canvas and not more CSS. */}
+          {/* One canvas draws the block grid AND the sparkles. Two grids — a CSS gradient under a
+              canvas — drifted apart on phase, on rounding, and on bitmap rescaling in turn, which
+              is what made the sparkles look a different size from the tiles. See SpeedSparkle. */}
           <SpeedSparkle pct={pct} busy={disabled} />
         </span>
         <input

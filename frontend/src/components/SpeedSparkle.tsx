@@ -1,46 +1,43 @@
 import { useEffect, useRef } from 'react'
 
 /**
- * The speed track's sparkle: individual squares drifting left to right, each a random colour from a
- * six-step blue-to-grey ramp, each dying somewhere around the knob.
+ * The speed track's whole texture: a grid of white blocks with blue sparkles travelling through it.
  *
- * A canvas rather than CSS, because the brief is a particle system and CSS cannot express it: every
- * sparkle needs its own colour drawn from a set, its own speed, and its own despawn point. Earlier
- * CSS attempts could only move a mask over a fixed pattern, which gives a travelling *wave* — every
- * square lighting in lockstep — and no amount of gradient work turns that into independent
- * particles.
+ * ONE RENDERER DRAWS BOTH, and that is the entire reason this file looks the way it does. The grid
+ * used to be a CSS repeating-gradient with the sparkles on a canvas above — two independent
+ * implementations of the same grid, which disagreed for three different reasons in succession: the
+ * gradient's phase started from a different edge than the canvas rows; the canvas coordinate space
+ * was a rounded copy of a fractional element box; and then the browser resampled the bitmap by a
+ * fraction of a percent, which does not look like a scale error, it looks like the sparkles are
+ * smaller than the tiles and sitting between them. Each fix revealed the next variant of the same
+ * bug. Drawing the blocks and the sparkles from one integer grid in one pass makes them incapable
+ * of disagreeing about size, phase or position — there is no second grid to drift against.
  *
- * Two details that make it read as tiles lighting up rather than as dots flying past:
+ * A sparkle always occupies exactly one whole block. Its position advances continuously but is
+ * quantised to the pitch before drawing, so it jumps cell to cell and is never a different size
+ * from its neighbours.
  *
- * Sparkles are SNAPPED to the block grid. The grey base is a full field of 3px blocks on a 4px
- * pitch, so a particle's drawn x is quantised to that pitch and it hops cell to cell along a row
- * instead of sliding between them. Every cell is a real block, so any row and any column will do.
- *
- * They die around the KNOB, not at the right edge. Each picks a despawn point at the thumb plus a
- * random offset either side, so the lit region tracks the setting: at Slowest the knob is far left
- * and sparkles wink out early, at Normal they run the whole bar. The animation ends up describing
- * the control's state instead of merely decorating it.
+ * Each picks a colour from a six-step blue ramp, a speed, and a despawn point at the knob plus a
+ * random offset either side — so the lit region tracks the setting without anything computing that
+ * it should.
  */
 
-/** 6 steps from the accent blue toward grey — but stopping SHORT of the base tile grey.
- *
- * Ending on the exact grey of the grid wasted a sixth of the palette: those sparkles were
- * invisible, so the field read as more grey than blue. The last step is now a blue-grey that still
- * reads as blue against #cdd5dd, and every one of the six is visible. */
-const PALETTE_FROM = [58, 110, 165] // --accent  #3a6ea5
-const PALETTE_TO = [156, 178, 200] //  blue-grey #9cb2c8, not the tile grey
+/** Six steps from the accent blue toward a blue-grey, deliberately never reaching the seam colour:
+ *  a step that matches the background would be a wasted sixth of the palette. */
+const PALETTE_FROM = [58, 110, 165] // --accent #3a6ea5
+const PALETTE_TO = [156, 178, 200]
 const STEPS = 6
-
-/** Bias the pick toward the blue end, so blue dominates rather than merely appearing. */
+/** Skews the pick toward index 0, so blue dominates rather than merely appearing. */
 const BLUE_BIAS = 1.8
 
-// Tighter grid: bigger blocks, same 1px gutter, so the gaps are a smaller share of the pitch
-// (20% rather than 25%) and the blocks read as packed together. Must match .speed-dither.
-const CELL = 4
-const PITCH = 5
+const CELL = 4 // a block
+const PITCH = 5 // block plus its 1px seam
 
-// Dense enough that blue dominates, short of saturation — at 44 the field went over 100%
-// coverage at Normal, so sparkles stacked on the same cells and the texture flattened out.
+/** The original look: grey tiles, and the gaps left TRANSPARENT so the track's own pale gradient
+ *  shows through as the seams. Painting the seams a dark colour gave the grid a black cast, which
+ *  was not wanted — the seams should be lighter than the tiles, not darker. */
+const BLOCK = '#cdd5dd' // --border-strong
+
 const SPAWN_PER_SEC = 32
 const SPEED_MIN = 24 // css px/sec
 const SPEED_MAX = 52
@@ -58,7 +55,9 @@ function palette(): string[] {
 }
 
 interface Particle {
+  /** Continuous position; quantised to PITCH only when drawn. */
   x: number
+  /** Row origin, always a multiple of PITCH. */
   y: number
   vx: number
   colour: string
@@ -67,8 +66,8 @@ interface Particle {
 
 export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  // Read through refs so a speed change never restarts the animation — the sparkles should keep
-  // flowing while the knob moves under them.
+  // Through refs, so changing speed never restarts the animation — the sparkles keep flowing while
+  // the knob moves under them.
   const pctRef = useRef(pct)
   const busyRef = useRef(busy)
   pctRef.current = pct
@@ -86,53 +85,67 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
     let raf = 0
     let last = 0
     let spawnDebt = 0
+    let cols = 0
+    let rows = 0
     let w = 0
     let h = 0
 
+    /**
+     * Size the bitmap to a WHOLE number of css pixels and pin the element to that same integer.
+     *
+     * The canvas is inset:0 in the track, so its box can be fractional — 208.4px, say. Leaving the
+     * css size at 100% while the bitmap is an integer number of device pixels makes the browser
+     * rescale the drawing, and a 0.2% rescale is exactly what "the sparkles are a different size
+     * from the tiles" looks like. Pinning both to the same integer removes the resample, at the
+     * cost of up to one unpainted pixel at the right edge, which the rounded end hides.
+     */
     const resize = () => {
       const dpr = window.devicePixelRatio || 1
-      const r = canvas.getBoundingClientRect()
-      // The coordinate space must be the element's FRACTIONAL css size, not a rounded version of
-      // it. Rounding 210.4px down to 210 and then letting css stretch the bitmap back to 210.4
-      // rescales everything by 1.002 — which is invisible on its own but slides the sparkles
-      // progressively out of step with the css block grid across the bar, up to half a block by
-      // the right-hand end. That was the "tiles do not match the sparkles" bug.
-      w = Math.max(1, r.width)
-      h = Math.max(1, r.height)
-      canvas.width = Math.max(1, Math.round(w * dpr))
-      canvas.height = Math.max(1, Math.round(h * dpr))
+      // Measure the PARENT, never the canvas itself. Now that the element's css size is pinned in
+      // JS it has no size of its own to measure — an unsized canvas reports its intrinsic 300x150
+      // default, so measuring itself made it lock to 300x150 forever, and there is no width at
+      // which that is right.
+      const host = canvas.parentElement
+      const r = host ? host.getBoundingClientRect() : canvas.getBoundingClientRect()
+      w = Math.max(PITCH, Math.floor(r.width))
+      h = Math.max(PITCH, Math.floor(r.height))
+      cols = Math.floor(w / PITCH)
+      rows = Math.floor(h / PITCH)
+      canvas.width = Math.round(w * dpr)
+      canvas.height = Math.round(h * dpr)
+      canvas.style.width = `${w}px`
+      canvas.style.height = `${h}px`
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      // Paint at once. The first draw used to happen inside the frame loop, which meant the track
+      // was blank until rAF fired — and completely blank wherever rAF never fires, such as a
+      // background tab.
+      draw()
     }
-    resize()
-    const ro = new ResizeObserver(resize)
-    ro.observe(canvas)
-
-    /** Every row of the block grid is available, since no cell is blank. */
-    const rows = () => {
-      const out: number[] = []
-      for (let y = 0; y + CELL <= h; y += PITCH) out.push(y)
-      return out
-    }
-
+    // Observe the parent: the canvas's own box is now pinned, so it would never report a change.
     const spawn = (): Particle => {
-      const r = rows()
       const knob = (pctRef.current / 100) * w
       return {
         x: -CELL,
-        y: r.length ? r[(Math.random() * r.length) | 0] : 0,
+        y: ((Math.random() * rows) | 0) * PITCH,
         vx: SPEED_MIN + Math.random() * (SPEED_MAX - SPEED_MIN),
-        // Math.random() ** BLUE_BIAS skews toward 0, i.e. toward the blue end of the ramp.
         colour: colours[Math.min(STEPS - 1, (Math.random() ** BLUE_BIAS * STEPS) | 0)],
-        // A random region to the left OR right of the knob's vicinity.
         dieAt: Math.max(CELL * 2, knob + (Math.random() * 2 - 1) * VICINITY * w),
       }
     }
 
     const draw = () => {
+      // Clear rather than fill: the untouched gaps let the track's pale gradient through, which is
+      // what makes the seams read as light. Then every cell as a grey tile.
       ctx.clearRect(0, 0, w, h)
+      ctx.fillStyle = BLOCK
+      for (let c = 0; c < cols; c++) {
+        for (let r = 0; r < rows; r++) ctx.fillRect(c * PITCH, r * PITCH, CELL, CELL)
+      }
+
+      // Sparkles REPLACE whole blocks — same grid, same size, same origin, by construction.
       for (const p of particles) {
-        // Quantise to the block pitch so it lands on a block, not across two.
-        const gx = Math.round(p.x / PITCH) * PITCH
+        const col = Math.round(p.x / PITCH)
+        if (col < 0 || col >= cols) continue
         let alpha = 1
         if (p.x < FADE_IN) alpha = Math.max(0, p.x / FADE_IN)
         const left = p.dieAt - p.x
@@ -140,14 +153,18 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
         if (alpha <= 0) continue
         ctx.globalAlpha = alpha
         ctx.fillStyle = p.colour
-        ctx.fillRect(gx, p.y, CELL, CELL)
+        ctx.fillRect(col * PITCH, p.y, CELL, CELL)
       }
       ctx.globalAlpha = 1
     }
 
+    resize()
+    const ro = new ResizeObserver(resize)
+    ro.observe(canvas.parentElement ?? canvas)
+
     if (reduced) {
-      // No motion: seed a static field so the track still reads as a blue-to-grey ramp.
-      for (let i = 0; i < 140; i++) {
+      // No motion: one static field, so the track still reads as blue thinning to the right.
+      for (let i = 0; i < cols * rows; i++) {
         const p = spawn()
         p.x = Math.random() * Math.max(1, p.dieAt)
         particles.push(p)
@@ -159,15 +176,14 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
     const frame = (t: number) => {
       const dt = last ? Math.min(0.05, (t - last) / 1000) : 0
       last = t
+      const rush = busyRef.current ? 2 : 1
 
-      // Busy doubles the flow, so waiting for a slower variant to render is visible.
-      spawnDebt += dt * SPAWN_PER_SEC * (busyRef.current ? 2.2 : 1)
+      spawnDebt += dt * SPAWN_PER_SEC * rush
       while (spawnDebt >= 1) {
         particles.push(spawn())
         spawnDebt -= 1
       }
-
-      for (const p of particles) p.x += p.vx * dt * (busyRef.current ? 1.8 : 1)
+      for (const p of particles) p.x += p.vx * dt * rush
       particles = particles.filter((p) => p.x < p.dieAt && p.x < w + CELL)
 
       draw()

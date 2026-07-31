@@ -960,25 +960,14 @@ kbd {
    mask over a fixed pattern, which produces a travelling wave with every block lighting in
    lockstep — it cannot give each block its own colour, speed and lifetime. See SpeedSparkle.tsx. */
 
-.speed-dither {
-  position: absolute; inset: 0;
-  background-color: var(--border-strong);
-  /* 4px blocks on a 5px pitch, and a fainter gutter than before: the gaps are a smaller share of
-     the pitch and read lighter, so the blocks sit tight against each other instead of floating in
-     white. Kept semi-transparent so the track's own gradient still shows through. */
-  /* 180deg, NOT 0deg, for the horizontal gutters. 0deg runs bottom-to-top, so the gradient phases
-     from the bottom edge while the canvas measures rows from the top — the two grids only agreed
-     when the height happened to divide evenly by the pitch. */
-  background-image:
-    repeating-linear-gradient(90deg, transparent 0 4px, rgba(255, 255, 255, .55) 4px 5px),
-    repeating-linear-gradient(180deg, transparent 0 4px, rgba(255, 255, 255, .55) 4px 5px);
-  opacity: .9;
-}
+/* No CSS grid here any more. SpeedSparkle draws the blocks AND the sparkles from one integer
+   grid in one pass — a CSS gradient grid under a canvas was two implementations of the same thing
+   and they drifted apart three separate ways. The track just supplies the pill shape. */
 
-/* The sparkles. Above the grey grid, below the thumb. */
+/* The texture. Its width/height are set in JS to whole pixels, so no `width: 100%` here — that is
+   what let the browser resample the bitmap and make the sparkles a different size from the tiles. */
 .speed-canvas {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
+  position: absolute; left: 0; top: 0;
   display: block;
   pointer-events: none;
 }
