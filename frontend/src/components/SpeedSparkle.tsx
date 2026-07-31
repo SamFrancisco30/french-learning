@@ -39,6 +39,8 @@ const BLUE_BIAS = 2.6
 
 const CELL = 4 // a block
 const PITCH = 5 // block plus its 1px seam
+// Speeds must stay under PITCH * 60 = 300 px/s. Above that a block advances more than one cell per
+// frame and the quantised hop turns into skipping, which reads as flicker rather than movement.
 
 /** The original look: grey tiles, and the gaps left TRANSPARENT so the track's own pale gradient
  *  shows through as the seams. Painting the seams a dark colour gave the grid a black cast, which
@@ -47,9 +49,14 @@ const BLOCK = '#cdd5dd' // --border-strong
 
 // Deliberately dense. Past roughly 40/sec the field exceeds one sparkle per cell at Normal, so some
 // get overwritten — that is a denser blue, not a lost sparkle, and density is the point here.
-const SPAWN_PER_SEC = 46
-const SPEED_MIN = 24 // css px/sec
-const SPEED_MAX = 52
+//
+// The spawn rate is tied to the SPEED. Steady-state population is spawn rate times lifetime, and
+// lifetime is distance over speed, so making the blocks move faster thins the field unless the rate
+// rises with it. Mean speed went 38 -> 82 px/s, a factor of 2.16, so the rate went 46 -> 100 to hold
+// the same coverage.
+const SPAWN_PER_SEC = 100
+const SPEED_MIN = 52 // css px/sec
+const SPEED_MAX = 112
 /** How far either side of the knob a sparkle may choose to die, as a fraction of the track. */
 const VICINITY = 0.2
 const FADE_IN = 10
