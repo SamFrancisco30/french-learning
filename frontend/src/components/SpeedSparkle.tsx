@@ -38,9 +38,18 @@ const STEPS = 6
  */
 const BLUE_BIAS = 2.6
 
-const CELL = 4 // a block
-const PITCH = 5 // block plus its 1px seam
-// Speeds must stay under PITCH * 60 = 300 px/s. Above that a block advances more than one cell per
+/**
+ * Block and pitch. The seam is the difference, and it stays at 1px because that is the thinnest line
+ * that renders crisply at dpr 1 — going below it means half-pixel geometry and a blurred lattice.
+ *
+ * So making the blocks "stick together" is a matter of growing them AROUND that fixed 1px, not of
+ * shrinking the gap: at 4/5 the seam was a fifth of the pitch, at 6/7 it is a seventh. The track
+ * height follows, since a flush fit needs h = rows * PITCH - 1, and 7 admits exactly one sensible
+ * height in range — 3 rows at 20px.
+ */
+const CELL = 6
+const PITCH = 7
+// Speeds must stay under PITCH * 60 = 420 px/s. Above that a block advances more than one cell per
 // frame and the quantised hop turns into skipping, which reads as flicker rather than movement.
 
 /** Tiles are a flat grey. The gradient belongs to the GRID LINES, not to the blocks. */
@@ -62,14 +71,15 @@ const SEAM_TO = 'rgba(58, 110, 165, 0)' //     the same blue, gone
  *  a hard stop under it; carrying on a little lets the colour die away behind the thumb instead. */
 const SEAM_OVERSHOOT = 0.12
 
-// Deliberately dense. Past roughly 40/sec the field exceeds one sparkle per cell at Normal, so some
-// get overwritten — that is a denser blue, not a lost sparkle, and density is the point here.
+// Deliberately dense, past one sparkle per cell — the overlap reads as a denser blue rather than a
+// lost sparkle.
 //
-// The spawn rate is tied to the SPEED. Steady-state population is spawn rate times lifetime, and
-// lifetime is distance over speed, so making the blocks move faster thins the field unless the rate
-// rises with it. Mean speed went 38 -> 82 px/s, a factor of 2.16, so the rate went 46 -> 100 to hold
-// the same coverage.
-const SPAWN_PER_SEC = 100
+// The rate is tied to BOTH the speed and the cell size, and both have moved. Steady-state population
+// is rate times lifetime, and lifetime is distance over speed, so speeding the blocks up thins the
+// field unless the rate rises with it: mean speed 38 -> 82 px/s took the rate 46 -> 100. Then the
+// bigger 6/7 grid halved the cell count, 168 -> 87, which doubles coverage at the same rate — so the
+// rate comes back down to 52 to land on the same ~160% it had before.
+const SPAWN_PER_SEC = 52
 const SPEED_MIN = 52 // css px/sec
 const SPEED_MAX = 112
 /** How far either side of the knob a sparkle may choose to die, as a fraction of the track. */
