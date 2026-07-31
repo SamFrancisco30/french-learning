@@ -417,6 +417,54 @@ describe('VocabularyPage', () => {
     }
   })
 
+  it('lets a pending initial request complete when raw search is trim-equivalent', async () => {
+    vi.useFakeTimers()
+    try {
+      const initial = deferred<VocabList>()
+      vocabMocks.list.mockReturnValue(initial.promise)
+      renderPage()
+      expect(vocabMocks.list).toHaveBeenCalledOnce()
+
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: '   ' } })
+      await act(async () => vi.advanceTimersByTimeAsync(300))
+      initial.resolve(page())
+      await act(async () => initial.promise)
+
+      expect(vocabMocks.list).toHaveBeenCalledOnce()
+      expect(screen.getByText('No saved words yet')).toBeInTheDocument()
+      expect(screen.queryByText('Loading saved words')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('preserves an equivalent cursor and restores it when raw search is undone', async () => {
+    vi.useFakeTimers()
+    try {
+      vocabMocks.list.mockResolvedValue(page([word()], 'stable-cursor'))
+      renderPage()
+      await act(async () => Promise.resolve())
+      expect(screen.getByRole('button', { name: 'Load more' })).toBeInTheDocument()
+
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: '   ' } })
+      expect(screen.getByRole('button', { name: 'Load more' })).toBeInTheDocument()
+
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'different' } })
+      expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Edit écouter' })).toBeDisabled()
+
+      await act(async () => vi.advanceTimersByTimeAsync(100))
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: '' } })
+      expect(screen.getByRole('button', { name: 'Load more' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Edit écouter' })).toBeEnabled()
+
+      await act(async () => vi.advanceTimersByTimeAsync(300))
+      expect(vocabMocks.list).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('ignores a slower stale search response', async () => {
     vi.useFakeTimers()
     try {

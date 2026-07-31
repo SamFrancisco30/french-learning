@@ -17,6 +17,11 @@ type CursorState = {
   criteria: string
 }
 
+type CriteriaError = {
+  message: string
+  criteria: string
+}
+
 export function VocabularyPage({
   language,
   navigate,
@@ -35,7 +40,7 @@ export function VocabularyPage({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
+  const [loadMoreError, setLoadMoreError] = useState<CriteriaError | null>(null)
   const requestId = useRef(0)
   const mounted = useRef(false)
   const lastAutoCriteria = useRef<string | null>(null)
@@ -103,7 +108,12 @@ export function VocabularyPage({
   }, [activeCriteria, loadFirst])
 
   const loadMore = async () => {
-    if (!cursor || cursor.criteria !== activeCriteria || loadingMore) return
+    if (
+      !cursor ||
+      cursor.criteria !== activeCriteria ||
+      activeCriteria !== viewCriteria ||
+      loadingMore
+    ) return
     const activeRequest = requestId.current
     const criteria = activeCriteria
     const requestedCursor = cursor.value
@@ -132,7 +142,7 @@ export function VocabularyPage({
         requestId.current !== activeRequest ||
         activeCriteriaRef.current !== criteria
       ) return
-      setLoadMoreError(errorMessage(reason))
+      setLoadMoreError({ message: errorMessage(reason), criteria })
     } finally {
       if (
         mounted.current &&
@@ -157,14 +167,6 @@ export function VocabularyPage({
   const hasItems = items.length > 0
   const isStale = hasItems && itemsCriteria !== viewCriteria
 
-  const changeQuery = (nextQuery: string) => {
-    requestId.current += 1
-    setCursor(null)
-    setLoadMoreError(null)
-    setLoadingMore(false)
-    setQuery(nextQuery)
-  }
-
   return (
     <main className="wordbook-page">
       <div className="pagehead wordbook-pagehead">
@@ -178,7 +180,7 @@ export function VocabularyPage({
       <VocabularyToolbar
         query={query}
         sort={sort}
-        onQueryChange={changeQuery}
+        onQueryChange={setQuery}
         onSortChange={setSort}
       />
 
@@ -232,16 +234,16 @@ export function VocabularyPage({
         <VocabularyEmpty searching={Boolean(debouncedQuery)} />
       )}
 
-      {loadMoreError && (
+      {loadMoreError?.criteria === activeCriteria && activeCriteria === viewCriteria && (
         <div className="wordbook-error wordbook-more-error" role="alert">
-          <span>{loadMoreError}</span>
+          <span>{loadMoreError.message}</span>
           <button type="button" onClick={() => void loadMore()}>
             Retry loading more
           </button>
         </div>
       )}
 
-      {cursor?.criteria === activeCriteria && !loading && (
+      {cursor?.criteria === activeCriteria && activeCriteria === viewCriteria && !loading && (
         <div className="wordbook-more">
           <button type="button" onClick={() => void loadMore()} disabled={loadingMore}>
             {loadingMore ? 'Loading more' : 'Load more'}
