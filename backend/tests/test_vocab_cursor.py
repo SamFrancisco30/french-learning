@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy import Column, DateTime, Integer, MetaData, Table, create_engine, select
 
+from app.lexicon.normalize import normalize_vocab_v1
 from app.vocab.cursor import (
     InvalidCursor,
     decode_cursor,
@@ -88,17 +89,40 @@ def test_recent_cursor_datetime_binds_in_sqlalchemy_predicate() -> None:
     assert matched == 42
 
 
-@pytest.mark.parametrize(
-    "value",
-    [
-        datetime(2026, 7, 30, 12, 34, 56, tzinfo=UTC).replace(tzinfo=None),
-        "2026-07-30T12:34:56+00:00",
-    ],
-)
-def test_recent_encoder_rejects_naive_or_non_datetime_positions(value: object) -> None:
+def test_recent_cursor_accepts_naive_datetime_selected_from_sqlite() -> None:
+    created_at = datetime(2026, 7, 30, 12, 34, 56, tzinfo=UTC)
+    metadata = MetaData()
+    vocab = Table(
+        "persisted_vocab",
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("created_at", DateTime(timezone=True), nullable=False),
+    )
+    engine = create_engine("sqlite://")
+    metadata.create_all(engine)
+    with engine.begin() as connection:
+        connection.execute(vocab.insert().values(id=42, created_at=created_at))
+        persisted = connection.scalar(select(vocab.c.created_at))
+
+    assert persisted is not None
+    assert persisted.tzinfo is None
+    token = encode_recent_cursor(
+        language="fr", q="", last_created_at=persisted, last_id=42
+    )
+    payload = decode_cursor(
+        token, sort="recent", language="fr", q=""
+    )
+    assert payload.last_created_at == created_at
+    assert payload.last_created_at.tzinfo is UTC
+
+
+def test_recent_encoder_rejects_non_datetime_position() -> None:
     with pytest.raises(ValidationError):
         encode_recent_cursor(
-            language="fr", q="", last_created_at=value, last_id=42
+            language="fr",
+            q="",
+            last_created_at="2026-07-30T12:34:56+00:00",
+            last_id=42,
         )
 
 
@@ -183,8 +207,8 @@ def test_decode_rejects_request_binding_mismatch(binding: str, value: object) ->
             {"sort": "recent", "language": "language9", "q": "écouter"},
         ),
         (
-            {"q": "é" * 129},
-            {"sort": "recent", "language": "fr", "q": "é" * 129},
+            {"q": "é" * 4097},
+            {"sort": "recent", "language": "fr", "q": "é" * 4097},
         ),
         (
             {
@@ -260,3 +284,18 @@ def test_legitimate_maximum_alphabetical_cursor_fits_and_round_trips() -> None:
     )
     assert payload.q == q
     assert payload.last_headword == headword
+
+
+@pytest.mark.parametrize("raw_character", ["\u2167", "\ufdfa"])
+def test_cursor_supports_worst_case_normalized_query_expansion(
+    raw_character: str,
+) -> None:
+    q = normalize_vocab_v1(raw_character * 128)
+    assert len(q) > 128
+    token = encode_alphabetical_cursor(
+        language="fr", q=q, last_headword="mot", last_id=42
+    )
+    payload = decode_cursor(
+        token, sort="alphabetical", language="fr", q=q
+    )
+    assert payload.q == q

@@ -18,7 +18,12 @@ from pydantic import (
     model_validator,
 )
 
-_MAX_ENCODED_CURSOR_LENGTH = 2048
+# Raw queries are capped at 128 code points. NFKC currently expands a code point
+# by at most 18x; 4,096 leaves room for a conservative 32x Unicode expansion.
+_MAX_NORMALIZED_QUERY_LENGTH = 4096
+# 4,096 four-byte query code points plus the other bounded fields encode below
+# 24 KiB in base64url; 32 KiB keeps the parser bounded with conservative slack.
+_MAX_ENCODED_CURSOR_LENGTH = 32768
 
 
 class InvalidCursor(ValueError):
@@ -31,7 +36,7 @@ class CursorPayload(BaseModel):
     v: Literal[1]
     sort: Literal["recent", "alphabetical"]
     language: str | None = Field(max_length=8)
-    q: str = Field(max_length=128)
+    q: str = Field(max_length=_MAX_NORMALIZED_QUERY_LENGTH)
     last_created_at: datetime | None
     last_headword: str | None = Field(min_length=1, max_length=128)
     last_id: int
@@ -93,6 +98,14 @@ def encode_recent_cursor(
     last_created_at: datetime,
     last_id: int,
 ) -> str:
+    """Encode a recent cursor at the persistence boundary.
+
+    SQLite drops timezone metadata when reading DateTime values. A naive datetime
+    supplied here is therefore the known-UTC persisted value, not local wall time.
+    Decoded payloads remain strict and reject crafted naive timestamp strings.
+    """
+    if isinstance(last_created_at, datetime) and last_created_at.tzinfo is None:
+        last_created_at = last_created_at.replace(tzinfo=UTC)
     return _encode(
         CursorPayload(
             v=1,
