@@ -105,12 +105,18 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
       // JS it has no size of its own to measure — an unsized canvas reports its intrinsic 300x150
       // default, so measuring itself made it lock to 300x150 forever, and there is no width at
       // which that is right.
+      //
+      // clientWidth/clientHeight, NOT getBoundingClientRect: the rect is the border box, but the
+      // canvas is positioned at the PADDING box, so measuring the rect made the canvas 2px too tall
+      // and shifted it a pixel down — which is where the grey strip above the tiles came from.
       const host = canvas.parentElement
-      const r = host ? host.getBoundingClientRect() : canvas.getBoundingClientRect()
-      w = Math.max(PITCH, Math.floor(r.width))
-      h = Math.max(PITCH, Math.floor(r.height))
-      cols = Math.floor(w / PITCH)
-      rows = Math.floor(h / PITCH)
+      w = Math.max(PITCH, host ? host.clientWidth : Math.floor(canvas.getBoundingClientRect().width))
+      h = Math.max(PITCH, host ? host.clientHeight : Math.floor(canvas.getBoundingClientRect().height))
+      // Count whole blocks that FIT, rather than dividing the space up. n blocks with n-1 seams
+      // between them occupy n*PITCH - 1, so dividing by PITCH always leaves a stripe over — the
+      // remainder being the margin at the bottom edge.
+      cols = Math.max(1, Math.floor((w - CELL) / PITCH) + 1)
+      rows = Math.max(1, Math.floor((h - CELL) / PITCH) + 1)
       canvas.width = Math.round(w * dpr)
       canvas.height = Math.round(h * dpr)
       canvas.style.width = `${w}px`
