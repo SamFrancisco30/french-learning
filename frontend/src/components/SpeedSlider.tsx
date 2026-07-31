@@ -1,5 +1,6 @@
 import { useId } from 'react'
 import { SPEED_LEVELS, speedIndex } from '../useClipPlayer'
+import { SpeedSparkle } from './SpeedSparkle'
 
 /**
  * Playback speed as a four-stop slider: drag right to speed up, left to slow down.
@@ -50,12 +51,9 @@ export function SpeedSlider({
       <div className="speed-rail" style={{ ['--pos' as string]: `${pct}%` }}>
         <span className="speed-track" aria-hidden="true">
           <span className="speed-dither" />
-          {/* Everything blue sits inside .speed-ramp, which is what dilutes it to the right: the
-              permanent glow and the travelling crests then fade together. See index.css. */}
-          <span className="speed-ramp">
-            <span className="speed-base" />
-            <span className="speed-spark" />
-          </span>
+          {/* Colour arrives as individual sparkles, each with its own hue, speed and despawn point
+              near the knob — which is why this is a canvas and not more CSS. */}
+          <SpeedSparkle pct={pct} busy={disabled} />
         </span>
         <input
           id={id}
