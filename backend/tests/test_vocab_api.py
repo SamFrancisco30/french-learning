@@ -1060,6 +1060,7 @@ def test_repeat_save_validates_source_before_any_fill(
 
     assert response.status_code == 422
     assert response.json() == {"detail": "invalid vocabulary input"}
+    assert not api_db.in_transaction()
     api_db.refresh(existing)
     assert existing.gloss_en is None
     assert existing.normalized_gloss == ""
@@ -1525,3 +1526,563 @@ def test_authenticated_edit_delete_sql_and_404_are_user_scoped(
         assert "vocab_items.id" in statement
         assert "vocab_items.user_id" in statement
         assert "learner_key" not in statement
+
+
+def _operational_write_error() -> OperationalError:
+    return OperationalError("write failed", {}, sqlite3.OperationalError("write failed"))
+
+
+@pytest.mark.parametrize("error_kind", ["operational", "integrity"])
+@pytest.mark.parametrize("operation", ["save", "fill", "edit", "delete"])
+def test_mutation_write_error_rolls_back_and_session_remains_usable(
+    operation: str,
+    error_kind: str,
+    api_db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = importlib.import_module("app.vocab.service")
+    from app.schemas import VocabEditIn, VocabSaveIn
+
+    identity = LearnerIdentity("learner_alpha")
+    item: VocabItem | None = None
+    if operation != "save":
+        item = _add_item(
+            api_db,
+            learner_key=identity.learner_key,
+            headword="mot",
+            gloss=None,
+        )
+        api_db.commit()
+
+    original_rollback = api_db.rollback
+    rollback_calls = 0
+
+    def _rollback() -> None:
+        nonlocal rollback_calls
+        rollback_calls += 1
+        original_rollback()
+
+    monkeypatch.setattr(api_db, "rollback", _rollback)
+    error: IntegrityError | OperationalError
+    if error_kind == "integrity":
+        error = IntegrityError(
+            "write failed",
+            {},
+            sqlite3.IntegrityError("CHECK constraint failed: unrelated"),
+        )
+    else:
+        error = _operational_write_error()
+    if operation == "save":
+        original_commit = api_db.commit
+        failed = False
+
+        def _fail_commit_once() -> None:
+            nonlocal failed
+            if not failed:
+                failed = True
+                raise error
+            original_commit()
+
+        monkeypatch.setattr(api_db, "commit", _fail_commit_once)
+    else:
+        original_execute = api_db.execute
+        failed = False
+        expected_statement = "Delete" if operation == "delete" else "Update"
+
+        def _fail_execute_once(statement: Any, *args: Any, **kwargs: Any) -> Any:
+            nonlocal failed
+            if not failed and statement.__class__.__name__ == expected_statement:
+                failed = True
+                raise error
+            return original_execute(statement, *args, **kwargs)
+
+        monkeypatch.setattr(api_db, "execute", _fail_execute_once)
+
+    with pytest.raises(type(error)) as caught:
+        if operation == "save":
+            service.save_vocab(
+                api_db,
+                identity=identity,
+                payload=VocabSaveIn(language="fr", headword="new"),
+            )
+        elif operation == "fill":
+            service.save_vocab(
+                api_db,
+                identity=identity,
+                payload=VocabSaveIn(
+                    language="fr",
+                    headword="MOT",
+                    gloss_en="meaning",
+                ),
+            )
+        elif operation == "edit":
+            assert item is not None
+            service.edit_vocab(
+                api_db,
+                identity=identity,
+                item_id=item.id,
+                payload=VocabEditIn(example="example"),
+            )
+        else:
+            assert item is not None
+            service.delete_vocab(api_db, identity=identity, item_id=item.id)
+
+    assert caught.value is error
+    assert rollback_calls == 1
+    assert api_db.scalar(text("SELECT 1")) == 1
+
+
+@pytest.mark.parametrize("operation", ["save", "fill", "patch"])
+def test_mutation_builds_response_snapshot_before_commit(
+    operation: str,
+    api_db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = importlib.import_module("app.vocab.service")
+    from app.schemas import VocabEditIn, VocabSaveIn
+
+    identity = LearnerIdentity("learner_alpha")
+    item: VocabItem | None = None
+    if operation in {"fill", "patch"}:
+        item = _add_item(
+            api_db,
+            learner_key=identity.learner_key,
+            headword="mot",
+            gloss=None,
+        )
+        api_db.commit()
+
+    events: list[str] = []
+    original_to_vocab_out = service.to_vocab_out
+    original_commit = api_db.commit
+
+    def _snapshot(row: Any) -> Any:
+        events.append("snapshot")
+        return original_to_vocab_out(row)
+
+    def _commit() -> None:
+        events.append("commit")
+        original_commit()
+
+    monkeypatch.setattr(service, "to_vocab_out", _snapshot)
+    monkeypatch.setattr(api_db, "commit", _commit)
+    if operation == "save":
+        service.save_vocab(
+            api_db,
+            identity=identity,
+            payload=VocabSaveIn(language="fr", headword="new"),
+        )
+    elif operation == "fill":
+        service.save_vocab(
+            api_db,
+            identity=identity,
+            payload=VocabSaveIn(
+                language="fr",
+                headword="MOT",
+                gloss_en="meaning",
+            ),
+        )
+    else:
+        assert item is not None
+        service.edit_vocab(
+            api_db,
+            identity=identity,
+            item_id=item.id,
+            payload=VocabEditIn(example="example"),
+        )
+
+    assert events.index("snapshot") < events.index("commit")
+
+
+@pytest.mark.parametrize("operation", ["save", "fill", "patch"])
+def test_commit_adjacent_delete_cannot_break_successful_response(
+    operation: str,
+    api_db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = importlib.import_module("app.vocab.service")
+    from app.schemas import VocabEditIn, VocabSaveIn
+
+    identity = LearnerIdentity("learner_alpha")
+    item: VocabItem | None = None
+    if operation in {"fill", "patch"}:
+        item = _add_item(
+            api_db,
+            learner_key=identity.learner_key,
+            headword="mot",
+            gloss=None,
+        )
+        api_db.commit()
+
+    original_commit = api_db.commit
+    original_execute = api_db.execute
+    deleted = False
+
+    def _commit_then_delete() -> None:
+        nonlocal deleted
+        original_commit()
+        if not deleted:
+            deleted = True
+            original_execute(text("DELETE FROM vocab_items"))
+            original_commit()
+
+    monkeypatch.setattr(api_db, "commit", _commit_then_delete)
+    if operation == "save":
+        result = service.save_vocab(
+            api_db,
+            identity=identity,
+            payload=VocabSaveIn(language="fr", headword="new"),
+        )
+        assert result.headword == "new"
+    elif operation == "fill":
+        result = service.save_vocab(
+            api_db,
+            identity=identity,
+            payload=VocabSaveIn(
+                language="fr",
+                headword="MOT",
+                gloss_en="meaning",
+            ),
+        )
+        assert result.gloss_en == "meaning"
+    else:
+        assert item is not None
+        result = service.edit_vocab(
+            api_db,
+            identity=identity,
+            item_id=item.id,
+            payload=VocabEditIn(example="example"),
+        )
+        assert result.id == item.id
+        assert result.example == "example"
+
+    assert deleted
+    assert api_db.scalar(text("SELECT count(*) FROM vocab_items")) == 0
+
+
+def test_recognized_race_with_missing_winner_retries_insert_once(
+    api_db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = importlib.import_module("app.vocab.service")
+    from app.schemas import VocabSaveIn
+
+    original_flush = api_db.flush
+    flush_calls = 0
+    race = IntegrityError(
+        "INSERT",
+        {},
+        sqlite3.IntegrityError(
+            "UNIQUE constraint failed: vocab_items.learner_key, "
+            "vocab_items.language, vocab_items.normalized_headword"
+        ),
+    )
+
+    def _race_then_flush(*args: Any, **kwargs: Any) -> None:
+        nonlocal flush_calls
+        if not api_db.new:
+            original_flush(*args, **kwargs)
+            return
+        flush_calls += 1
+        if flush_calls == 1:
+            raise race
+        original_flush(*args, **kwargs)
+
+    monkeypatch.setattr(api_db, "flush", _race_then_flush)
+    result = service.save_vocab(
+        api_db,
+        identity=LearnerIdentity("learner_alpha"),
+        payload=VocabSaveIn(language="fr", headword="mot"),
+    )
+
+    assert flush_calls == 2
+    assert result.headword == "mot"
+    assert api_db.scalar(text("SELECT count(*) FROM vocab_items")) == 1
+
+
+def test_recognized_race_retry_is_bounded_and_reraises_current_error(
+    api_db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = importlib.import_module("app.vocab.service")
+    from app.schemas import VocabSaveIn
+
+    errors = [
+        IntegrityError(
+            "INSERT first",
+            {},
+            sqlite3.IntegrityError(
+                "UNIQUE constraint failed: vocab_items.learner_key, "
+                "vocab_items.language, vocab_items.normalized_headword"
+            ),
+        ),
+        IntegrityError(
+            "INSERT second",
+            {},
+            sqlite3.IntegrityError(
+                "UNIQUE constraint failed: vocab_items.learner_key, "
+                "vocab_items.language, vocab_items.normalized_headword"
+            ),
+        ),
+    ]
+    flush_calls = 0
+
+    def _always_race(*_args: Any, **_kwargs: Any) -> None:
+        nonlocal flush_calls
+        if not api_db.new:
+            return
+        error = errors[flush_calls]
+        flush_calls += 1
+        raise error
+
+    monkeypatch.setattr(api_db, "flush", _always_race)
+    with pytest.raises(IntegrityError) as caught:
+        service.save_vocab(
+            api_db,
+            identity=LearnerIdentity("learner_alpha"),
+            payload=VocabSaveIn(language="fr", headword="mot"),
+        )
+
+    assert flush_calls == 2
+    assert caught.value is errors[1]
+    assert api_db.scalar(text("SELECT 1")) == 1
+
+
+def test_fill_patch_delete_use_returning_and_exact_owner_predicates(
+    api_db: Session,
+) -> None:
+    service = importlib.import_module("app.vocab.service")
+    from app.schemas import VocabEditIn, VocabSaveIn
+
+    identity = LearnerIdentity("learner_alpha")
+    filled = _add_item(
+        api_db,
+        learner_key=identity.learner_key,
+        headword="fill",
+        gloss=None,
+    )
+    edited = _add_item(api_db, learner_key=identity.learner_key, headword="edit")
+    deleted = _add_item(api_db, learner_key=identity.learner_key, headword="delete")
+    api_db.commit()
+    statements: list[str] = []
+
+    def _capture(_conn: object, _cursor: object, statement: str, *_args: object) -> None:
+        sql = statement.lstrip().lower()
+        if sql.startswith(("update", "delete")):
+            statements.append(sql)
+
+    engine = api_db.get_bind()
+    event.listen(engine, "before_cursor_execute", _capture)
+    try:
+        service.save_vocab(
+            api_db,
+            identity=identity,
+            payload=VocabSaveIn(
+                language="fr",
+                headword=filled.headword,
+                gloss_en="meaning",
+            ),
+        )
+        service.edit_vocab(
+            api_db,
+            identity=identity,
+            item_id=edited.id,
+            payload=VocabEditIn(example="example"),
+        )
+        service.delete_vocab(api_db, identity=identity, item_id=deleted.id)
+    finally:
+        event.remove(engine, "before_cursor_execute", _capture)
+
+    assert len(statements) == 3
+    for statement in statements:
+        assert "returning id" in statement
+        assert "vocab_items.id" in statement
+        assert "vocab_items.learner_key" in statement
+        assert "vocab_items.user_id is null" in statement
+
+
+@pytest.mark.parametrize(
+    ("field", "competing_value", "normalized_value"),
+    [
+        ("gloss_en", "", ""),
+        ("gloss_en", "   ", ""),
+        ("example", "", None),
+        ("example", "   ", None),
+    ],
+)
+def test_fill_uses_current_database_semantic_empty_state(
+    field: str,
+    competing_value: str,
+    normalized_value: str | None,
+    api_db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = importlib.import_module("app.vocab.service")
+    from app.schemas import VocabSaveIn
+
+    item = _add_item(
+        api_db,
+        learner_key="learner_alpha",
+        headword="mot",
+        gloss=None,
+    )
+    item.example = None
+    api_db.commit()
+    original_execute = api_db.execute
+    injected = False
+
+    def _interleave(statement: Any, *args: Any, **kwargs: Any) -> Any:
+        nonlocal injected
+        if not injected and statement.__class__.__name__ == "Update":
+            injected = True
+            if field == "gloss_en":
+                original_execute(
+                    text(
+                        "UPDATE vocab_items SET gloss_en = :value, "
+                        "normalized_gloss = :normalized WHERE id = :item_id"
+                    ),
+                    {
+                        "value": competing_value,
+                        "normalized": normalized_value,
+                        "item_id": item.id,
+                    },
+                )
+            else:
+                original_execute(
+                    text(
+                        "UPDATE vocab_items SET example = :value WHERE id = :item_id"
+                    ),
+                    {"value": competing_value, "item_id": item.id},
+                )
+            api_db.commit()
+        return original_execute(statement, *args, **kwargs)
+
+    monkeypatch.setattr(api_db, "execute", _interleave)
+    payload_kwargs = {field: "incoming"}
+    result = service.save_vocab(
+        api_db,
+        identity=LearnerIdentity("learner_alpha"),
+        payload=VocabSaveIn(language="fr", headword="MOT", **payload_kwargs),
+    )
+
+    assert injected
+    assert getattr(result, field) == "incoming"
+
+
+def test_fill_losing_every_field_race_returns_winner_instead_of_404(
+    api_db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = importlib.import_module("app.vocab.service")
+    from app.schemas import VocabSaveIn
+
+    item = _add_item(
+        api_db,
+        learner_key="learner_alpha",
+        headword="mot",
+        gloss=None,
+    )
+    api_db.commit()
+    original_execute = api_db.execute
+    injected = False
+
+    def _interleave(statement: Any, *args: Any, **kwargs: Any) -> Any:
+        nonlocal injected
+        if not injected and statement.__class__.__name__ == "Update":
+            injected = True
+            original_execute(
+                text(
+                    "UPDATE vocab_items SET gloss_en = 'winner', "
+                    "normalized_gloss = 'winner' WHERE id = :item_id"
+                ),
+                {"item_id": item.id},
+            )
+            api_db.commit()
+        return original_execute(statement, *args, **kwargs)
+
+    monkeypatch.setattr(api_db, "execute", _interleave)
+    result = service.save_vocab(
+        api_db,
+        identity=LearnerIdentity("learner_alpha"),
+        payload=VocabSaveIn(
+            language="fr",
+            headword="MOT",
+            gloss_en="loser",
+        ),
+    )
+
+    assert injected
+    assert result.id == item.id
+    assert result.gloss_en == "winner"
+
+
+def test_existing_row_deleted_before_fill_retries_insert_once(
+    api_db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = importlib.import_module("app.vocab.service")
+    from app.schemas import VocabSaveIn
+
+    deleted = _add_item(
+        api_db,
+        learner_key="learner_alpha",
+        headword="mot",
+        gloss=None,
+    )
+    api_db.commit()
+    deleted_id = deleted.id
+    original_execute = api_db.execute
+    injected = False
+
+    def _interleave(statement: Any, *args: Any, **kwargs: Any) -> Any:
+        nonlocal injected
+        if not injected and statement.__class__.__name__ == "Update":
+            injected = True
+            original_execute(
+                text("DELETE FROM vocab_items WHERE id = :item_id"),
+                {"item_id": deleted_id},
+            )
+            api_db.commit()
+        return original_execute(statement, *args, **kwargs)
+
+    monkeypatch.setattr(api_db, "execute", _interleave)
+    result = service.save_vocab(
+        api_db,
+        identity=LearnerIdentity("learner_alpha"),
+        payload=VocabSaveIn(
+            language="fr",
+            headword="MOT",
+            gloss_en="meaning",
+        ),
+    )
+
+    assert injected
+    assert result.headword == "MOT"
+    assert result.gloss_en == "meaning"
+    assert api_db.scalar(text("SELECT count(*) FROM vocab_items")) == 1
+
+
+def test_source_validation_statement_locks_unit_and_lesson_on_postgres(
+    api_db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = importlib.import_module("app.vocab.service")
+    statement: Any = None
+
+    def _capture_scalar(candidate: Any) -> str:
+        nonlocal statement
+        statement = candidate
+        return "fr"
+
+    monkeypatch.setattr(api_db, "scalar", _capture_scalar)
+    service._validate_source(api_db, unit_id=123, language="fr")
+
+    assert statement is not None
+    compiled = str(
+        statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    ).lower()
+    assert "for update" in compiled
+    assert "of lessons, listening_units" in compiled

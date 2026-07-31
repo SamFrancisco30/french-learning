@@ -6,7 +6,7 @@ import sqlite3
 from typing import Literal
 
 from sqlalchemy import Select, and_, case, delete, func, or_, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -150,11 +150,13 @@ def _select_owned_item(
     db: Session,
     identity: LearnerIdentity,
     *clauses: ColumnElement[bool],
+    for_update: bool = False,
 ) -> tuple[VocabItem, int | None, int | None, int | None, str | None] | None:
+    statement = _owned_item_select(identity, *clauses)
+    if for_update:
+        statement = statement.with_for_update(of=VocabItem)
     return db.execute(
-        _owned_item_select(identity, *clauses).execution_options(
-            populate_existing=True
-        )
+        statement.execution_options(populate_existing=True)
     ).one_or_none()
 
 
@@ -176,12 +178,17 @@ def _validate_save(payload: VocabSaveIn) -> tuple[str, str, str, object]:
 
 
 def _validate_source(db: Session, unit_id: int | None, language: str) -> None:
+    """Validate and lock a source for the mutation transaction.
+
+    Published lessons keep their language and unit association immutable.
+    """
     if unit_id is None:
         return
     unit_language = db.scalar(
         select(Lesson.language)
         .join(ListeningUnit, ListeningUnit.lesson_id == Lesson.id)
         .where(ListeningUnit.id == unit_id)
+        .with_for_update(of=(Lesson, ListeningUnit))
     )
     if unit_language != language:
         raise InvalidVocabInput
@@ -189,6 +196,13 @@ def _validate_source(db: Session, unit_id: int | None, language: str) -> None:
 
 def _present(value: str | None) -> bool:
     return value is not None and bool(value.strip())
+
+
+def _rollback_preserving_error(db: Session) -> None:
+    try:
+        db.rollback()
+    except SQLAlchemyError:
+        pass
 
 
 def _fill_existing(
@@ -202,10 +216,9 @@ def _fill_existing(
     fill_conditions: list[ColumnElement[bool]] = []
     values: dict[str, object] = {}
     if not _present(item.gloss_en) and _present(payload.gloss_en):
-        gloss_condition = (
-            VocabItem.gloss_en.is_(None)
-            if item.gloss_en is None
-            else VocabItem.gloss_en == item.gloss_en
+        gloss_condition = or_(
+            VocabItem.gloss_en.is_(None),
+            VocabItem.normalized_gloss == "",
         )
         fill_conditions.append(gloss_condition)
         values["gloss_en"] = case(
@@ -217,10 +230,9 @@ def _fill_existing(
             else_=VocabItem.normalized_gloss,
         )
     if not _present(item.example) and _present(payload.example):
-        example_condition = (
-            VocabItem.example.is_(None)
-            if item.example is None
-            else VocabItem.example == item.example
+        example_condition = or_(
+            VocabItem.example.is_(None),
+            func.trim(VocabItem.example) == "",
         )
         fill_conditions.append(example_condition)
         values["example"] = case(
@@ -234,28 +246,37 @@ def _fill_existing(
             (source_condition, payload.unit_id),
             else_=VocabItem.unit_id,
         )
-    if not fill_conditions:
-        return to_vocab_out(row)
-
-    values["updated_at"] = utcnow()
-    result = db.execute(
-        update(VocabItem)
-        .where(
-            VocabItem.id == item.id,
-            owner_clause(identity),
-            or_(*fill_conditions),
-        )
-        .values(**values)
-        .execution_options(synchronize_session=False)
-    )
-    if result.rowcount:
+    try:
+        if fill_conditions:
+            values["updated_at"] = utcnow()
+            returned_id = db.execute(
+                update(VocabItem)
+                .where(
+                    VocabItem.id == item.id,
+                    owner_clause(identity),
+                    or_(*fill_conditions),
+                )
+                .values(**values)
+                .returning(VocabItem.id)
+                .execution_options(synchronize_session=False)
+            ).scalar_one_or_none()
+            refreshed = _select_owned_item(
+                db,
+                identity,
+                VocabItem.id == (returned_id or item.id),
+                for_update=True,
+            )
+            if refreshed is None:
+                db.rollback()
+                raise VocabItemNotFound
+            snapshot = to_vocab_out(refreshed)
+        else:
+            snapshot = to_vocab_out(row)
         db.commit()
-    else:
-        db.rollback()
-    refreshed = _select_owned_item(db, identity, VocabItem.id == item.id)
-    if refreshed is None:  # pragma: no cover - a concurrent delete is exceptional
-        raise VocabItemNotFound
-    return to_vocab_out(refreshed)
+        return snapshot
+    except SQLAlchemyError:
+        _rollback_preserving_error(db)
+        raise
 
 
 def _is_owner_unique_race(
@@ -298,53 +319,88 @@ def save_vocab(
     language, display_headword, normalized_headword, language_profile = _validate_save(
         payload
     )
-    _validate_source(db, payload.unit_id, language)
     key_clauses = (
         VocabItem.language == language,
         VocabItem.normalized_headword == normalized_headword,
     )
-    existing = _select_owned_item(db, identity, *key_clauses)
-    if existing is not None:
-        return _fill_existing(
-            db,
-            identity=identity,
-            row=existing,
-            payload=payload,
-        )
-
-    item = VocabItem(
-        learner_key=identity.learner_key,
-        user_id=identity.user_id,
-        language=language,
-        headword=display_headword,
-        normalized_headword=normalized_headword,
-        gloss_en=payload.gloss_en,
-        normalized_gloss=normalize_vocab_v1(payload.gloss_en or ""),
-        example=payload.example,
-        zipf=round(language_profile.zipf(display_headword), 2),
-        unit_id=payload.unit_id,
-    )
-    db.add(item)
     try:
-        db.commit()
-    except IntegrityError as error:
-        if not _is_owner_unique_race(error, identity):
-            raise
+        _validate_source(db, payload.unit_id, language)
+        existing = _select_owned_item(db, identity, *key_clauses)
+    except InvalidVocabInput:
         db.rollback()
-        winner = _select_owned_item(db, identity, *key_clauses)
-        if winner is None:
-            raise
-        return _fill_existing(
-            db,
-            identity=identity,
-            row=winner,
-            payload=payload,
+        raise
+    except SQLAlchemyError:
+        _rollback_preserving_error(db)
+        raise
+    if existing is not None:
+        try:
+            return _fill_existing(
+                db,
+                identity=identity,
+                row=existing,
+                payload=payload,
+            )
+        except VocabItemNotFound:
+            if existing[0] in db:
+                db.expunge(existing[0])
+            try:
+                _validate_source(db, payload.unit_id, language)
+            except InvalidVocabInput:
+                db.rollback()
+                raise
+            except SQLAlchemyError:
+                _rollback_preserving_error(db)
+                raise
+
+    for attempt in range(2):
+        item = VocabItem(
+            learner_key=identity.learner_key,
+            user_id=identity.user_id,
+            language=language,
+            headword=display_headword,
+            normalized_headword=normalized_headword,
+            gloss_en=payload.gloss_en,
+            normalized_gloss=normalize_vocab_v1(payload.gloss_en or ""),
+            example=payload.example,
+            zipf=round(language_profile.zipf(display_headword), 2),
+            unit_id=payload.unit_id,
         )
-    db.refresh(item)
-    created = _select_owned_item(db, identity, VocabItem.id == item.id)
-    if created is None:  # pragma: no cover - commit made the row visible
-        raise VocabItemNotFound
-    return to_vocab_out(created)
+        try:
+            db.add(item)
+            db.flush()
+            created = db.execute(
+                _owned_item_select(identity, VocabItem.id == item.id).execution_options(
+                    populate_existing=True
+                )
+            ).one()
+            snapshot = to_vocab_out(created)
+            db.commit()
+            return snapshot
+        except IntegrityError as error:
+            recognized_race = _is_owner_unique_race(error, identity)
+            _rollback_preserving_error(db)
+            if not recognized_race or attempt == 1:
+                raise
+            try:
+                _validate_source(db, payload.unit_id, language)
+                winner = _select_owned_item(db, identity, *key_clauses)
+            except InvalidVocabInput:
+                db.rollback()
+                raise
+            except SQLAlchemyError:
+                _rollback_preserving_error(db)
+                raise
+            if winner is not None:
+                return _fill_existing(
+                    db,
+                    identity=identity,
+                    row=winner,
+                    payload=payload,
+                )
+        except SQLAlchemyError:
+            _rollback_preserving_error(db)
+            raise
+    raise RuntimeError("bounded vocabulary insert retry exhausted")
 
 
 def edit_vocab(
@@ -360,19 +416,31 @@ def edit_vocab(
         values["normalized_gloss"] = normalize_vocab_v1(payload.gloss_en or "")
     if "example" in payload.model_fields_set:
         values["example"] = payload.example
-    result = db.execute(
-        update(VocabItem)
-        .where(VocabItem.id == item_id, owner_clause(identity))
-        .values(**values)
-    )
-    if result.rowcount == 0:
-        db.rollback()
-        raise VocabItemNotFound
-    db.commit()
-    row = _select_owned_item(db, identity, VocabItem.id == item_id)
-    if row is None:  # pragma: no cover - a concurrent delete after update
-        raise VocabItemNotFound
-    return to_vocab_out(row)
+    try:
+        returned_id = db.execute(
+            update(VocabItem)
+            .where(VocabItem.id == item_id, owner_clause(identity))
+            .values(**values)
+            .returning(VocabItem.id)
+        ).scalar_one_or_none()
+        if returned_id is None:
+            db.rollback()
+            raise VocabItemNotFound
+        row = _select_owned_item(
+            db,
+            identity,
+            VocabItem.id == returned_id,
+            for_update=True,
+        )
+        if row is None:  # pragma: no cover - RETURNING protects this invariant
+            db.rollback()
+            raise VocabItemNotFound
+        snapshot = to_vocab_out(row)
+        db.commit()
+        return snapshot
+    except SQLAlchemyError:
+        _rollback_preserving_error(db)
+        raise
 
 
 def delete_vocab(
@@ -381,13 +449,19 @@ def delete_vocab(
     identity: LearnerIdentity,
     item_id: int,
 ) -> None:
-    result = db.execute(
-        delete(VocabItem).where(VocabItem.id == item_id, owner_clause(identity))
-    )
-    if result.rowcount == 0:
-        db.rollback()
-        raise VocabItemNotFound
-    db.commit()
+    try:
+        returned_id = db.execute(
+            delete(VocabItem)
+            .where(VocabItem.id == item_id, owner_clause(identity))
+            .returning(VocabItem.id)
+        ).scalar_one_or_none()
+        if returned_id is None:
+            db.rollback()
+            raise VocabItemNotFound
+        db.commit()
+    except SQLAlchemyError:
+        _rollback_preserving_error(db)
+        raise
 
 
 def list_vocab(
