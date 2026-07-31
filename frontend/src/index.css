@@ -111,20 +111,145 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
      ending short of it. Follows shell-wide for the same reason. */
   max-width: 908px; margin: 0 auto;
   display: flex; align-items: center; gap: 18px;
-  flex-wrap: wrap; padding: 14px 0 0;
+  /* ONE line. This used to wrap, which put the five skill tabs on a row of their own and made the
+     bar 103px tall. What made it wrap was the brand carrying the language name AND the skill name
+     AND three language-code buttons beside it — about 230px that the flag now does in 44px. */
+  flex-wrap: nowrap; padding: 14px 0 0;
 }
 .shell.shell-wide .masthead-inner { max-width: 1208px; }
-.brand { display: flex; align-items: baseline; gap: 10px; }
+/* The bottom margin is alignment, not spacing. `align-items: center` lines up the flex items' BOXES,
+   but a skill tab carries 13px of bottom padding to leave room for its underline, so its text sits
+   about 3px above its box centre. Six pixels of bottom margin here shifts the brand up by half that
+   and puts "Écoute" on the same line as "Listening" — which is exactly what .utilitytab's own 7px
+   bottom margin is already doing for the star. */
+.brand { display: flex; align-items: center; gap: 10px; flex: none; margin-bottom: 6px; }
 .brand h1 {
   font-size: 19px; margin: 0; letter-spacing: -0.015em; font-weight: 650;
 }
-.brand .tagline { color: var(--text-faint); font-size: 12.5px; }
+
+/* ---------------- saved-words star ---------------- */
+
+.utilitytab.starbtn {
+  /* Square-ish, because the label is gone and 5px 10px around a 20px icon reads as lopsided. */
+  padding: 5px 7px;
+  line-height: 0;
+  color: var(--text-faint);
+}
+.utilitytab.starbtn:hover { color: var(--accent); }
+.utilitytab.starbtn.on { color: var(--accent); }
+
+.star-mark { display: block; width: 20px; height: 20px; overflow: visible; }
+
+.star-body {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linejoin: round;
+  /* fill-box, or the origin is the whole 24x24 viewBox corner and the star swings rather than
+     turning in place. */
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform .22s cubic-bezier(.34, 1.56, .64, 1), fill .18s;
+}
+/* Filled on the page it leads to, so an icon with no label still shows where you are. */
+.utilitytab.starbtn.on .star-body { fill: currentColor; }
+.utilitytab.starbtn:hover .star-body { transform: rotate(-10deg) scale(1.1); }
+.utilitytab.starbtn:active .star-body { transform: rotate(-4deg) scale(.94); }
+
+.star-spark {
+  fill: currentColor;
+  transform-box: fill-box;
+  transform-origin: center;
+  /* Opacity and scale only — nothing here moves the icon's box, so a twinkle in the nav cannot
+     nudge the row it sits in. */
+  animation: twinkle 2.9s ease-in-out infinite;
+}
+/* Offset so the two sparkles alternate instead of pulsing together, which would read as the whole
+   icon blinking. */
+.spark-b { animation-delay: 1.45s; }
+
+@keyframes twinkle {
+  0%, 100% { opacity: .18; transform: scale(.55); }
+  50%      { opacity: .95; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Settle on the visible end of the cycle rather than the invisible one — switching the animation
+     off must not delete the sparkles. */
+  .star-spark { animation: none; opacity: .6; transform: scale(.85); }
+  .star-body { transition: none; }
+  .utilitytab.starbtn:hover .star-body,
+  .utilitytab.starbtn:active .star-body { transform: none; }
+}
+
+/* ---------------- language picker ---------------- */
+
+.langpick { position: relative; display: flex; flex: none; }
+
+.langpick-trigger {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 5px 3px 4px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  /* The flag is the only thing setting this button's height, and an inline svg would otherwise
+     reserve room for a text baseline underneath it. */
+  line-height: 0;
+}
+.langpick-trigger:hover { border-color: var(--border-hover); }
+.langpick-trigger[aria-expanded='true'] {
+  border-color: var(--accent-border); background: var(--accent-soft);
+}
+
+.flag {
+  display: block;
+  width: 24px;
+  /* aspect-ratio rather than a second length: all three flags are 3:2, and stating the ratio keeps
+     them exact instead of rounding a height to 16px and squashing the bands. */
+  aspect-ratio: 3 / 2;
+  border-radius: 2px;
+  /* France and Russia both have a white band that runs to the edge. Against a white surface the
+     flag would look clipped without an outline of its own. */
+  box-shadow: 0 0 0 1px rgba(24, 33, 46, .18);
+}
+.langpick-caret { width: 8px; height: 5px; color: var(--text-faint); flex: none; }
+
+.langpick-menu {
+  position: absolute; top: calc(100% + 7px); left: 0; z-index: 40;
+  min-width: 196px; padding: 5px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.langpick-menu button {
+  display: grid; grid-template-columns: auto 1fr auto;
+  align-items: center; gap: 10px;
+  padding: 7px 9px;
+  background: none; border: 0; border-radius: var(--radius-sm);
+  font-size: 13.5px; color: var(--text); text-align: left;
+}
+.langpick-menu button:hover { background: var(--bg-sunken); }
+.langpick-menu button.on {
+  background: var(--accent-soft); color: var(--accent-ink); font-weight: 600;
+}
+/* Neither name may wrap. The menu is absolutely positioned, so it shrink-to-fits and simply grows
+   wider instead — without this, "Chinese (Mandarin)" squeezed the native column until 中文 broke
+   across two lines. */
+.langpick-name, .langpick-en { white-space: nowrap; }
+.langpick-en { font-size: 11px; color: var(--text-faint); }
 
 /* skill tabs — one page each */
 .skillnav {
   display: flex;
   gap: 2px;
-  margin-left: auto;
+  /* Takes whatever is left after the brand and My Words, and spreads the tabs across it, so the
+     row reads as one bar rather than a cluster on each side. `min-width: 0` because a nowrap flex
+     item will otherwise refuse to shrink below its content and push the row wider than the page. */
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: space-between;
   flex-wrap: nowrap;
   white-space: nowrap;
 }
@@ -154,8 +279,6 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .skilltab .dot.live { background: var(--good); }
 .skilltab .dot.partial { background: var(--warn); }
 
-.langnav { display: flex; gap: 3px; }
-
 .utilitytab {
   background: var(--bg-raised);
   border: 1px solid var(--border);
@@ -166,7 +289,7 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   font-size: 13px;
   white-space: nowrap;
 }
-.utilitynav { display: flex; align-items: center; }
+.utilitynav { display: flex; align-items: center; flex: none; }
 .utilitytab:hover { border-color: var(--border-hover); color: var(--text); }
 .utilitytab.on {
   background: var(--accent-soft);
@@ -975,10 +1098,14 @@ select:focus, textarea:focus { outline: none; border-color: var(--accent); backg
 }
 
 @media (max-width: 700px) {
-  .masthead-inner { padding-bottom: 0; }
+  /* One line is the point of the desktop bar, but five tabs plus the brand cannot honestly fit on a
+     phone. Wrapping is re-enabled here so the tabs drop to a row of their own and scroll sideways,
+     and space-between is dropped with it — spreading four visible tabs across a scrolling row puts
+     gaps in the middle of a list you are swiping through. */
+  .masthead-inner { padding-bottom: 0; flex-wrap: wrap; }
   .skillnav {
-    margin-left: 0;
-    width: 100%;
+    flex: 1 1 100%;
+    justify-content: flex-start;
     overflow-x: auto;
     flex-wrap: nowrap;
   }

@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { api } from './api'
+import { StarMark } from './components/icons'
+import { LanguagePicker } from './components/LanguagePicker'
 import { DictationPage } from './pages/DictationPage'
 import { ListeningPage } from './pages/ListeningPage'
 import { ReadingPage } from './pages/ReadingPage'
@@ -23,9 +25,9 @@ export default function App() {
 
   // Publish the masthead's real height so the sticky audio player sits flush beneath it.
   // Measured every render via offsetHeight (border-box) rather than with a ResizeObserver:
-  // the observer reports the content box and fired before the language buttons loaded, so
-  // the published value stayed stale at 56px for a 103px masthead and the player tucked
-  // behind the nav. A layout-effect read is cheap and can't go stale.
+  // the observer reports the content box and fired before the language picker had loaded its
+  // languages, so the published value stayed stale at 56px for a 103px masthead and the player
+  // tucked behind the nav. A layout-effect read is cheap and can't go stale.
   useLayoutEffect(() => {
     const el = mastheadRef.current
     if (!el) return
@@ -38,7 +40,6 @@ export default function App() {
 
   const skill = skillFromPath(segments)
   const isVocabulary = segments[0] === 'vocabulary'
-  const active = languages.find((l) => l.code === language)
 
   // The listening index — the grid of topic photographs — is the one view that is pictures rather
   // than prose, so it gets the wide shell. Everything else keeps a reading column: the drills,
@@ -61,38 +62,31 @@ export default function App() {
             <h1 lang={isVocabulary ? 'en' : language}>
               {isVocabulary ? 'My Words' : skillTitle(skill, language)}
             </h1>
-            <span className="tagline">
-              {active ? active.name_native : language} ·{' '}
-              {isVocabulary ? 'vocabulary' : skill.label.toLowerCase()}
-            </span>
+            {/* The flag replaces both the language name and the three code buttons that used to
+                sit beside it. It says which language is loaded and is also how you change it, and
+                between them those two jobs used to cost about 230px of a single-line bar. The
+                skill is not repeated here either — the tab for it is right there, underlined. */}
+            <LanguagePicker
+              languages={languages}
+              value={language}
+              onChange={(code) => {
+                setLanguage(code)
+                navigate(isVocabulary ? '/vocabulary' : `/${skill.key}`)
+              }}
+            />
           </div>
 
-          {languages.length > 1 && (
-            <div className="langnav">
-              {languages.map((l) => (
-                <button
-                  key={l.code}
-                  className={`rate-btn ${l.code === language ? 'on' : ''}`}
-                  onClick={() => {
-                    setLanguage(l.code)
-                    navigate(isVocabulary ? '/vocabulary' : `/${skill.key}`)
-                  }}
-                  title={l.name_en}
-                  aria-label={l.name_en}
-                >
-                  {l.code}
-                </button>
-              ))}
-            </div>
-          )}
-
           <nav className="utilitynav" aria-label="Utilities">
+            {/* Icon-only, so the name has to come from aria-label — there is no text to read, and
+                "My Words" is the whole meaning of the control. */}
             <button
-              className={`utilitytab ${isVocabulary ? 'on' : ''}`}
+              className={`utilitytab starbtn ${isVocabulary ? 'on' : ''}`}
               onClick={() => navigate('/vocabulary')}
               aria-current={isVocabulary ? 'page' : undefined}
+              aria-label="My Words"
+              title="My Words — the vocabulary you have saved"
             >
-              My Words
+              <StarMark />
             </button>
           </nav>
           <nav className="skillnav" aria-label="Skills">

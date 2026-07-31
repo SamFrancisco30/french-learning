@@ -134,10 +134,15 @@ describe('My Words route and navigation', () => {
 
   it('keeps the utility route when switching language and reloads that language', async () => {
     renderApp()
-    const russian = await screen.findByRole('button', { name: 'Russian' })
-    expect(russian).toHaveAttribute('aria-label', 'Russian')
 
-    await userEvent.click(russian)
+    // The language control is a flag dropdown now rather than one button per code, so the
+    // interaction is open-then-pick. The trigger carries the current language in its accessible
+    // name, because a flag on its own says nothing to a screen reader.
+    const trigger = await screen.findByRole('button', { name: /language: french/i })
+    await userEvent.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+
+    await userEvent.click(await screen.findByRole('menuitem', { name: /Russian/ }))
 
     expect(window.location.hash).toBe('#/vocabulary')
     await waitFor(() =>
