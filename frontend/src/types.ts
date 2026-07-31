@@ -408,3 +408,13 @@ export interface DictationWord {
   credit: number
   note: string | null
 }
+
+export interface DictationAudio {
+  exercise_id: number
+  url: string | null
+  speed: number
+  punctuation: boolean
+  /** Null when cached — read the real length off the audio element instead. */
+  duration_s: number | null
+  cached: boolean
+}

@@ -15,12 +15,19 @@ from __future__ import annotations
 
 import logging
 import random
+import subprocess
+import tempfile
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from ..db import get_db
+from ..languages import get_language
+from ..media.audio import extract_clip
+from ..media.punctuation import MissingAssets, find_marks, splice_announcements
+from ..media.timestretch import TimeStretchError, natural_slow
 from ..models import (
     CEFR_LEVELS,
     DICTATION_KINDS,
@@ -31,8 +38,21 @@ from ..models import (
     Lesson,
     ListeningUnit,
 )
-from ..schemas import DictationItemOut, DictationLevelOut, DictationNextOut
-from ..storage import get_store
+from ..schemas import (
+    DictationAudioOut,
+    DictationItemOut,
+    DictationLevelOut,
+    DictationNextOut,
+)
+from ..storage import dictation_clip_key, get_store
+
+
+def _probe(path: Path) -> float:
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+        capture_output=True, text=True,
+    ).stdout.strip()
+    return float(out) if out else 0.0
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/dictation", tags=["dictation"])
@@ -221,6 +241,109 @@ def next_item(
         404,
         f"no {mode} dictation items exist for language {language!r}. "
         "Run: python scripts/curate_dictation.py sync",
+    )
+
+
+def _interp(t: float, time_map: list[list[float]]) -> float:
+    """Original passage seconds -> seconds in a reshaped clip, through a breakpoint map."""
+    if not time_map:
+        return t
+    if t <= time_map[0][0]:
+        return time_map[0][1]
+    if t >= time_map[-1][0]:
+        return time_map[-1][1] + (t - time_map[-1][0])
+    lo, hi = 0, len(time_map) - 1
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        if time_map[mid][0] <= t:
+            lo = mid
+        else:
+            hi = mid
+    ax, ay = time_map[lo]
+    bx, by = time_map[hi]
+    return ay if bx <= ax else ay + (t - ax) / (bx - ax) * (by - ay)
+
+
+@router.get("/items/{exercise_id}/audio", response_model=DictationAudioOut)
+def item_audio(
+    exercise_id: int,
+    speed: float = Query(1.0, ge=0.4, le=1.0),
+    punctuation: bool = Query(False, description="Read the punctuation aloud, as in a dictée."),
+    db: Session = Depends(get_db),
+) -> DictationAudioOut:
+    """The item's own audio, optionally slowed and with the punctuation announced.
+
+    Order of operations matters and is the only subtle part: slowing is applied FIRST, then the
+    announcements are spliced at positions mapped through the slow variant's time map. Doing it the
+    other way round would leave the word timings describing audio that no longer exists, so every
+    "virgule" would drift further out of place through the passage.
+    """
+    ex = db.get(Exercise, exercise_id)
+    if not ex or ex.kind not in DICTATION_KINDS:
+        raise HTTPException(404, f"dictation item {exercise_id} not found")
+    unit = ex.unit
+    if not unit.clip_key:
+        raise HTTPException(409, "this item's unit has no audio")
+
+    lang = get_language(unit.lesson.language)
+    store = get_store()
+    provider_id = unit.lesson.source.provider_id
+    key = dictation_clip_key(provider_id, ex.id, speed=speed, punctuation=punctuation)
+
+    start = ex.audio_start_s if ex.audio_start_s is not None else unit.start_s
+    end = ex.audio_end_s if ex.audio_end_s is not None else unit.end_s
+
+    if store.exists(key):
+        # No duration on the cached path, and deliberately not a guess: the window length is NOT
+        # the file's length once slowing and announcements have been spliced in — it reported 2.54s
+        # for a 4.37s file. The client reads the real duration off the audio element, which cannot
+        # drift, rather than us storing a sidecar to answer a question the browser already knows.
+        return DictationAudioOut(
+            exercise_id=ex.id, url=store.url_for(key), speed=speed,
+            punctuation=punctuation, duration_s=None, cached=True,
+        )
+
+    text = (ex.answer or {}).get("text") or ""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpd = Path(tmp)
+        unit_clip = tmpd / "unit.m4a"
+        unit_clip.write_bytes(store.get_bytes(unit.clip_key))
+
+        current = tmpd / "item.m4a"
+        extract_clip(unit_clip, start - unit.start_s, end - unit.start_s, current)
+
+        # Positions the announcements will be spliced at, in passage-relative seconds.
+        time_map: list[list[float]] = []
+        if speed < 0.999:
+            slowed = tmpd / "slow.m4a"
+            try:
+                res = natural_slow(
+                    current, unit.words_json or [], speed=speed,
+                    clip_start_s=start, dst=slowed,
+                )
+                time_map = res.time_map
+                current = slowed
+            except (TimeStretchError, ValueError) as exc:
+                log.warning("could not slow item %d: %s", ex.id, exc)
+
+        if punctuation:
+            spoken = tmpd / "spoken.m4a"
+            try:
+                marks = find_marks(text, unit.words_json or [], lang, offset_s=start)
+                shifted = [(m.spoken, _interp(m.at_s, time_map)) for m in marks]
+                result = splice_announcements(current, shifted, lang, dst=spoken)
+                current = spoken
+                duration = result.duration_s
+            except MissingAssets as exc:
+                raise HTTPException(503, str(exc)) from None
+        else:
+            duration = _probe(current)
+
+        store.put_file(key, current, overwrite=True)
+
+    return DictationAudioOut(
+        exercise_id=ex.id, url=store.url_for(key), speed=speed,
+        punctuation=punctuation, duration_s=round(duration, 3), cached=False,
     )
 
 

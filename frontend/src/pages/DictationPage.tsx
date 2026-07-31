@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, dictation } from '../api'
-import { SPEEDS, fmt, useClipPlayer } from '../useClipPlayer'
+import { SPEEDS, fmt } from '../useClipPlayer'
 import type {
   AttemptResult,
+  DictationAudio,
   DictationInventory,
   DictationItem,
   DictationLevel,
@@ -255,11 +256,40 @@ function DictationDrill({
   onNext: () => void
   boxRef: React.RefObject<HTMLTextAreaElement | null>
 }) {
-  const player = useClipPlayer(item.unit_id, item.unit_start_s, item.unit_end_s, item.clip_url)
-  const from = item.audio_start_s ?? item.unit_start_s
-  const to = item.audio_end_s ?? item.unit_end_s
+  // Dictation plays the item's OWN audio file rather than a window inside the unit clip. It has to:
+  // the punctuation announcements are spliced into that file, so there is no window of the original
+  // that contains them, and once the server owns the cutting the client no longer needs a time map.
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [speed, setSpeed] = useState(1)
+  const [punctuation, setPunctuation] = useState(true)
+  const [audio, setAudio] = useState<DictationAudio | null>(null)
+  const [loadingAudio, setLoadingAudio] = useState(false)
+  const [audioError, setAudioError] = useState<string | null>(null)
+  const [plays, setPlays] = useState(0)
+  // Read from the element, not the API: only the browser knows the delivered file's length.
+  const [heard, setHeard] = useState<number | null>(null)
 
-  const playItem = useCallback(() => player.playWindow(from, to), [player, from, to])
+  useEffect(() => {
+    let live = true
+    setLoadingAudio(true)
+    setAudioError(null)
+    dictation
+      .audio(item.exercise_id, speed, punctuation)
+      .then((a) => live && setAudio(a))
+      .catch((e) => live && setAudioError(String(e)))
+      .finally(() => live && setLoadingAudio(false))
+    return () => {
+      live = false
+    }
+  }, [item.exercise_id, speed, punctuation])
+
+  const playItem = useCallback(() => {
+    const el = audioRef.current
+    if (!el) return
+    el.currentTime = 0
+    setPlays((n) => n + 1)
+    void el.play()
+  }, [])
 
   // Ctrl/Cmd+Enter submits, so the learner never has to leave the keyboard, and plain Enter
   // stays available for line breaks inside a paragraph.
@@ -285,36 +315,64 @@ function DictationDrill({
           <div className="ex-prompt">{item.prompt}</div>
           {item.lesson_title && (
             <div className="sub">
-              from “{item.lesson_title}” · {fmt(to - from)} of audio
+              from “{item.lesson_title}”
+              {heard ? ` · ${fmt(heard)} of audio` : ''}
             </div>
           )}
         </div>
       </div>
 
       <div className="dict-player">
-        <button className="play-btn" onClick={playItem} title="Play the passage">
-          {player.playing ? '❚❚' : '▶'}
+        <button
+          className="play-btn"
+          onClick={playItem}
+          disabled={loadingAudio || !audio?.url}
+          title="Play the passage"
+        >
+          ▶
         </button>
-        <button className="btn ghost" onClick={playItem}>
+        <button className="btn ghost" onClick={playItem} disabled={loadingAudio || !audio?.url}>
           ↺ replay
         </button>
         <div className="rates">
           {SPEEDS.map((r) => (
             <button
               key={r}
-              className={`rate-btn ${player.speed === r ? 'on' : ''}`}
-              onClick={() => player.setSpeed(r)}
-              disabled={player.loadingSpeed}
+              className={`rate-btn ${speed === r ? 'on' : ''}`}
+              onClick={() => setSpeed(r)}
+              disabled={loadingAudio}
               title={r === 1 ? 'Original speed' : `${r}× — words kept clear, pauses lengthened`}
             >
               {r}×
             </button>
           ))}
         </div>
+        <button
+          className={`rate-btn ${punctuation ? 'on' : ''}`}
+          onClick={() => setPunctuation((p) => !p)}
+          disabled={loadingAudio}
+          title={
+            punctuation
+              ? 'The punctuation is read aloud, as in a dictée — turn it off to work it out yourself'
+              : 'Have the punctuation read aloud: “virgule”, “point”'
+          }
+        >
+          , point
+        </button>
         <span className="bar-label">
-          {player.replays} plays{player.loadingSpeed ? ' · preparing slower audio…' : ''}
+          {loadingAudio
+            ? 'preparing the audio…'
+            : `${plays} plays${heard ? ` · ${fmt(heard)}` : ''}`}
         </span>
-        {player.src && <audio ref={player.ref} src={player.src} preload="auto" />}
+        {audioError && <span className="bar-label">audio unavailable — {audioError}</span>}
+        {audio?.url && (
+          <audio
+            ref={audioRef}
+            src={audio.url}
+            preload="auto"
+            onLoadedMetadata={(e) => setHeard(e.currentTarget.duration)}
+          />
+        )}
       </div>
 
       <textarea

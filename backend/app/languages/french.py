@@ -55,6 +55,25 @@ FRENCH = LanguageProfile(
            no nos fig vol chap ch éd ed p pp t j.-c j.c av.j.-c""".split()
     ),
     terminal_abbreviations=frozenset("etc cf ibid op".split()),
+    # As a French teacher reads a dictée. Longest symbols first matters for the ones that share a
+    # prefix — "..." must be matched before "." — so the splicer sorts by length rather than
+    # relying on this order, but keeping them grouped here makes the set easy to read.
+    punctuation_names=(
+        ("…", "points de suspension"),
+        ("...", "points de suspension"),
+        ("?", "point d'interrogation"),
+        ("!", "point d'exclamation"),
+        (";", "point-virgule"),
+        (":", "deux points"),
+        (",", "virgule"),
+        (".", "point"),
+        ("«", "ouvrez les guillemets"),
+        ("»", "fermez les guillemets"),
+        ("(", "ouvrez la parenthèse"),
+        (")", "fermez la parenthèse"),
+        ("—", "tiret"),
+        ("–", "tiret"),
+    ),
     # Ordered roughly by how often a learner trips on them. Ranked sets, not a dictionary: the
     # grader only asks "did the learner write a different member of the same set", which is
     # cheap and catches the confusions French dictée is actually testing.

@@ -91,6 +91,14 @@ export const dictation = {
     ),
   inventory: (language = 'fr') =>
     get<import('./types').DictationInventory>(`/api/dictation/inventory?language=${language}`),
+  /**
+   * The item's own audio: its window, optionally slowed and with the punctuation read aloud.
+   * Generated on demand and cached server-side, so the first call for a variant is slow.
+   */
+  audio: (exerciseId: number, speed: number, punctuation: boolean) =>
+    get<import('./types').DictationAudio>(
+      `/api/dictation/items/${exerciseId}/audio?speed=${speed}&punctuation=${punctuation}`,
+    ),
   /** One item at the learner's level. `level` overrides the derived one. */
   next: (mode: string, learnerKey = 'anonymous', language = 'fr', level?: string | null) =>
     get<import('./types').DictationNext>(

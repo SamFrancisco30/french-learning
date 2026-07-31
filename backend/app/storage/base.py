@@ -121,6 +121,27 @@ def variant_map_key(provider_id: str, unit_idx: int, speed: float) -> str:
     return f"clips/{provider_id}/unit_{unit_idx:03d}@{speed:g}{VARIANT_VERSION}.map.json"
 
 
+#   v1  spoken punctuation spliced into a per-item clip
+DICTATION_VERSION = "v1"
+
+
+def dictation_clip_key(
+    provider_id: str, exercise_id: int, *, speed: float, punctuation: bool
+) -> str:
+    """A dictation item's own audio: the passage window, optionally with punctuation read aloud.
+
+    Per item rather than per unit because both transformations are item-scoped — the window is the
+    item's, and the announcements land inside it. Generated on demand and cached, so the ~1000
+    items cost nothing until someone actually practises one.
+    """
+    parts = [f"ex{exercise_id}"]
+    if speed < 0.999:
+        parts.append(f"@{speed:g}")
+    if punctuation:
+        parts.append("@punct")
+    return f"dictation/{provider_id}/{''.join(parts)}{DICTATION_VERSION}.m4a"
+
+
 def transcript_key(provider_id: str, backend: str) -> str:
     return f"transcripts/{provider_id}.{backend}.json"
 

@@ -1,0 +1,130 @@
+#!/usr/bin/env python
+"""Render the spoken punctuation names once, as committed assets.
+
+    python scripts/build_punctuation_audio.py --language fr           # macOS `say`
+    python scripts/build_punctuation_audio.py --language fr --engine openai
+    python scripts/build_punctuation_audio.py --language fr --list
+
+Why these are committed rather than synthesised at runtime: there are a dozen of them, they never
+change, and the alternative is a TTS dependency in the request path. macOS `say` is the easiest
+way to make them but only exists on a Mac, so depending on it at runtime would mean the feature
+works in development and quietly does not in production. Rendering once and committing ~12 small
+files makes it work everywhere with no TTS installed and nothing to pay per request.
+
+The voice is deliberately a neutral one. This is the reader's voice, not the speaker's — a learner
+should hear immediately that "virgule" is an instruction and not part of the passage.
+"""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from app.languages import get_language  # noqa: E402
+from app.media.punctuation import ASSET_ROOT, asset_name  # noqa: E402
+
+# 22.05 kHz mono is plenty for a single spoken word and keeps the committed assets small.
+SAMPLE_RATE = 22_050
+
+SAY_VOICE = {"fr": "Thomas"}
+OPENAI_VOICE = "alloy"
+
+
+def render_say(text: str, dest: Path, voice: str) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        aiff = Path(tmp) / "out.aiff"
+        subprocess.run(
+            ["say", "-v", voice, "-r", "170", "-o", str(aiff), text],
+            check=True, capture_output=True,
+        )
+        _encode(aiff, dest)
+
+
+def render_openai(text: str, dest: Path) -> None:
+    from app.config import settings
+
+    if not settings.openai_api_key:
+        raise SystemExit("OPENAI_API_KEY is not set")
+    from openai import OpenAI
+
+    client = OpenAI(api_key=settings.openai_api_key)
+    with tempfile.TemporaryDirectory() as tmp:
+        raw = Path(tmp) / "out.mp3"
+        with client.audio.speech.with_streaming_response.create(
+            model="gpt-4o-mini-tts", voice=OPENAI_VOICE, input=text, response_format="mp3"
+        ) as resp:
+            resp.stream_to_file(raw)
+        _encode(raw, dest)
+
+
+def _encode(src: Path, dest: Path) -> None:
+    """Normalise loudness and trim leading/trailing silence, then write a small mono wav.
+
+    Trimming matters: `say` pads the start, and an untrimmed asset would insert a gap before every
+    spoken comma, which reads as hesitation rather than instruction.
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-v", "error", "-i", str(src),
+            "-af",
+            "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.02:"
+            "detection=peak,areverse,"
+            "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.02:"
+            "detection=peak,areverse,"
+            "loudnorm=I=-19:TP=-2:LRA=7",
+            "-ac", "1", "-ar", str(SAMPLE_RATE),
+            str(dest),
+        ],
+        check=True, capture_output=True,
+    )
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--language", default="fr")
+    ap.add_argument("--engine", choices=("say", "openai"), default="say")
+    ap.add_argument("--list", action="store_true", help="show what would be rendered")
+    args = ap.parse_args()
+
+    lang = get_language(args.language)
+    if not lang.punctuation_names:
+        raise SystemExit(f"{lang.code} has no punctuation_names in its profile")
+
+    # Several symbols share a spoken name ("..." and "…"), so render each distinct name once.
+    names = sorted({name for _, name in lang.punctuation_names})
+    out_dir = ASSET_ROOT / lang.code
+
+    if args.list:
+        for name in names:
+            print(f"{name:24s} -> {out_dir / (asset_name(name) + '.wav')}")
+        return
+
+    voice = SAY_VOICE.get(lang.code)
+    if args.engine == "say" and not voice:
+        raise SystemExit(f"no `say` voice configured for {lang.code}; use --engine openai")
+
+    total = 0
+    for name in names:
+        dest = out_dir / f"{asset_name(name)}.wav"
+        if args.engine == "say":
+            render_say(name, dest, voice)
+        else:
+            render_openai(name, dest)
+        size = dest.stat().st_size
+        total += size
+        dur = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(dest)],
+            capture_output=True, text=True,
+        ).stdout.strip()
+        print(f"{name:24s} {float(dur):.2f}s  {size / 1024:5.1f} KB  {dest.name}")
+    print(f"\n{len(names)} assets, {total / 1024:.0f} KB total -> {out_dir}")
+
+
+if __name__ == "__main__":
+    main()

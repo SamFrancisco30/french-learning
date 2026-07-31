@@ -55,6 +55,12 @@ class LanguageProfile:
     # "etc. Mais" does not. Without the split those items run two sentences long.
     terminal_abbreviations: frozenset[str] = field(default_factory=frozenset)
 
+    # How a dictation reader says each punctuation mark aloud, symbol -> spoken words. A real
+    # dictée is read with the punctuation announced ("virgule", "point"), which is the only way
+    # the learner can know where it goes — a comma and a clause break sound identical otherwise.
+    # A tuple of pairs rather than a dict so the profile stays hashable and frozen.
+    punctuation_names: tuple[tuple[str, str], ...] = ()
+
     # Groups of words that sound alike. Dictation lives or dies on these: writing "ses" for
     # "c'est" is not a typo, it is the actual skill being tested, and a learner who is told
     # "homophone — you heard it right, you chose the wrong spelling" learns something that

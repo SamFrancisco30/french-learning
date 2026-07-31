@@ -396,3 +396,14 @@ class DictationNextOut(BaseModel):
     off_level: bool
     repeat: bool
     remaining_at_level: int
+
+
+class DictationAudioOut(BaseModel):
+    exercise_id: int
+    url: str | None
+    speed: float
+    punctuation: bool
+    # None when served from cache — the client reads the real duration off the audio element. See
+    # the note in routers/dictation.py: the window length is not the file length.
+    duration_s: float | None = None
+    cached: bool

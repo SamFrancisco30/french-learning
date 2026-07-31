@@ -202,7 +202,7 @@ function Mcq({ ex, result, response, setResponse }: ExerciseProps) {
 
 /* ------------------------------------------------------------------ true / false */
 
-function TrueFalse({ ex, result, response, setResponse }: ExerciseProps) {
+function TrueFalse({ result, response, setResponse }: ExerciseProps) {
   const selected = response as boolean | undefined
   const correct = result?.feedback.correct_value as boolean | undefined
   const label = ['Vrai', 'Faux']
