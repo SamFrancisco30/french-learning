@@ -198,6 +198,12 @@ def _present(value: str | None) -> bool:
     return value is not None and bool(value.strip())
 
 
+def _canonical_content(value: str | None) -> str | None:
+    if value is not None and not _present(value):
+        return ""
+    return value
+
+
 def _rollback_preserving_error(db: Session) -> None:
     try:
         db.rollback()
@@ -219,6 +225,7 @@ def _fill_existing(
         gloss_condition = or_(
             VocabItem.gloss_en.is_(None),
             VocabItem.normalized_gloss == "",
+            VocabItem.gloss_en == item.gloss_en,
         )
         fill_conditions.append(gloss_condition)
         values["gloss_en"] = case(
@@ -233,6 +240,7 @@ def _fill_existing(
         example_condition = or_(
             VocabItem.example.is_(None),
             func.trim(VocabItem.example) == "",
+            VocabItem.example == item.example,
         )
         fill_conditions.append(example_condition)
         values["example"] = case(
@@ -352,6 +360,8 @@ def save_vocab(
                 _rollback_preserving_error(db)
                 raise
 
+    canonical_gloss = _canonical_content(payload.gloss_en)
+    canonical_example = _canonical_content(payload.example)
     for attempt in range(2):
         item = VocabItem(
             learner_key=identity.learner_key,
@@ -359,9 +369,9 @@ def save_vocab(
             language=language,
             headword=display_headword,
             normalized_headword=normalized_headword,
-            gloss_en=payload.gloss_en,
-            normalized_gloss=normalize_vocab_v1(payload.gloss_en or ""),
-            example=payload.example,
+            gloss_en=canonical_gloss,
+            normalized_gloss=normalize_vocab_v1(canonical_gloss or ""),
+            example=canonical_example,
             zipf=round(language_profile.zipf(display_headword), 2),
             unit_id=payload.unit_id,
         )
@@ -391,12 +401,27 @@ def save_vocab(
                 _rollback_preserving_error(db)
                 raise
             if winner is not None:
-                return _fill_existing(
-                    db,
-                    identity=identity,
-                    row=winner,
-                    payload=payload,
-                )
+                try:
+                    return _fill_existing(
+                        db,
+                        identity=identity,
+                        row=winner,
+                        payload=payload,
+                    )
+                except VocabItemNotFound:
+                    if winner[0] in db:
+                        db.expunge(winner[0])
+                    if attempt == 1:
+                        raise error
+                    try:
+                        _validate_source(db, payload.unit_id, language)
+                    except InvalidVocabInput:
+                        db.rollback()
+                        raise
+                    except SQLAlchemyError:
+                        _rollback_preserving_error(db)
+                        raise
+                    continue
             if attempt == 1:
                 raise
         except SQLAlchemyError:
@@ -414,10 +439,11 @@ def edit_vocab(
 ) -> VocabItemOut:
     values: dict[str, object] = {"updated_at": utcnow()}
     if "gloss_en" in payload.model_fields_set:
-        values["gloss_en"] = payload.gloss_en
-        values["normalized_gloss"] = normalize_vocab_v1(payload.gloss_en or "")
+        canonical_gloss = _canonical_content(payload.gloss_en)
+        values["gloss_en"] = canonical_gloss
+        values["normalized_gloss"] = normalize_vocab_v1(canonical_gloss or "")
     if "example" in payload.model_fields_set:
-        values["example"] = payload.example
+        values["example"] = _canonical_content(payload.example)
     try:
         returned_id = db.execute(
             update(VocabItem)
