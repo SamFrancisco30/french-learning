@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..db import get_db
 from ..languages import get_language
+from ..lexicon.normalize import normalize_vocab_v1
 from ..lexicon.practice import grade_practice
 from ..lexicon.resolver import expression_spans_for_unit, resolve_selection
 from ..lexicon.sentence import LLMError, analyze_sentence
@@ -27,6 +29,18 @@ from ..schemas import (
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["lexicon"])
+
+
+def _with_vocab_keys(result: dict[str, Any]) -> dict[str, Any]:
+    """Add save-compatible vocabulary keys without mutating resolver-owned payloads."""
+    word = dict(result["word"])
+    word["normalized_headword"] = normalize_vocab_v1(word.get("lemma") or result["selection"])
+    expressions = []
+    for candidate in result["expressions"]:
+        expression = dict(candidate)
+        expression["normalized_headword"] = normalize_vocab_v1(expression["canonical"])
+        expressions.append(expression)
+    return {**result, "word": word, "expressions": expressions}
 
 
 @router.post("/lookup", response_model=LookupOut)
@@ -52,6 +66,7 @@ def lookup(payload: LookupIn, db: Session = Depends(get_db)) -> LookupOut:
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from None
 
+    result = _with_vocab_keys(result)
     db.commit()  # persist any newly cached gloss
     return LookupOut(**result)
 
