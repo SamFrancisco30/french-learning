@@ -7,6 +7,7 @@ import {
 } from 'react'
 
 const STORAGE_KEY = 'learner_key'
+const LEARNER_KEY_PATTERN = /^learner_[A-Za-z0-9-]{1,48}$/
 
 type VocabHeaders = Readonly<{
   'X-Learner-Key': string
@@ -19,12 +20,71 @@ type Identity = Readonly<{
 
 const IdentityContext = createContext<Identity | undefined>(undefined)
 
-function getOrCreateLearnerKey(): string {
-  const existing = localStorage.getItem(STORAGE_KEY)
-  if (existing !== null && existing.length > 0) return existing
+function uuidFromRandomValues(webCrypto: Crypto): string {
+  const bytes = new Uint8Array(16)
+  webCrypto.getRandomValues(bytes)
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
 
-  const learnerKey = `learner_${crypto.randomUUID()}`
-  localStorage.setItem(STORAGE_KEY, learnerKey)
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0'))
+  return [
+    hex.slice(0, 4).join(''),
+    hex.slice(4, 6).join(''),
+    hex.slice(6, 8).join(''),
+    hex.slice(8, 10).join(''),
+    hex.slice(10, 16).join(''),
+  ].join('-')
+}
+
+function pseudonymousFallback(): string {
+  const timestamp = Date.now().toString(36)
+  const random = Math.random().toString(36).slice(2)
+  return `${timestamp}-${random}`.slice(0, 48)
+}
+
+function generateLearnerKey(): string {
+  let webCrypto: Crypto | undefined
+  try {
+    webCrypto = globalThis.crypto
+  } catch {
+    webCrypto = undefined
+  }
+
+  if (webCrypto) {
+    try {
+      if (typeof webCrypto.randomUUID === 'function') {
+        const learnerKey = `learner_${webCrypto.randomUUID()}`
+        if (LEARNER_KEY_PATTERN.test(learnerKey)) return learnerKey
+      }
+    } catch {
+      // Continue to getRandomValues when randomUUID is unavailable.
+    }
+
+    try {
+      return `learner_${uuidFromRandomValues(webCrypto)}`
+    } catch {
+      // This device-local identifier is not authentication; a safe alphabet is enough.
+    }
+  }
+
+  return `learner_${pseudonymousFallback()}`
+}
+
+function getOrCreateLearnerKey(): string {
+  let existing: string | null = null
+  try {
+    existing = globalThis.localStorage.getItem(STORAGE_KEY)
+  } catch {
+    existing = null
+  }
+  if (existing !== null && LEARNER_KEY_PATTERN.test(existing)) return existing
+
+  const learnerKey = generateLearnerKey()
+  try {
+    globalThis.localStorage.setItem(STORAGE_KEY, learnerKey)
+  } catch {
+    // Storage can be unavailable in privacy modes; retain this key in provider state.
+  }
   return learnerKey
 }
 
