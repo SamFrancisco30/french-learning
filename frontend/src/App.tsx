@@ -3,25 +3,17 @@ import { api } from './api'
 import { ListeningPage } from './pages/ListeningPage'
 import { ReadingPage } from './pages/ReadingPage'
 import { SkillStatusPage } from './pages/SkillStatusPage'
+import { useIdentity } from './identity/IdentityContext'
 import { useHashRoute } from './router'
 import { SKILLS, skillFromPath, skillTitle } from './skills'
 import type { Language } from './types'
 
-// Anonymous, device-local identity. Replace with real auth when accounts land.
-function learnerKey(): string {
-  const existing = localStorage.getItem('learner_key')
-  if (existing) return existing
-  const key = `learner_${Math.random().toString(36).slice(2, 10)}`
-  localStorage.setItem('learner_key', key)
-  return key
-}
-
 export default function App() {
+  const { learnerKey } = useIdentity()
   const { segments, navigate } = useHashRoute()
   const mastheadRef = useRef<HTMLElement | null>(null)
   const [languages, setLanguages] = useState<Language[]>([])
   const [language, setLanguage] = useState('fr')
-  const [key] = useState(learnerKey)
 
   useEffect(() => {
     api.languages().then(setLanguages).catch(() => undefined)
@@ -106,11 +98,13 @@ export default function App() {
           segments={segments}
           navigate={navigate}
           language={language}
-          learnerKey={key}
+          learnerKey={learnerKey}
         />
       )}
 
-      {skill.key === 'reading' && <ReadingPage language={language} learnerKey={key} />}
+      {skill.key === 'reading' && (
+        <ReadingPage language={language} learnerKey={learnerKey} />
+      )}
 
       {(skill.key === 'writing' || skill.key === 'speaking' || skill.key === 'dictation') && (
         <SkillStatusPage skill={skill} onGoListening={() => navigate('/listening')} />

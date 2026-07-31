@@ -26,6 +26,7 @@ backend/data/
 node_modules/
 dist/
 .vite/
+coverage/
 *.tsbuildinfo
 
 # --- db ---
@@ -41,3 +42,4 @@ Thumbs.db
 
 # --- isolated implementation worktrees ---
 .worktrees/
+.tmp/
