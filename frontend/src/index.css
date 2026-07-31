@@ -939,11 +939,13 @@ kbd {
   position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
   /* Chunky rather than hairline: this is the control the learner reaches for most, and a thin
      rail made the dither read as noise instead of as a ramp. */
-  /* 20px, and NO border. 20 is what three rows of blocks occupy exactly: 3 blocks of 6px with two
-     1px seams between them, 3*7 - 1. Bigger blocks around the same 1px seam is what makes them read
-     as packed together, and the height has to follow the pitch or a stripe is left over.
-     
-     The border had to go. The canvas fills the PADDING box, so a 1px border left a pale --border
+  /* The height here is only a pre-paint placeholder: SpeedSparkle overwrites it on its first measure
+     with exactly what six flush rows of blocks come to at this display's density — 20.5px at 2x,
+     17px at 1x. It has to work that way round, because six rows plus a crisp seam have no solution
+     in whole css pixels at 20px, and sizing the bar to the grid is what keeps the fit flush with no
+     leftover stripe at the bottom edge. Kept near the final value so there is no visible reflow.
+
+     NO border, either. The canvas fills the PADDING box, so a 1px border left a pale --border
      line above the top row and below the bottom one — invisible at 1x and unmistakable zoomed in,
      which is the "tiny space between the topmost bar and the slider boundary". Without it the
      padding box is the border box and the tile grid itself is the bar's edge. The pill shape comes

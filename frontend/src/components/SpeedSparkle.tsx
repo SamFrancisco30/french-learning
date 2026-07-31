@@ -32,25 +32,41 @@ const PALETTE_FROM = [58, 110, 165] // --accent #3a6ea5
 const PALETTE_TO = [124, 154, 189]
 const STEPS = 6
 /**
- * Skews the pick toward index 0. `Math.random() ** BLUE_BIAS` compresses the distribution toward 0,
- * and the exponent controls how hard: at 1.8 the ramp ran 37/18/14/12/11/9%, at 2.6 it runs
- * roughly 50/15/11/9/8/7 — half the sparkles are the strongest blue and the palest is rare.
+ * How often each step spawns, as a geometric ladder: each step is this fraction as likely as the one
+ * before it. 0.62 gives roughly 40 / 25 / 15 / 10 / 6 / 4 percent — strong blue the most common,
+ * every lighter step rarer than the last, the palest rarest of all.
+ *
+ * Explicit weights, rather than the `Math.random() ** exponent` trick this used to use. That skewed
+ * toward index 0 well enough (50/15/11/9/8/7) but the tail came out nearly flat — 7, 8, 9 and 11
+ * percent are the same thing to the eye, so the ramp read as "lots of blue, then a jumble" instead
+ * of as a ladder. A cumulative table costs one array and says exactly what the distribution is.
  */
-const BLUE_BIAS = 2.6
+const RAMP_FALLOFF = 0.62
 
 /**
- * Block and pitch. The seam is the difference, and it stays at 1px because that is the thinnest line
- * that renders crisply at dpr 1 — going below it means half-pixel geometry and a blurred lattice.
+ * ROWS is the fixed quantity now and the pitch is derived from it, which is the only way to get six
+ * rows into a bar this short.
  *
- * So making the blocks "stick together" is a matter of growing them AROUND that fixed 1px, not of
- * shrinking the gap: at 4/5 the seam was a fifth of the pitch, at 6/7 it is a seventh. The track
- * height follows, since a flush fit needs h = rows * PITCH - 1, and 7 admits exactly one sensible
- * height in range — 3 rows at 20px.
+ * In whole css pixels it is impossible. A flush fit needs `ROWS * pitch - seam = height`, and with a
+ * seam of at least 1 nothing integer solves 6 * pitch - seam = 20; the nearest answers are a 17px
+ * bar (2px blocks, the seam a third of the pitch) or a 23px bar — one throws away the tightness, the
+ * other grows the control, and neither was what was asked for.
+ *
+ * The way out is to stop working in css pixels. The seam only ever had to be one DEVICE pixel — that
+ * is what "the thinnest line that renders crisply" actually means — so the grid is computed and drawn
+ * entirely in device space with integer coordinates, and the bar is then sized to whatever six flush
+ * rows need. On a 2x display that is a 7-device pitch: 3px blocks with a 0.5px seam, still a seventh
+ * of the pitch, in a 20.5px bar. Half a pixel taller than the three-row version, for twice the rows.
+ *
+ * The trade is that the geometry varies with display density — 2px blocks at 1x, 3px at 2x — which no
+ * single viewer can ever see, and each is exactly crisp on its own screen.
  */
-const CELL = 6
-const PITCH = 7
-// Speeds must stay under PITCH * 60 = 420 px/s. Above that a block advances more than one cell per
-// frame and the quantised hop turns into skipping, which reads as flicker rather than movement.
+const ROWS = 6
+/** The height to aim for. The real height is whatever six flush rows come to at this density. */
+const TARGET_H = 20
+const SEAM_DEV = 1
+/** Floor on the pitch, so blocks stay visible on a hypothetical very low-density display. */
+const MIN_PITCH_DEV = 3
 
 /** Tiles are a flat grey. The gradient belongs to the GRID LINES, not to the blocks. */
 const BLOCK = '#cdd5dd' // --border-strong
@@ -74,18 +90,33 @@ const SEAM_OVERSHOOT = 0.12
 // Deliberately dense, past one sparkle per cell — the overlap reads as a denser blue rather than a
 // lost sparkle.
 //
-// The rate is tied to BOTH the speed and the cell size, and both have moved. Steady-state population
-// is rate times lifetime, and lifetime is distance over speed, so speeding the blocks up thins the
-// field unless the rate rises with it: mean speed 38 -> 82 px/s took the rate 46 -> 100. Then the
-// bigger 6/7 grid halved the cell count, 168 -> 87, which doubles coverage at the same rate — so the
-// rate comes back down to 52 to land on the same ~160% it had before.
-const SPAWN_PER_SEC = 52
-const SPEED_MIN = 52 // css px/sec
+// The rate is tied to BOTH the speed and the cell size, and both have moved repeatedly. Steady-state
+// population is rate times lifetime, and lifetime is distance over speed, so speeding the blocks up
+// thins the field unless the rate rises with it: mean speed 38 -> 82 px/s took the rate 46 -> 100.
+// Then the bigger 6/7 grid halved the cell count, 168 -> 87, doubling coverage at the same rate, and
+// the rate came back down to 52.
+//
+// Six rows quadrupled the cells again, 87 -> 354, so at 52 the field thinned to 9% lit: a grey bar
+// with the occasional blue fleck. 210 puts it back to the 36% measured before. Not a guess — this is
+// simulated to steady state at the shipped constants, with the knob at its sparsest setting.
+const SPAWN_PER_SEC = 210
+// Css px/sec, so the motion looks the same on every display. The ceiling is one cell per frame —
+// a 3.5px pitch at 60fps is 210 css px/s — above which the quantised hop skips cells and reads as
+// flicker rather than movement.
+const SPEED_MIN = 52
 const SPEED_MAX = 112
 /** How far either side of the knob a sparkle may choose to die, as a fraction of the track. */
 const VICINITY = 0.2
 const FADE_IN = 10
 const FADE_OUT = 14
+
+/** Cumulative weights for RAMP_FALLOFF, so a pick is one random number and a scan of six. */
+function rampCdf(): number[] {
+  const weights = Array.from({ length: STEPS }, (_, i) => RAMP_FALLOFF ** i)
+  const total = weights.reduce((a, b) => a + b, 0)
+  let run = 0
+  return weights.map((wt) => (run += wt / total))
+}
 
 function palette(): string[] {
   return Array.from({ length: STEPS }, (_, i) => {
@@ -96,10 +127,10 @@ function palette(): string[] {
 }
 
 interface Particle {
-  /** Continuous position; quantised to PITCH only when drawn. */
+  /** Continuous position in CSS px. The physics stays in css space; only drawing is device space. */
   x: number
-  /** Row origin, always a multiple of PITCH. */
-  y: number
+  /** Row INDEX, not a pixel offset — the pixel geometry is derived per display. */
+  row: number
   vx: number
   colour: string
   dieAt: number
@@ -121,13 +152,19 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
     if (!ctx) return
 
     const colours = palette()
+    const cdf = rampCdf()
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     let particles: Particle[] = []
     let raf = 0
     let last = 0
     let spawnDebt = 0
     let cols = 0
-    let rows = 0
+    // Device-pixel geometry, derived in resize() from the display density. Always integers.
+    let pitchDev = 0
+    let cellDev = 0
+    let dpr = 1
+    // Css-pixel mirror of the cell, for the physics.
+    let cell = 0
     let w = 0
     let h = 0
 
@@ -141,68 +178,93 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
      * cost of up to one unpainted pixel at the right edge, which the rounded end hides.
      */
     const resize = () => {
-      const dpr = window.devicePixelRatio || 1
-      // Measure the PARENT, never the canvas itself. Now that the element's css size is pinned in
-      // JS it has no size of its own to measure — an unsized canvas reports its intrinsic 300x150
-      // default, so measuring itself made it lock to 300x150 forever, and there is no width at
-      // which that is right.
+      dpr = window.devicePixelRatio || 1
+      // Derive the pitch from the ROW COUNT and the density, in device pixels. Six rows is the
+      // requirement; the pitch is whatever satisfies it in about TARGET_H, and the seam is one device
+      // pixel because that is the thinnest crisp line — half a css pixel at 2x, which is how six rows
+      // fit where three used to without the seam growing as a fraction of the pitch.
+      pitchDev = Math.max(MIN_PITCH_DEV, Math.round((TARGET_H * dpr) / ROWS))
+      cellDev = pitchDev - SEAM_DEV
+      cell = cellDev / dpr
+      // ROWS blocks with ROWS-1 seams between them occupy exactly this, and the bar is sized to it
+      // rather than the other way round — which is what makes the fit flush at any density, with no
+      // leftover stripe at the bottom edge.
+      const gridDev = ROWS * pitchDev - SEAM_DEV
+
+      // Measure the PARENT, never the canvas itself. Now that the element's css size is pinned in JS
+      // it has no size of its own to measure — an unsized canvas reports its intrinsic 300x150
+      // default, so measuring itself made it lock to 300x150 forever, and there is no width at which
+      // that is right.
       //
-      // clientWidth/clientHeight, NOT getBoundingClientRect: the rect is the border box, but the
-      // canvas is positioned at the PADDING box, so measuring the rect made the canvas 2px too tall
-      // and shifted it a pixel down — which is where the grey strip above the tiles came from.
+      // clientWidth, NOT getBoundingClientRect: the rect is the border box, but the canvas is
+      // positioned at the PADDING box, so measuring the rect made the canvas 2px too tall and shifted
+      // it a pixel down — which is where the grey strip above the tiles came from.
       const host = canvas.parentElement
-      w = Math.max(PITCH, host ? host.clientWidth : Math.floor(canvas.getBoundingClientRect().width))
-      h = Math.max(PITCH, host ? host.clientHeight : Math.floor(canvas.getBoundingClientRect().height))
-      // Count whole blocks that FIT, rather than dividing the space up. n blocks with n-1 seams
-      // between them occupy n*PITCH - 1, so dividing by PITCH always leaves a stripe over — the
-      // remainder being the margin at the bottom edge.
-      cols = Math.max(1, Math.floor((w - CELL) / PITCH) + 1)
-      rows = Math.max(1, Math.floor((h - CELL) / PITCH) + 1)
-      canvas.width = Math.round(w * dpr)
-      canvas.height = Math.round(h * dpr)
+      w = Math.max(4, host ? host.clientWidth : Math.floor(canvas.getBoundingClientRect().width))
+      h = gridDev / dpr
+      // The track takes its height FROM the grid. Writing to the element being observed is safe
+      // because the value converges on the first pass: the notification that write triggers computes
+      // the same height, sets nothing new, and the observer goes quiet.
+      if (host && Math.abs(host.clientHeight - h) > 0.01) host.style.height = `${h}px`
+
+      const wDev = Math.round(w * dpr)
+      // Count whole blocks that FIT, rather than dividing the space up — dividing always leaves a
+      // partial stripe over at the far edge.
+      cols = Math.max(1, Math.floor((wDev - cellDev) / pitchDev) + 1)
+      canvas.width = wDev
+      canvas.height = gridDev
       canvas.style.width = `${w}px`
       canvas.style.height = `${h}px`
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      // Paint at once. The first draw used to happen inside the frame loop, which meant the track
-      // was blank until rAF fired — and completely blank wherever rAF never fires, such as a
-      // background tab.
+      // Identity transform: every drawing coordinate below is an integer number of device pixels, so
+      // nothing lands on a fraction and nothing gets resampled.
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      // Paint at once. The first draw used to happen inside the frame loop, which meant the track was
+      // blank until rAF fired — and blank indefinitely wherever rAF never fires, such as a background
+      // tab.
       draw()
     }
     // Observe the parent: the canvas's own box is now pinned, so it would never report a change.
+    /** Weighted step index: strong blue most often, each lighter step rarer, the palest rarest. */
+    const pick = (): number => {
+      const r = Math.random()
+      for (let i = 0; i < cdf.length; i++) if (r < cdf[i]) return i
+      return cdf.length - 1
+    }
+
     const spawn = (): Particle => {
       const knob = (pctRef.current / 100) * w
       return {
-        x: -CELL,
-        y: ((Math.random() * rows) | 0) * PITCH,
+        x: -cell,
+        row: (Math.random() * ROWS) | 0,
         vx: SPEED_MIN + Math.random() * (SPEED_MAX - SPEED_MIN),
-        colour: colours[Math.min(STEPS - 1, (Math.random() ** BLUE_BIAS * STEPS) | 0)],
-        dieAt: Math.max(CELL * 2, knob + (Math.random() * 2 - 1) * VICINITY * w),
+        colour: colours[pick()],
+        dieAt: Math.max(cell * 2, knob + (Math.random() * 2 - 1) * VICINITY * w),
       }
     }
 
     const draw = () => {
-      ctx.clearRect(0, 0, w, h)
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
 
       // 1. THE GRID LINES. The gradient goes down first across the whole canvas; the blocks then
       //    cover it, so the only thing left visible is the 1px lattice between them. Blue at the
       //    left edge, faded to nothing a little past the knob.
       const knob = (pctRef.current / 100) * w
-      const fadeEnd = Math.max(PITCH, knob + SEAM_OVERSHOOT * w)
+      const fadeEnd = Math.max(pitchDev, (knob + SEAM_OVERSHOOT * w) * dpr)
       const seam = ctx.createLinearGradient(0, 0, fadeEnd, 0)
       seam.addColorStop(0, SEAM_FROM)
       seam.addColorStop(1, SEAM_TO)
       ctx.fillStyle = seam
-      ctx.fillRect(0, 0, w, h)
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
 
       // 2. The blocks, flat grey, masking everything but the separators.
       ctx.fillStyle = BLOCK
       for (let c = 0; c < cols; c++) {
-        for (let r = 0; r < rows; r++) ctx.fillRect(c * PITCH, r * PITCH, CELL, CELL)
+        for (let r = 0; r < ROWS; r++) ctx.fillRect(c * pitchDev, r * pitchDev, cellDev, cellDev)
       }
 
       // Sparkles REPLACE whole blocks — same grid, same size, same origin, by construction.
       for (const p of particles) {
-        const col = Math.round(p.x / PITCH)
+        const col = Math.round((p.x * dpr) / pitchDev)
         if (col < 0 || col >= cols) continue
         let alpha = 1
         if (p.x < FADE_IN) alpha = Math.max(0, p.x / FADE_IN)
@@ -211,7 +273,7 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
         if (alpha <= 0) continue
         ctx.globalAlpha = alpha
         ctx.fillStyle = p.colour
-        ctx.fillRect(col * PITCH, p.y, CELL, CELL)
+        ctx.fillRect(col * pitchDev, p.row * pitchDev, cellDev, cellDev)
       }
       ctx.globalAlpha = 1
     }
@@ -222,7 +284,7 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
 
     if (reduced) {
       // No motion: one static field, so the track still reads as blue thinning to the right.
-      for (let i = 0; i < cols * rows; i++) {
+      for (let i = 0; i < cols * ROWS; i++) {
         const p = spawn()
         p.x = Math.random() * Math.max(1, p.dieAt)
         particles.push(p)
@@ -242,7 +304,7 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
         spawnDebt -= 1
       }
       for (const p of particles) p.x += p.vx * dt * rush
-      particles = particles.filter((p) => p.x < p.dieAt && p.x < w + CELL)
+      particles = particles.filter((p) => p.x < p.dieAt && p.x < w + cell)
 
       draw()
       raf = requestAnimationFrame(frame)
