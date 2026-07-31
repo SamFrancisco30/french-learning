@@ -42,20 +42,26 @@ const PITCH = 5 // block plus its 1px seam
 // Speeds must stay under PITCH * 60 = 300 px/s. Above that a block advances more than one cell per
 // frame and the quantised hop turns into skipping, which reads as flicker rather than movement.
 
-/** The grid itself is a gradient: blue at the left, fading to the plain tile grey by the knob and
- *  staying there beyond it. So the base carries the same left-to-right reading as the sparkles, and
- *  moving the knob moves where the tint runs out — the whole control describes its own setting.
+/** The tiles are a gradient in their own right: FULL blue at the very left edge, fading to the plain
+ *  tile grey a little past the knob. So the base carries the same left-to-right reading as the
+ *  sparkles, and moving the knob moves where the colour runs out — the whole control ends up
+ *  describing its own setting rather than only the animated layer doing it.
  *
- *  Both ends stay LIGHTER than the palest sparkle (124,154,189). That is the constraint that makes
- *  the animation still visible: tint the base as far as the sparkles and the moving part disappears
- *  into the static part.
+ *  One consequence worth naming rather than hiding: at the far left the base is the same blue the
+ *  sparkles are, so sparkles there blend into it and only separate out as the base lightens. That is
+ *  unavoidable with a blue base and blue sparkles, and it reads well — the left is a solid mass of
+ *  colour and individual blocks emerge from it — but it does mean the animation is least visible in
+ *  the first few columns.
  *
  *  The gaps are left transparent so the track's own pale gradient shows through as the seams —
  *  painting them a dark colour gave the grid a black cast, which was not wanted. */
-const BASE_FROM = [156, 181, 208] // clearly blue at the left edge
-const BASE_TO = [205, 213, 221] //   --border-strong, from the knob onward
+const BASE_FROM = [58, 110, 165] // --accent, at the very left edge
+const BASE_TO = [205, 213, 221] //  --border-strong, once the fade is done
 /** Quantised so the per-column colour is a lookup rather than a string built every frame. */
-const BASE_STEPS = 40
+const BASE_STEPS = 48
+/** The fade ends this far past the knob, as a fraction of the track. Ending exactly AT the knob put
+ *  a hard stop under it; carrying on a little lets the colour die away behind the thumb instead. */
+const BASE_OVERSHOOT = 0.12
 
 // Deliberately dense. Past roughly 40/sec the field exceeds one sparkle per cell at Normal, so some
 // get overwritten — that is a denser blue, not a lost sparkle, and density is the point here.
@@ -180,11 +186,12 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
       // what makes the seams read as light.
       ctx.clearRect(0, 0, w, h)
 
-      // The base grid, tinted per column: full blue at the left, reaching the plain grey at the
-      // knob. One fillStyle change per column, ~42 of them, which is nothing.
-      const knob = Math.max(PITCH, (pctRef.current / 100) * w)
+      // The base grid, tinted per column: full blue at the left, reaching the plain grey a little
+      // past the knob. One fillStyle change per column, ~42 of them, which is nothing.
+      const knob = (pctRef.current / 100) * w
+      const fadeEnd = Math.max(PITCH, knob + BASE_OVERSHOOT * w)
       for (let c = 0; c < cols; c++) {
-        const t = Math.min(1, (c * PITCH) / knob)
+        const t = Math.min(1, (c * PITCH) / fadeEnd)
         ctx.fillStyle = base[Math.min(BASE_STEPS - 1, (t * BASE_STEPS) | 0)]
         for (let r = 0; r < rows; r++) ctx.fillRect(c * PITCH, r * PITCH, CELL, CELL)
       }
