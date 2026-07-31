@@ -1848,6 +1848,77 @@ def test_recognized_race_retry_is_bounded_and_reraises_current_error(
     assert api_db.scalar(text("SELECT 1")) == 1
 
 
+def test_final_recognized_race_reselects_and_fills_present_winner(
+    api_db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = importlib.import_module("app.vocab.service")
+    from app.schemas import VocabSaveIn
+
+    errors = [
+        IntegrityError(
+            "INSERT first",
+            {},
+            sqlite3.IntegrityError(
+                "UNIQUE constraint failed: vocab_items.learner_key, "
+                "vocab_items.language, vocab_items.normalized_headword"
+            ),
+        ),
+        IntegrityError(
+            "INSERT second",
+            {},
+            sqlite3.IntegrityError(
+                "UNIQUE constraint failed: vocab_items.learner_key, "
+                "vocab_items.language, vocab_items.normalized_headword"
+            ),
+        ),
+    ]
+    original_flush = api_db.flush
+    original_commit = api_db.commit
+    insert_attempts = 0
+    creating_winner = False
+    winner: VocabItem | None = None
+
+    def _race_with_final_winner(*args: Any, **kwargs: Any) -> None:
+        nonlocal insert_attempts, creating_winner, winner
+        if creating_winner or not api_db.new:
+            original_flush(*args, **kwargs)
+            return
+        error = errors[insert_attempts]
+        insert_attempts += 1
+        if insert_attempts == 2:
+            api_db.rollback()
+            creating_winner = True
+            winner = _add_item(
+                api_db,
+                learner_key="learner_alpha",
+                headword="winner display",
+                normalized_headword="mot",
+                gloss=None,
+            )
+            original_commit()
+            creating_winner = False
+        raise error
+
+    monkeypatch.setattr(api_db, "flush", _race_with_final_winner)
+    result = service.save_vocab(
+        api_db,
+        identity=LearnerIdentity("learner_alpha"),
+        payload=VocabSaveIn(
+            language="fr",
+            headword="MOT",
+            gloss_en="meaning",
+        ),
+    )
+
+    assert insert_attempts == 2
+    assert winner is not None
+    assert result.id == winner.id
+    assert result.headword == "winner display"
+    assert result.gloss_en == "meaning"
+    assert api_db.scalar(text("SELECT count(*) FROM vocab_items")) == 1
+
+
 def test_fill_patch_delete_use_returning_and_exact_owner_predicates(
     api_db: Session,
 ) -> None:

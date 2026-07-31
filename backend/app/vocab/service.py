@@ -379,7 +379,7 @@ def save_vocab(
         except IntegrityError as error:
             recognized_race = _is_owner_unique_race(error, identity)
             _rollback_preserving_error(db)
-            if not recognized_race or attempt == 1:
+            if not recognized_race:
                 raise
             try:
                 _validate_source(db, payload.unit_id, language)
@@ -397,6 +397,8 @@ def save_vocab(
                     row=winner,
                     payload=payload,
                 )
+            if attempt == 1:
+                raise
         except SQLAlchemyError:
             _rollback_preserving_error(db)
             raise
