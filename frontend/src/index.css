@@ -933,13 +933,16 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
-.speed-rail { position: relative; height: 26px; margin-top: 5px; }
+.speed-rail { position: relative; height: 30px; margin-top: 5px; }
 
 .speed-track {
   position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
   /* Chunky rather than hairline: this is the control the learner reaches for most, and a thin
      rail made the dither read as noise instead of as a ramp. */
-  height: 18px; border-radius: 999px; overflow: hidden;
+  /* 22px border-box, which with the 1px border is a 20px padding box — exactly four 5px rows, so
+     the grid divides evenly and the canvas rows land on the css rows. box-sizing is border-box
+     globally, so this arithmetic has to account for the border. */
+  height: 22px; border-radius: 999px; overflow: hidden;
   background: linear-gradient(90deg,
     var(--accent-soft) 0%, var(--bg-sunken) 46%, var(--bg-sunken) 100%);
   border: 1px solid var(--border);
@@ -960,11 +963,15 @@ kbd {
 .speed-dither {
   position: absolute; inset: 0;
   background-color: var(--border-strong);
-  /* 3px blocks on a 4px pitch: the gutters are gaps between blocks, not missing blocks. Kept
-     semi-transparent so the track's own left-to-right gradient still reads through them. */
+  /* 4px blocks on a 5px pitch, and a fainter gutter than before: the gaps are a smaller share of
+     the pitch and read lighter, so the blocks sit tight against each other instead of floating in
+     white. Kept semi-transparent so the track's own gradient still shows through. */
+  /* 180deg, NOT 0deg, for the horizontal gutters. 0deg runs bottom-to-top, so the gradient phases
+     from the bottom edge while the canvas measures rows from the top — the two grids only agreed
+     when the height happened to divide evenly by the pitch. */
   background-image:
-    repeating-linear-gradient(90deg, transparent 0 3px, rgba(255, 255, 255, .9) 3px 4px),
-    repeating-linear-gradient(0deg, transparent 0 3px, rgba(255, 255, 255, .9) 3px 4px);
+    repeating-linear-gradient(90deg, transparent 0 4px, rgba(255, 255, 255, .55) 4px 5px),
+    repeating-linear-gradient(180deg, transparent 0 4px, rgba(255, 255, 255, .55) 4px 5px);
   opacity: .9;
 }
 

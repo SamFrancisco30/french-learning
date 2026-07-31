@@ -22,15 +22,26 @@ import { useEffect, useRef } from 'react'
  * the control's state instead of merely decorating it.
  */
 
-/** 6 steps from the accent blue to the tile grey, as the brief asks. */
-const PALETTE_FROM = [58, 110, 165] //  --accent      #3a6ea5
-const PALETTE_TO = [205, 213, 221] // --border-strong #cdd5dd
+/** 6 steps from the accent blue toward grey — but stopping SHORT of the base tile grey.
+ *
+ * Ending on the exact grey of the grid wasted a sixth of the palette: those sparkles were
+ * invisible, so the field read as more grey than blue. The last step is now a blue-grey that still
+ * reads as blue against #cdd5dd, and every one of the six is visible. */
+const PALETTE_FROM = [58, 110, 165] // --accent  #3a6ea5
+const PALETTE_TO = [156, 178, 200] //  blue-grey #9cb2c8, not the tile grey
 const STEPS = 6
 
-const CELL = 3 // one block
-const PITCH = 4 // block plus its 1px gutter — matches .speed-dither
+/** Bias the pick toward the blue end, so blue dominates rather than merely appearing. */
+const BLUE_BIAS = 1.8
 
-const SPAWN_PER_SEC = 26
+// Tighter grid: bigger blocks, same 1px gutter, so the gaps are a smaller share of the pitch
+// (20% rather than 25%) and the blocks read as packed together. Must match .speed-dither.
+const CELL = 4
+const PITCH = 5
+
+// Dense enough that blue dominates, short of saturation — at 44 the field went over 100%
+// coverage at Normal, so sparkles stacked on the same cells and the texture flattened out.
+const SPAWN_PER_SEC = 32
 const SPEED_MIN = 24 // css px/sec
 const SPEED_MAX = 52
 /** How far either side of the knob a sparkle may choose to die, as a fraction of the track. */
@@ -81,10 +92,15 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
     const resize = () => {
       const dpr = window.devicePixelRatio || 1
       const r = canvas.getBoundingClientRect()
-      w = Math.max(1, Math.round(r.width))
-      h = Math.max(1, Math.round(r.height))
-      canvas.width = Math.round(w * dpr)
-      canvas.height = Math.round(h * dpr)
+      // The coordinate space must be the element's FRACTIONAL css size, not a rounded version of
+      // it. Rounding 210.4px down to 210 and then letting css stretch the bitmap back to 210.4
+      // rescales everything by 1.002 — which is invisible on its own but slides the sparkles
+      // progressively out of step with the css block grid across the bar, up to half a block by
+      // the right-hand end. That was the "tiles do not match the sparkles" bug.
+      w = Math.max(1, r.width)
+      h = Math.max(1, r.height)
+      canvas.width = Math.max(1, Math.round(w * dpr))
+      canvas.height = Math.max(1, Math.round(h * dpr))
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
     resize()
@@ -105,7 +121,8 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
         x: -CELL,
         y: r.length ? r[(Math.random() * r.length) | 0] : 0,
         vx: SPEED_MIN + Math.random() * (SPEED_MAX - SPEED_MIN),
-        colour: colours[(Math.random() * colours.length) | 0],
+        // Math.random() ** BLUE_BIAS skews toward 0, i.e. toward the blue end of the ramp.
+        colour: colours[Math.min(STEPS - 1, (Math.random() ** BLUE_BIAS * STEPS) | 0)],
         // A random region to the left OR right of the knob's vicinity.
         dieAt: Math.max(CELL * 2, knob + (Math.random() * 2 - 1) * VICINITY * w),
       }
