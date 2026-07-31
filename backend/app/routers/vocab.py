@@ -21,14 +21,14 @@ router = APIRouter(prefix="/api", tags=["vocab"])
 def _validated_language(language: str) -> str:
     try:
         return get_language(language).code
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except ValueError:
+        raise HTTPException(status_code=400, detail="unsupported language") from None
 
 
 # Keep static collection routes ahead of any future /vocab/{item_id} route.
 @router.get("/vocab/saved-keys", response_model=VocabSavedKeysOut)
 def saved_keys(
-    language: str,
+    language: Annotated[str, Query(max_length=8)],
     identity: Annotated[LearnerIdentity, Depends(get_learner_identity)],
     db: Annotated[Session, Depends(get_db)],
 ) -> VocabSavedKeysOut:
@@ -43,7 +43,7 @@ def saved_keys(
 def list_vocab(
     identity: Annotated[LearnerIdentity, Depends(get_learner_identity)],
     db: Annotated[Session, Depends(get_db)],
-    language: str | None = None,
+    language: Annotated[str | None, Query(max_length=8)] = None,
     q: Annotated[str, Query(max_length=128)] = "",
     sort: Literal["recent", "alphabetical"] = "recent",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,

@@ -1,27 +1,35 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 import logging
 import os
 import re
 import uuid
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
+from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.dialects import postgresql, sqlite
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import InterfaceError, OperationalError
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from alembic import command
 from app.db import get_db
 from app.identity import LearnerIdentity
 from app.models import Base, Lesson, ListeningUnit, Source, VocabItem
 from app.routers import lexicon
+from app.vocab.cursor import InvalidCursor, encode_recent_cursor
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
 app = FastAPI()
 app.include_router(lexicon.router)
@@ -308,6 +316,47 @@ def test_list_rejects_cursor_bound_to_different_filter(
     assert response.json() == {"detail": "invalid cursor"}
 
 
+@pytest.mark.parametrize(
+    "cursor",
+    [
+        "not+base64!",
+        encode_recent_cursor(
+            language="ru",
+            q="",
+            last_created_at=datetime(2026, 7, 30, 12, tzinfo=UTC),
+            last_id=1,
+        ),
+    ],
+)
+def test_list_invalid_cursor_executes_zero_database_statements(
+    cursor: str, api_db: Session
+) -> None:
+    service = importlib.import_module("app.vocab.service")
+    statements = 0
+
+    def _count_statement(*_args: object, **_kwargs: object) -> None:
+        nonlocal statements
+        statements += 1
+
+    engine = api_db.get_bind()
+    event.listen(engine, "before_cursor_execute", _count_statement)
+    try:
+        with pytest.raises(InvalidCursor):
+            service.list_vocab(
+                api_db,
+                identity=LearnerIdentity("learner_alpha"),
+                language="fr",
+                q="",
+                sort="recent",
+                limit=50,
+                cursor=cursor,
+            )
+    finally:
+        event.remove(engine, "before_cursor_execute", _count_statement)
+
+    assert statements == 0
+
+
 def test_list_includes_source_and_preserves_item_after_source_deletion(
     client: TestClient, api_db: Session
 ) -> None:
@@ -389,8 +438,10 @@ def test_saved_keys_returns_only_owner_language_and_minimal_shape(
         ("/api/vocab", {"limit": 0}, 422),
         ("/api/vocab", {"limit": 101}, 422),
         ("/api/vocab", {"q": "x" * 129}, 422),
+        ("/api/vocab", {"language": "x" * 9}, 422),
         ("/api/vocab/saved-keys", {}, 422),
         ("/api/vocab/saved-keys", {"language": "xx"}, 400),
+        ("/api/vocab/saved-keys", {"language": "x" * 9}, 422),
     ],
 )
 def test_list_and_saved_keys_query_validation(
@@ -401,6 +452,19 @@ def test_list_and_saved_keys_query_validation(
     assert response.status_code == status
 
 
+@pytest.mark.parametrize("path", ["/api/vocab", "/api/vocab/saved-keys"])
+def test_list_unsupported_language_error_does_not_echo_input(
+    path: str, client: TestClient
+) -> None:
+    unsupported = "secretx"
+
+    response = client.get(path, params={"language": unsupported}, headers=_headers())
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "unsupported language"}
+    assert unsupported not in response.text
+
+
 def test_saved_keys_static_route_is_not_captured_as_item_id(client: TestClient) -> None:
     response = client.get(
         "/api/vocab/saved-keys", params={"language": "fr"}, headers=_headers()
@@ -409,14 +473,34 @@ def test_saved_keys_static_route_is_not_captured_as_item_id(client: TestClient) 
     assert response.status_code == 200
 
 
+@pytest.mark.parametrize(
+    "database_error",
+    [
+        OperationalError(
+            "postgresql://admin:fake-password@db.example.test/private",
+            {"password": "fake-password"},
+            Exception("postgresql://admin:fake-password@db.example.test/private"),
+        ),
+        InterfaceError(
+            "postgresql://admin:fake-password@db.example.test/private",
+            {"password": "fake-password"},
+            Exception("postgresql://admin:fake-password@db.example.test/private"),
+        ),
+        SQLAlchemyTimeoutError(
+            "pool timeout postgresql://admin:fake-password@db.example.test/private"
+        ),
+    ],
+    ids=["operational", "interface", "pool-timeout"],
+)
 def test_list_database_error_response_and_logs_never_leak_credentials(
+    database_error: Exception,
     client: TestClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     router = importlib.import_module("app.routers.vocab")
     secret_url = "postgresql://admin:fake-password@db.example.test/private"
 
     def _raise(*_args: object, **_kwargs: object) -> None:
-        raise OperationalError(secret_url, {"password": "fake-password"}, Exception(secret_url))
+        raise database_error
 
     monkeypatch.setattr(router, "list_vocab_service", _raise)
     caplog.set_level(logging.ERROR)
@@ -458,7 +542,8 @@ def test_list_search_statement_compiles_portably_without_database_lower(
 
 
 def _validate_schema_name(schema: str) -> None:
-    assert re.fullmatch(r"vocab_test_[0-9a-f]{32}", schema)
+    if re.fullmatch(r"vocab_test_[0-9a-f]{32}", schema) is None:
+        raise ValueError("unsafe PostgreSQL test schema name")
 
 
 @pytest.fixture(params=["sqlite", "postgresql"])
@@ -482,24 +567,33 @@ def search_db(request: pytest.FixtureRequest) -> Generator[Session, None, None]:
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
         _validate_schema_name(schema)
         connection.exec_driver_sql(f"CREATE SCHEMA {schema}")
-    connection = engine.connect().execution_options(
-        schema_translate_map={None: schema}
-    )
     try:
-        _validate_schema_name(schema)
-        connection.exec_driver_sql(f"SET search_path TO {schema}")
-        Base.metadata.create_all(connection)
-        session = Session(connection)
-        try:
-            yield session
-        finally:
-            session.close()
+        with engine.connect() as connection:
+            connection.exec_driver_sql(f"SET search_path TO {schema}")
+            alembic_config = Config(str(BACKEND_ROOT / "alembic.ini"))
+            alembic_config.attributes["connection"] = connection
+            command.upgrade(alembic_config, "head")
+            session = Session(connection)
+            try:
+                yield session
+            finally:
+                session.close()
     finally:
-        connection.close()
-        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as cleanup:
-            _validate_schema_name(schema)
-            cleanup.exec_driver_sql(f"DROP SCHEMA {schema} CASCADE")
-        engine.dispose()
+        try:
+            with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as cleanup:
+                _validate_schema_name(schema)
+                cleanup.exec_driver_sql(f"DROP SCHEMA {schema} CASCADE")
+        finally:
+            engine.dispose()
+
+
+def test_postgres_search_fixture_uses_alembic_not_model_metadata() -> None:
+    fixture_source = inspect.getsource(search_db)
+    postgres_branch = fixture_source.split('postgres_url =', maxsplit=1)[1]
+
+    assert "command.upgrade" in postgres_branch
+    assert "Base.metadata.create_all" not in postgres_branch
+    assert "assert re.fullmatch" not in inspect.getsource(_validate_schema_name)
 
 
 def test_list_search_integration_cross_dialect(search_db: Session) -> None:

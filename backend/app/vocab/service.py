@@ -133,6 +133,15 @@ def list_vocab(
     cursor: str | None,
 ) -> VocabListOut:
     normalized_q = normalize_vocab_v1(q)
+    position = None
+    if cursor is not None:
+        position = decode_cursor(
+            cursor,
+            sort=sort,
+            language=language,
+            q=normalized_q,
+        )
+
     clauses = _filter_clauses(
         identity=identity,
         language=language,
@@ -152,13 +161,7 @@ def list_vocab(
             VocabItem.normalized_headword.asc(), VocabItem.id.asc()
         )
 
-    if cursor is not None:
-        position = decode_cursor(
-            cursor,
-            sort=sort,
-            language=language,
-            q=normalized_q,
-        )
+    if position is not None:
         if sort == "recent":
             statement = statement.where(
                 or_(
