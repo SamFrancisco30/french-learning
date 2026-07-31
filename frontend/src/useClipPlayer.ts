@@ -28,7 +28,32 @@ import type { ClipVariant } from './types'
  * most of the extra time has to come from the gaps between words, which run to a second or more
  * each. That is dictation pace — a phrase, then room to think — rather than slowed speech.
  */
-export const SPEEDS = [0.5, 0.75, 0.9, 1] as const
+/**
+ * The four speeds, named the way a person would.
+ *
+ * Ordered slowest-first because that is the order they sit in on the slider — dragging right
+ * speeds up, which matches every media control a learner has ever used. "0.75×" tells you the
+ * arithmetic; "Slower" tells you what you are about to hear, and the arithmetic is still shown
+ * next to it for anyone who wants it.
+ */
+export const SPEED_LEVELS = [
+  {
+    speed: 0.5,
+    label: 'Slowest',
+    hint: 'Dictation pace — words still articulated, a second or more between them.',
+  },
+  { speed: 0.75, label: 'Slower', hint: 'Clearly slowed, with room to think between phrases.' },
+  { speed: 0.9, label: 'Slow', hint: 'A touch below natural — the artifact is inaudible here.' },
+  { speed: 1, label: 'Normal', hint: 'The recording exactly as it was spoken.' },
+] as const
+
+export const SPEEDS = SPEED_LEVELS.map((l) => l.speed)
+
+/** Index of the level for a speed, falling back to Normal for anything unrecognised. */
+export function speedIndex(speed: number): number {
+  const i = SPEED_LEVELS.findIndex((l) => Math.abs(l.speed - speed) < 0.001)
+  return i === -1 ? SPEED_LEVELS.length - 1 : i
+}
 
 /** Piecewise-linear lookup over `map`, reading column `from` and returning column `to`. */
 function interpolate(t: number, map: number[][], from: 0 | 1 = 0, to: 0 | 1 = 1): number {

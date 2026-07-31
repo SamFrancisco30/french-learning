@@ -911,3 +911,129 @@ kbd {
 }
 
 .dict-counts { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 4px; }
+
+/* ---------------- speed slider ----------------
+   Replaces four rate buttons with one four-stop slider. The look is a dithered ramp: a
+   checkerboard of 3px squares over an accent gradient, masked so the squares thin out to the
+   right. It reads as "more is being done to the audio at this end", which is literally true —
+   the left stop stretches every word and inserts seconds of pause, the right stop is the
+   untouched recording. */
+
+.speed { --pos: 100%; margin: 4px 0 2px; min-width: 210px; }
+
+.speed-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.speed-title {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em;
+  color: var(--text-faint); font-weight: 700;
+}
+.speed-now { display: flex; align-items: baseline; gap: 6px; }
+.speed-now b { font-size: 13.5px; font-weight: 650; color: var(--accent-ink); }
+.speed-x {
+  font-family: var(--mono); font-size: 11px; color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.speed-rail { position: relative; height: 26px; margin-top: 5px; }
+
+.speed-track {
+  position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+  /* Chunky rather than hairline: this is the control the learner reaches for most, and a thin
+     rail made the dither read as noise instead of as a ramp. */
+  height: 18px; border-radius: 999px; overflow: hidden;
+  background: linear-gradient(90deg,
+    var(--accent-border) 0%, var(--accent-soft) 42%, var(--bg-sunken) 74%, var(--bg-sunken) 100%);
+  border: 1px solid var(--border);
+}
+
+/* The dither. A repeating-conic checkerboard gives crisp 3px squares; the mask fades them out
+   toward the right so density carries the meaning rather than colour alone. */
+.speed-dither {
+  position: absolute; inset: 0;
+  background-image: repeating-conic-gradient(var(--accent) 0% 25%, transparent 0% 50%);
+  background-size: 6px 6px;
+  /* Near-full opacity with the ramp carried entirely by the mask. At .55 the squares blurred into
+     the background and the whole control read grey — the direction of the ramp has to be obvious
+     at a glance, since it is the only thing saying which way is slower. */
+  opacity: .9;
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, rgba(0,0,0,.85) 26%, rgba(0,0,0,.35) 55%, transparent 82%);
+  mask-image: linear-gradient(90deg, #000 0%, rgba(0,0,0,.85) 26%, rgba(0,0,0,.35) 55%, transparent 82%);
+  /* Drifts one tile per cycle, so the texture breathes without ever appearing to move. */
+  animation: speed-drift 9s linear infinite;
+}
+@keyframes speed-drift {
+  from { background-position: 0 0; }
+  to   { background-position: 6px 0; }
+}
+
+/* Brighter behind the thumb: the setting you are on should feel active. */
+.speed-track::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(
+    circle at var(--pos) 50%,
+    rgba(58, 110, 165, .30) 0,
+    rgba(58, 110, 165, .10) 26px,
+    transparent 46px
+  );
+  transition: background .18s ease;
+}
+
+
+/* The native input carries the interaction; only the thumb is visible. */
+.speed-input {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; background: none; -webkit-appearance: none; appearance: none;
+  cursor: grab;
+}
+.speed-input:active { cursor: grabbing; }
+.speed-input:disabled { cursor: not-allowed; }
+.speed-input::-webkit-slider-runnable-track { height: 100%; background: none; }
+.speed-input::-moz-range-track { height: 100%; background: none; }
+
+.speed-input::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 1px 3px rgba(24, 33, 46, .22), 0 0 0 0 var(--accent-soft);
+  transition: box-shadow .16s ease, transform .12s ease;
+}
+.speed-input::-moz-range-thumb {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 1px 3px rgba(24, 33, 46, .22);
+  transition: box-shadow .16s ease, transform .12s ease;
+}
+.speed-input:hover::-webkit-slider-thumb { box-shadow: 0 1px 3px rgba(24,33,46,.22), 0 0 0 5px var(--accent-soft); }
+.speed-input:hover::-moz-range-thumb { box-shadow: 0 1px 3px rgba(24,33,46,.22), 0 0 0 5px var(--accent-soft); }
+.speed-input:active::-webkit-slider-thumb { transform: scale(1.06); }
+.speed-input:active::-moz-range-thumb { transform: scale(1.06); }
+.speed-input:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.speed-input:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.speed-input:focus-visible { outline: none; }
+
+.speed-ends {
+  display: flex; justify-content: space-between;
+  font-size: 10.5px; color: var(--text-faint); margin-top: 1px;
+}
+.speed-hint { font-size: 11.5px; color: var(--text-dim); margin-top: 4px; max-width: 46ch; }
+
+.speed.is-busy .speed-track { opacity: .6; }
+/* While a slower variant is being generated the dither speeds up — the one place the animation
+   carries information rather than decoration. */
+.speed.is-busy .speed-dither { animation-duration: 1.1s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .speed-dither { animation: none; }
+  .speed-track::after, .speed-input::-webkit-slider-thumb { transition: none; }
+}
+
+.player-speed {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 18px; flex-wrap: wrap; margin-top: 11px;
+}
+.player-speed .speed { flex: 1 1 240px; max-width: 340px; }
+.player-speed .player-hint { margin-top: 0; }
+
+.dict-speed { max-width: 340px; margin: 2px 0 14px; }

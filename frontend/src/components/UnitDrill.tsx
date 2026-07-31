@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, lexicon } from '../api'
 import type {
   AttemptResult,
+  ClipVariant,
   Exercise,
   Transcript,
   UnitDetail,
   UnitExpressionSpan,
 } from '../types'
-import { SPEEDS, fmt, useClipPlayer } from '../useClipPlayer'
+import { fmt, useClipPlayer } from '../useClipPlayer'
 import {
   ExerciseBody,
   KIND_LABEL,
@@ -18,6 +19,26 @@ import {
 import { FollowProvider } from './Follow'
 import { FollowTranscript } from './FollowTranscript'
 import { LookupProvider, SelectableText } from './Lookup'
+import { SpeedSlider } from './SpeedSlider'
+
+/**
+ * What the reshaping actually did to this clip, for the line under the speed slider.
+ *
+ * Reports the mean gap rather than the total, because the same requested speed lands very
+ * differently depending on how much silence a clip already had — 0.3s between words on a measured
+ * talk, 2s on dense speech with few natural pauses.
+ *
+ * Returns undefined at 1x and while loading, so the slider falls back to describing the setting.
+ */
+function reshapeDetail(variant: ClipVariant | null, loading: boolean): string | undefined {
+  if (loading || !variant || variant.natural) return undefined
+  const words = `words at ${Math.round((variant.word_factor ?? 1) * 100)}%`
+  const added = variant.inserted_silence_s ?? 0
+  // At 0.9x the word stretch alone reaches the target, so nothing is inserted. Saying "0.00s added
+  // at each of 192 pauses" is technically true and reads as a bug.
+  if (added < 0.05 || !variant.pauses) return `${words} — no added pauses needed`
+  return `${words}, ${(added / variant.pauses).toFixed(2)}s added at each of ${variant.pauses} pauses`
+}
 
 interface Props {
   unitId: number
@@ -230,48 +251,29 @@ function Drill({
           <span className="time">
             {fmt(player.position)} / {fmt(player.duration)}
           </span>
-          <div className="rates">
-            {SPEEDS.map((r) => (
-              <button
-                key={r}
-                className={`rate-btn ${player.speed === r ? 'on' : ''}`}
-                onClick={() => player.setSpeed(r)}
-                disabled={player.loadingSpeed}
-                title={
-                  r === 1
-                    ? 'Original speed'
-                    : r <= 0.5
-                      ? '0.5× — dictation pace: words still articulated, a second or more between them'
-                      : `${r}× — words kept near normal, pauses lengthened`
-                }
-              >
-                {r}×
-              </button>
-            ))}
-          </div>
           <button className="replay" onClick={player.restart} title="Play from the start">
             ↺ restart
           </button>
         </div>
-        <div className="player-hint">
-          {unit.cefr} · {unit.wpm?.toFixed(0)} words/min · {player.replays} replays
-          {player.loadingSpeed && ' · preparing slower audio…'}
-          {!player.loadingSpeed && player.variant && !player.variant.natural && (
-            <>
-              {' · '}
-              {player.speed}×: words at {Math.round((player.variant.word_factor ?? 1) * 100)}%
-              {/* The mean gap, not just the total, because the same requested speed lands very
-                  differently depending on how much silence a clip already has: 0.3s between
-                  words on a measured talk, 2s on dense speech with few natural pauses. */}
-              {player.variant.pauses
-                ? `, ${(
-                    (player.variant.inserted_silence_s ?? 0) / player.variant.pauses
-                  ).toFixed(2)}s added at each of ${player.variant.pauses} pauses`
-                : `, +${(player.variant.inserted_silence_s ?? 0).toFixed(0)}s of added pauses`}
-            </>
-          )}
-          {!player.loadingSpeed && player.speed === 1 &&
-            ' · try 0.75× first, then confirm at full speed'}
+
+        {/* The slider gets its own row rather than a slot in the transport: it carries a label, two
+            end labels and a line of detail, and squeezing that between the scrubber and the restart
+            button made both cramped. */}
+        <div className="player-speed">
+          <SpeedSlider
+            speed={player.speed}
+            onChange={player.setSpeed}
+            disabled={player.loadingSpeed}
+            // Once a variant is loaded its own numbers replace the level's generic description:
+            // what this clip actually got is more use than what the setting means in general. The
+            // mean gap matters more than the total, because the same speed lands very differently
+            // depending on how much silence a clip already had — 0.3s between words on a measured
+            // talk, 2s on dense speech with few natural pauses.
+            detail={reshapeDetail(player.variant, player.loadingSpeed)}
+          />
+          <div className="player-hint">
+            {unit.cefr} · {unit.wpm?.toFixed(0)} words/min · {player.replays} replays
+          </div>
         </div>
         {player.src && <audio ref={player.ref} src={player.src} preload="auto" />}
       </div>

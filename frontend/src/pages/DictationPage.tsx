@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, dictation } from '../api'
-import { SPEEDS, fmt } from '../useClipPlayer'
+import { SpeedSlider } from '../components/SpeedSlider'
+import { fmt } from '../useClipPlayer'
 import type {
   AttemptResult,
   DictationAudio,
@@ -334,19 +335,6 @@ function DictationDrill({
         <button className="btn ghost" onClick={playItem} disabled={loadingAudio || !audio?.url}>
           ↺ replay
         </button>
-        <div className="rates">
-          {SPEEDS.map((r) => (
-            <button
-              key={r}
-              className={`rate-btn ${speed === r ? 'on' : ''}`}
-              onClick={() => setSpeed(r)}
-              disabled={loadingAudio}
-              title={r === 1 ? 'Original speed' : `${r}× — words kept clear, pauses lengthened`}
-            >
-              {r}×
-            </button>
-          ))}
-        </div>
         <button
           className={`rate-btn ${punctuation ? 'on' : ''}`}
           onClick={() => setPunctuation((p) => !p)}
@@ -373,6 +361,10 @@ function DictationDrill({
             onLoadedMetadata={(e) => setHeard(e.currentTarget.duration)}
           />
         )}
+      </div>
+
+      <div className="dict-speed">
+        <SpeedSlider speed={speed} onChange={setSpeed} disabled={loadingAudio} />
       </div>
 
       <textarea
