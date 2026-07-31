@@ -29,6 +29,7 @@ export function VocabularyPage({
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [sort, setSort] = useState<VocabularySort>('recent')
   const [items, setItems] = useState<VocabItem[]>([])
+  const [itemsCriteria, setItemsCriteria] = useState<string | null>(null)
   const [cursor, setCursor] = useState<CursorState | null>(null)
   const [hasLoaded, setHasLoaded] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -36,9 +37,19 @@ export function VocabularyPage({
   const [loadingMore, setLoadingMore] = useState(false)
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
   const requestId = useRef(0)
+  const mounted = useRef(false)
+  const lastAutoCriteria = useRef<string | null>(null)
   const activeCriteria = `${language}\u0000${debouncedQuery}\u0000${sort}`
+  const viewCriteria = `${language}\u0000${query.trim()}\u0000${sort}`
   const activeCriteriaRef = useRef(activeCriteria)
   activeCriteriaRef.current = activeCriteria
+
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 300)
@@ -60,21 +71,36 @@ export function VocabularyPage({
         sort,
         limit: 50,
       })
-      if (requestId.current !== id || activeCriteriaRef.current !== criteria) return
+      if (
+        !mounted.current ||
+        requestId.current !== id ||
+        activeCriteriaRef.current !== criteria
+      ) return
       setItems(response.items)
+      setItemsCriteria(criteria)
       setCursor(response.next_cursor ? { value: response.next_cursor, criteria } : null)
       setHasLoaded(true)
     } catch (reason) {
-      if (requestId.current !== id || activeCriteriaRef.current !== criteria) return
+      if (
+        !mounted.current ||
+        requestId.current !== id ||
+        activeCriteriaRef.current !== criteria
+      ) return
       setError(errorMessage(reason))
     } finally {
-      if (requestId.current === id && activeCriteriaRef.current === criteria) setLoading(false)
+      if (
+        mounted.current &&
+        requestId.current === id &&
+        activeCriteriaRef.current === criteria
+      ) setLoading(false)
     }
   }, [debouncedQuery, language, list, sort])
 
   useEffect(() => {
+    if (lastAutoCriteria.current === activeCriteria) return
+    lastAutoCriteria.current = activeCriteria
     void loadFirst()
-  }, [loadFirst])
+  }, [activeCriteria, loadFirst])
 
   const loadMore = async () => {
     if (!cursor || cursor.criteria !== activeCriteria || loadingMore) return
@@ -92,6 +118,7 @@ export function VocabularyPage({
         cursor: requestedCursor,
       })
       if (
+        !mounted.current ||
         requestId.current !== activeRequest ||
         activeCriteriaRef.current !== criteria
       ) return
@@ -101,12 +128,14 @@ export function VocabularyPage({
       )
     } catch (reason) {
       if (
+        !mounted.current ||
         requestId.current !== activeRequest ||
         activeCriteriaRef.current !== criteria
       ) return
       setLoadMoreError(errorMessage(reason))
     } finally {
       if (
+        mounted.current &&
         requestId.current === activeRequest &&
         activeCriteriaRef.current === criteria
       ) setLoadingMore(false)
@@ -115,15 +144,18 @@ export function VocabularyPage({
 
   const updateItem = async (id: number, input: VocabEditInput) => {
     const updated = await edit(id, input)
+    if (!mounted.current) return
     setItems((current) => current.map((item) => (item.id === id ? updated : item)))
   }
 
   const deleteItem = async (item: VocabItem) => {
     await remove(item)
+    if (!mounted.current) return
     setItems((current) => current.filter((candidate) => candidate.id !== item.id))
   }
 
   const hasItems = items.length > 0
+  const isStale = hasItems && itemsCriteria !== viewCriteria
 
   const changeQuery = (nextQuery: string) => {
     requestId.current += 1
@@ -171,6 +203,16 @@ export function VocabularyPage({
         </div>
       )}
 
+      {isStale && (
+        <div
+          className="wordbook-stale"
+          role="status"
+          aria-label="Showing previous results while this view refreshes"
+        >
+          Showing previous results while this view refreshes
+        </div>
+      )}
+
       {hasItems && (
         <div className="wordbook-list">
           {items.map((item) => (
@@ -180,6 +222,7 @@ export function VocabularyPage({
               navigate={navigate}
               onEdit={updateItem}
               onDelete={deleteItem}
+              mutationsDisabled={isStale}
             />
           ))}
         </div>

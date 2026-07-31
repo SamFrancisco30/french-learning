@@ -20,11 +20,13 @@ export function VocabularyRow({
   navigate,
   onEdit,
   onDelete,
+  mutationsDisabled,
 }: {
   item: VocabItem
   navigate: (to: string) => void
   onEdit: (id: number, input: VocabEditInput) => Promise<void>
   onDelete: (item: VocabItem) => Promise<void>
+  mutationsDisabled?: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [gloss, setGloss] = useState(item.gloss_en ?? '')
@@ -41,7 +43,7 @@ export function VocabularyRow({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if (saving) return
+    if (saving || mutationsDisabled) return
     setSaving(true)
     setError(null)
     try {
@@ -58,7 +60,11 @@ export function VocabularyRow({
   }
 
   const deleteItem = async () => {
-    if (deleting || !window.confirm(`Delete “${item.headword}” from My Words?`)) return
+    if (
+      deleting ||
+      mutationsDisabled ||
+      !window.confirm(`Delete “${item.headword}” from My Words?`)
+    ) return
     setDeleting(true)
     setError(null)
     try {
@@ -84,7 +90,7 @@ export function VocabularyRow({
               aria-label="Gloss"
               value={gloss}
               onChange={(event) => setGloss(event.target.value)}
-              disabled={saving}
+              disabled={saving || mutationsDisabled}
             />
           </label>
           <label>
@@ -94,7 +100,7 @@ export function VocabularyRow({
               value={example}
               onChange={(event) => setExample(event.target.value)}
               rows={2}
-              disabled={saving}
+              disabled={saving || mutationsDisabled}
             />
           </label>
           {error && (
@@ -103,7 +109,11 @@ export function VocabularyRow({
             </p>
           )}
           <div className="wordbook-row-actions">
-            <button className="wordbook-primary" type="submit" disabled={saving}>
+            <button
+              className="wordbook-primary"
+              type="submit"
+              disabled={saving || mutationsDisabled}
+            >
               {saving ? 'Saving' : 'Save changes'}
             </button>
             <button
@@ -155,6 +165,7 @@ export function VocabularyRow({
                 setError(null)
                 setEditing(true)
               }}
+              disabled={mutationsDisabled}
             >
               Edit
             </button>
@@ -163,7 +174,7 @@ export function VocabularyRow({
               type="button"
               aria-label={`Delete ${item.headword}`}
               onClick={deleteItem}
-              disabled={deleting}
+              disabled={deleting || mutationsDisabled}
             >
               {deleting ? 'Deleting' : 'Delete'}
             </button>

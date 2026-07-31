@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Profiler } from 'react'
+import { Profiler, StrictMode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import { IdentityProvider } from '../identity/IdentityContext'
@@ -105,9 +105,10 @@ describe('My Words route and navigation', () => {
     const utility = screen.getByRole('button', { name: 'My Words' })
     expect(utility).toHaveAttribute('aria-current', 'page')
     for (const skill of ['Listening', 'Dictation', 'Reading', 'Writing', 'Speaking']) {
-      expect(screen.getByRole('button', { name: new RegExp(`^${skill}`) })).not.toHaveAttribute(
-        'aria-current',
-      )
+      const tab = screen.getByRole('button', { name: new RegExp(`^${skill}`) })
+      expect(tab).not.toHaveAttribute('aria-current')
+      expect(tab.getAttribute('title')).toContain(':')
+      expect(tab.getAttribute('title')).not.toContain('—')
     }
   })
 
@@ -257,6 +258,11 @@ describe('VocabularyPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Load more' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('More unavailable')
     expect(screen.getByText('écouter')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Showing previous results while this view refreshes'),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit écouter' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Delete écouter' })).toBeEnabled()
 
     await userEvent.click(screen.getByRole('button', { name: 'Retry loading more' }))
     expect(await screen.findByText('parler')).toBeInTheDocument()
@@ -378,6 +384,39 @@ describe('VocabularyPage', () => {
     }
   })
 
+  it('marks retained rows stale as soon as the visible search changes', async () => {
+    vi.useFakeTimers()
+    try {
+      const search = deferred<VocabList>()
+      vocabMocks.list
+        .mockResolvedValueOnce(page([word()]))
+        .mockReturnValueOnce(search.promise)
+      renderPage()
+      await act(async () => Promise.resolve())
+      expect(screen.getByText('écouter')).toBeInTheDocument()
+
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'par' } })
+      expect(
+        screen.getByRole('status', {
+          name: 'Showing previous results while this view refreshes',
+        }),
+      ).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Edit écouter' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Delete écouter' })).toBeDisabled()
+
+      await act(async () => vi.advanceTimersByTimeAsync(300))
+      search.resolve(page([word({ id: 8, headword: 'parler', normalized_headword: 'parler' })]))
+      await act(async () => search.promise)
+      expect(screen.getByText('parler')).toBeInTheDocument()
+      expect(
+        screen.queryByText('Showing previous results while this view refreshes'),
+      ).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Edit parler' })).toBeEnabled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('ignores a slower stale search response', async () => {
     vi.useFakeTimers()
     try {
@@ -417,8 +456,74 @@ describe('VocabularyPage', () => {
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'alphabetical' } })
     expect(await screen.findByRole('alert')).toHaveTextContent('Refresh unavailable')
     expect(screen.getByText('écouter')).toBeInTheDocument()
+    expect(
+      screen.getByRole('status', {
+        name: 'Showing previous results while this view refreshes',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit écouter' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete écouter' })).toBeDisabled()
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByText('hear carefully')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Showing previous results while this view refreshes'),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit écouter' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Delete écouter' })).toBeEnabled()
+  })
+
+  it('labels retained rows stale after a language failure and restores actions after retry', async () => {
+    vocabMocks.list
+      .mockResolvedValueOnce(page([word()]))
+      .mockRejectedValueOnce(new Error('Russian words unavailable'))
+      .mockResolvedValueOnce(
+        page([
+          word({
+            id: 8,
+            language: 'ru',
+            headword: 'слушать',
+            normalized_headword: 'слушать',
+          }),
+        ]),
+      )
+    const view = renderPage('fr')
+    await screen.findByText('écouter')
+
+    view.rerender(<VocabularyPage language="ru" navigate={view.navigate} />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Russian words unavailable')
+    expect(screen.getByText('écouter')).toBeInTheDocument()
+    expect(
+      screen.getByRole('status', {
+        name: 'Showing previous results while this view refreshes',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit écouter' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete écouter' })).toBeDisabled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByText('слушать')).toBeInTheDocument()
+    expect(screen.queryByText('écouter')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Showing previous results while this view refreshes'),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit слушать' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Delete слушать' })).toBeEnabled()
+  })
+
+  it('automatically lists an exact criteria only once in Strict Mode', async () => {
+    const initial = deferred<VocabList>()
+    vocabMocks.list.mockReturnValue(initial.promise)
+
+    render(
+      <StrictMode>
+        <VocabularyPage language="fr" navigate={vi.fn()} />
+      </StrictMode>,
+    )
+    await act(async () => Promise.resolve())
+
+    expect(vocabMocks.list).toHaveBeenCalledOnce()
+    initial.resolve(page())
+    expect(await screen.findByText('No saved words yet')).toBeInTheDocument()
   })
 
   it('updates an edited row only after success and preserves its draft on failure', async () => {

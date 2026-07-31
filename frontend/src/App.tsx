@@ -93,10 +93,10 @@ export default function App() {
                 aria-current={!isVocabulary && s.key === skill.key ? 'page' : undefined}
                 title={
                   s.status === 'live'
-                    ? `${s.label} — ready`
+                    ? `${s.label}: ready`
                     : s.status === 'partial'
-                      ? `${s.label} — partly built`
-                      : `${s.label} — not built yet`
+                      ? `${s.label}: partly built`
+                      : `${s.label}: not built yet`
                 }
               >
                 <span className={`dot ${s.status}`} />
