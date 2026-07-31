@@ -1,11 +1,10 @@
-"""Smart-translation endpoints: selection lookup, unit expression spans, vocab saving."""
+"""Smart-translation endpoints: selection lookup and unit expression spans."""
 
 from __future__ import annotations
 
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -14,7 +13,7 @@ from ..languages import get_language
 from ..lexicon.practice import grade_practice
 from ..lexicon.resolver import expression_spans_for_unit, resolve_selection
 from ..lexicon.sentence import LLMError, analyze_sentence
-from ..models import ListeningUnit, VocabItem
+from ..models import ListeningUnit
 from ..schemas import (
     LookupIn,
     LookupOut,
@@ -24,8 +23,6 @@ from ..schemas import (
     SentenceIn,
     SentenceOut,
     UnitExpressionsOut,
-    VocabItemOut,
-    VocabSaveIn,
 )
 
 log = logging.getLogger(__name__)
@@ -152,44 +149,3 @@ def unit_expressions(unit_id: int, db: Session = Depends(get_db)) -> UnitExpress
     return UnitExpressionsOut(
         unit_id=unit_id, expressions=expression_spans_for_unit(db, unit_id)
     )
-
-
-@router.post("/vocab", response_model=VocabItemOut)
-def save_vocab(payload: VocabSaveIn, db: Session = Depends(get_db)) -> VocabItemOut:
-    """Add a word or expression to the learner's review queue.
-
-    Idempotent per (learner, language, headword): saving twice updates the gloss rather
-    than creating a duplicate or resetting review progress.
-    """
-    lang = get_language(payload.language)
-    headword = payload.headword.strip()
-
-    existing = db.scalar(
-        select(VocabItem).where(
-            VocabItem.learner_key == payload.learner_key,
-            VocabItem.language == lang.code,
-            VocabItem.headword == headword,
-        )
-    )
-    if existing:
-        if payload.gloss_en:
-            existing.gloss_en = payload.gloss_en
-        if payload.example:
-            existing.example = payload.example
-        db.commit()
-        db.refresh(existing)
-        return VocabItemOut.model_validate(existing)
-
-    item = VocabItem(
-        learner_key=payload.learner_key,
-        language=lang.code,
-        headword=headword,
-        gloss_en=payload.gloss_en,
-        example=payload.example,
-        zipf=round(lang.zipf(headword), 2),
-        unit_id=payload.unit_id,
-    )
-    db.add(item)
-    db.commit()
-    db.refresh(item)
-    return VocabItemOut.model_validate(item)
