@@ -15,17 +15,21 @@ _ANON_KEY = re.compile(r"^learner_[A-Za-z0-9-]{1,48}$")
 
 
 def get_learner_identity(
-    x_learner_key: Annotated[str | None, Header(alias="X-Learner-Key")] = None,
+    x_learner_key: Annotated[
+        list[str] | None,
+        Header(alias="X-Learner-Key"),
+    ] = None,
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
 ) -> LearnerIdentity:
     if (
         authorization is not None
         or x_learner_key is None
-        or _ANON_KEY.fullmatch(x_learner_key) is None
+        or len(x_learner_key) != 1
+        or _ANON_KEY.fullmatch(x_learner_key[0]) is None
     ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized",
         )
 
-    return LearnerIdentity(learner_key=x_learner_key)
+    return LearnerIdentity(learner_key=x_learner_key[0])

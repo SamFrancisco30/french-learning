@@ -55,6 +55,7 @@ def test_rejects_missing_overlong_malformed_or_unprefixed_keys(
     response = client.get("/identity", headers=headers)
 
     assert response.status_code == 401
+    assert response.json() == {"detail": "Unauthorized"}
     if learner_key is not None:
         assert learner_key not in response.text
 
@@ -74,6 +75,31 @@ def test_rejects_any_authorization_header_even_with_valid_anonymous_key(
     )
 
     assert response.status_code == 401
+    assert response.json() == {"detail": "Unauthorized"}
     if authorization:
         assert authorization not in response.text
     assert learner_key not in response.text
+
+
+@pytest.mark.parametrize(
+    "learner_keys",
+    [
+        ("learner_first", "learner_second"),
+        ("learner_valid", "malformed"),
+    ],
+)
+def test_rejects_duplicate_learner_key_headers(
+    learner_keys: tuple[str, str],
+) -> None:
+    response = client.get(
+        "/identity",
+        headers=[
+            ("X-Learner-Key", learner_keys[0]),
+            ("X-Learner-Key", learner_keys[1]),
+        ],
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Unauthorized"}
+    for learner_key in learner_keys:
+        assert learner_key not in response.text
