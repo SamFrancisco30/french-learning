@@ -78,21 +78,42 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 /* ---------------- shell + nav ---------------- */
 
-.shell { max-width: 940px; margin: 0 auto; padding: 0 20px 80px; }
+.shell { max-width: 940px; margin: 0 auto; padding: 0 16px 80px; }
+
+/* The listening index only. A grid of photographs earns width in a way a French passage does not,
+   and at 940px it was leaving 394px of empty page either side of it on a 1728px screen — most of
+   the window unused to show three tiles.
+
+   1240 is not a round number, it is the width at which four columns come out the same size as the
+   three used to be: 4 x 293 + 3 x 12 gaps + 32 padding. So the tile design is untouched and only
+   the count changes, which matters because the tile cannot be made narrower — below 268px the
+   blurb wraps to a third line, the footer grows 145px -> 192px and the photograph is crushed from
+   115px to 68px. Measured, not guessed; it is the same trap the card height was tuned around.
+
+   No media query is needed for the steps down. The grid is auto-fit over minmax(268px, 1fr), so
+   the column count falls out of the width available: four from 1140px of viewport, three from 860,
+   two from 580, one below that. */
+.shell.shell-wide { max-width: 1240px; }
 
 .masthead {
   position: sticky; top: 0; z-index: 30;
   background: linear-gradient(180deg, #fafbfc, #f4f6f8);
   border-bottom: 1px solid var(--border);
-  margin: 0 -20px 26px;
-  padding: 0 20px;
+  /* Bleeds to the shell's edges and re-pads itself, so the tinted band reaches the full width while
+     its contents stay in line with the page. Both numbers must equal the shell's padding — they are
+     the same measurement written twice, and if they drift the band stops meeting the page edge. */
+  margin: 0 -16px 26px;
+  padding: 0 16px;
   backdrop-filter: saturate(140%) blur(6px);
 }
 .masthead-inner {
-  max-width: 900px; margin: 0 auto;
+  /* The shell's content width, so the nav sits directly above the content it belongs to rather than
+     ending short of it. Follows shell-wide for the same reason. */
+  max-width: 908px; margin: 0 auto;
   display: flex; align-items: center; gap: 18px;
   flex-wrap: wrap; padding: 14px 0 0;
 }
+.shell.shell-wide .masthead-inner { max-width: 1208px; }
 .brand { display: flex; align-items: baseline; gap: 10px; }
 .brand h1 {
   font-size: 19px; margin: 0; letter-spacing: -0.015em; font-weight: 650;
