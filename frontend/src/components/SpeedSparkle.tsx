@@ -97,9 +97,14 @@ const SEAM_OVERSHOOT = 0.12
 // the rate came back down to 52.
 //
 // Six rows quadrupled the cells again, 87 -> 354, so at 52 the field thinned to 9% lit: a grey bar
-// with the occasional blue fleck. 210 puts it back to the 36% measured before. Not a guess — this is
+// with the occasional blue fleck. 210 put it back to the 36% measured before. Not a guess — this is
 // simulated to steady state at the shipped constants, with the knob at its sparsest setting.
-const SPAWN_PER_SEC = 210
+//
+// 255 is the same exercise once sparkles started expiring before the knob (see DIE_BAND_FROM). Their
+// runs are shorter now, and steady-state population is rate times lifetime, so the rate has to come
+// up to hold the density: it puts Normal at the 66% asked for, and the other three stops follow from
+// the same rate.
+const SPAWN_PER_SEC = 255
 // Css px/sec, so the motion looks the same on every display. The ceiling is one cell per frame —
 // a 3.5px pitch at 60fps is 210 css px/s — above which the quantised hop skips cells and reads as
 // flicker rather than movement.
@@ -109,6 +114,32 @@ const SPEED_MAX = 112
 const VICINITY = 0.2
 const FADE_IN = 10
 const FADE_OUT = 14
+
+/**
+ * Where sparkles give out: a band, as a fraction of the distance to the knob, so they expire in the
+ * last third of the approach and the run-up to the thumb goes quiet.
+ *
+ * A BAND, and uniform across it, which is the whole trick. The obvious way to clear the end is to
+ * skew the despawn point toward the near end, but that shortens every sparkle's run and drains the
+ * density everywhere — measured 39% at Normal, the profile sagging from the second fifth onward.
+ * Ending them in a band instead means every sparkle still crosses the early part of its run at full
+ * strength and only the approach thins.
+ *
+ * Being a fraction of the KNOB rather than of the track is what makes one rule serve all four
+ * settings: the clearing scales with the room available, so each stop reads the same way.
+ *
+ * DIE_THROUGH is why the far end is not bare. A clean cut reads as the texture hitting a wall rather
+ * than fading, so a few percent run the ordinary knob-vicinity course and keep a thin scatter
+ * arriving.
+ *
+ * DIE_MIN_REACH is for the bottom stop alone, where the knob sits ON the left edge and there is no
+ * "before" to clear into — the fraction would collapse to zero and blank the bar. It keeps the
+ * compact glow that setting has always had.
+ */
+const DIE_BAND_FROM = 0.55
+const DIE_BAND_TO = 0.85
+const DIE_THROUGH = 0.08
+const DIE_MIN_REACH = 0.12
 
 /** Cumulative weights for RAMP_FALLOFF, so a pick is one random number and a scan of six. */
 function rampCdf(): number[] {
@@ -231,6 +262,25 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
       return cdf.length - 1
     }
 
+    /**
+     * Where a sparkle gives out — short of the knob, so the lit region ends before the thumb rather
+     * than streaming through it.
+     *
+     * The old rule was the knob plus a random offset EITHER side, which meant half of them ran out
+     * past the thumb. At the top setting that was worst: the knob is at the far right, so every
+     * sparkle crossed the whole track, and the fullest the texture ever looked was the one setting
+     * where nothing is done to the audio at all. Now the density falls away as the thumb approaches,
+     * at every setting, which also pulls the four stops apart — they used to measure 7 / 31 / 57 / 61
+     * percent, so Slow and Normal were all but indistinguishable.
+     */
+    const dieAtFor = (knob: number): number => {
+      if (Math.random() < DIE_THROUGH) {
+        return knob + (Math.random() * 2 - 1) * VICINITY * w
+      }
+      const span = DIE_BAND_TO - DIE_BAND_FROM
+      return Math.max(knob * (DIE_BAND_FROM + span * Math.random()), DIE_MIN_REACH * w)
+    }
+
     const spawn = (): Particle => {
       const knob = (pctRef.current / 100) * w
       return {
@@ -238,7 +288,7 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
         row: (Math.random() * ROWS) | 0,
         vx: SPEED_MIN + Math.random() * (SPEED_MAX - SPEED_MIN),
         colour: colours[pick()],
-        dieAt: Math.max(cell * 2, knob + (Math.random() * 2 - 1) * VICINITY * w),
+        dieAt: Math.max(cell * 2, dieAtFor(knob)),
       }
     }
 
