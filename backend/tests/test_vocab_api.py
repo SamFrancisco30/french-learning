@@ -25,7 +25,7 @@ from sqlalchemy.pool import StaticPool
 
 from alembic import command
 from app.db import get_db
-from app.identity import LearnerIdentity
+from app.identity import LearnerIdentity, get_learner_identity
 from app.models import Base, Lesson, ListeningUnit, Source, VocabItem
 from app.routers import lexicon
 from app.vocab.cursor import InvalidCursor, encode_recent_cursor
@@ -1004,3 +1004,524 @@ def test_delete_is_permanent_scoped_and_indistinguishable(
     assert all("vocab_items.id" in sql for sql in statements)
     assert all("vocab_items.learner_key" in sql for sql in statements)
     assert all("vocab_items.user_id is null" in sql for sql in statements)
+
+
+@pytest.mark.parametrize(
+    ("headword", "normalized"),
+    [
+        ("X", "x"),
+        (" X ", "x"),
+        ("É" * 128, "é" * 128),
+    ],
+)
+def test_save_accepts_normalized_boundaries_and_raw_128(
+    headword: str, normalized: str, client: TestClient
+) -> None:
+    response = client.post(
+        "/api/vocab",
+        json={"language": "fr", "headword": headword},
+        headers=_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["normalized_headword"] == normalized
+    assert len(response.json()["normalized_headword"]) in {1, 128}
+
+
+@pytest.mark.parametrize("invalid_source", ["missing", "mismatch"])
+def test_repeat_save_validates_source_before_any_fill(
+    invalid_source: str, client: TestClient, api_db: Session
+) -> None:
+    existing = _add_item(
+        api_db,
+        learner_key="learner_alpha",
+        headword="mot",
+        gloss=None,
+        unit_id=None,
+    )
+    existing.example = None
+    invalid_unit_id = 999999
+    if invalid_source == "mismatch":
+        invalid_unit_id = _add_unit(api_db, language="ru").id
+    api_db.commit()
+    original_updated_at = existing.updated_at
+
+    response = client.post(
+        "/api/vocab",
+        json={
+            "language": "fr",
+            "headword": "MOT",
+            "gloss_en": "meaning",
+            "example": "example",
+            "unit_id": invalid_unit_id,
+        },
+        headers=_headers(),
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "invalid vocabulary input"}
+    api_db.refresh(existing)
+    assert existing.gloss_en is None
+    assert existing.normalized_gloss == ""
+    assert existing.example is None
+    assert existing.unit_id is None
+    assert existing.updated_at.replace(tzinfo=UTC) == original_updated_at
+
+
+def _assert_exact_vocab_output(
+    body: dict[str, Any],
+    *,
+    item: VocabItem,
+    source: dict[str, Any] | None,
+) -> None:
+    assert set(body) == {
+        "id",
+        "language",
+        "headword",
+        "normalized_headword",
+        "gloss_en",
+        "example",
+        "zipf",
+        "reps",
+        "due_at",
+        "created_at",
+        "updated_at",
+        "source",
+    }
+    assert body == {
+        "id": item.id,
+        "language": item.language,
+        "headword": item.headword,
+        "normalized_headword": item.normalized_headword,
+        "gloss_en": item.gloss_en,
+        "example": item.example,
+        "zipf": item.zipf,
+        "reps": item.reps,
+        "due_at": item.due_at.isoformat() if item.due_at else None,
+        "created_at": item.created_at.isoformat(),
+        "updated_at": item.updated_at.isoformat(),
+        "source": source,
+    }
+    datetime.fromisoformat(body["created_at"])
+    datetime.fromisoformat(body["updated_at"])
+
+
+def test_save_new_and_repeat_return_exact_full_output(
+    client: TestClient, api_db: Session
+) -> None:
+    unit = _add_unit(api_db)
+    api_db.commit()
+
+    created = client.post(
+        "/api/vocab",
+        json={"language": "fr", "headword": "  École  "},
+        headers=_headers(),
+    )
+    assert created.status_code == 200
+    item = api_db.get(VocabItem, created.json()["id"])
+    assert item is not None
+    _assert_exact_vocab_output(created.json(), item=item, source=None)
+    assert created.json()["reps"] == 0
+    assert created.json()["due_at"] is None
+
+    repeated = client.post(
+        "/api/vocab",
+        json={
+            "language": "fr",
+            "headword": "ÉCOLE",
+            "gloss_en": "school",
+            "example": "une école",
+            "unit_id": unit.id,
+        },
+        headers=_headers(),
+    )
+    assert repeated.status_code == 200
+    api_db.refresh(item)
+    _assert_exact_vocab_output(
+        repeated.json(),
+        item=item,
+        source={
+            "lesson_id": unit.lesson_id,
+            "lesson_title": "A lesson",
+            "unit_id": unit.id,
+            "unit_index": 3,
+        },
+    )
+
+
+class _FakePostgresDiagnostic:
+    def __init__(self, constraint_name: str) -> None:
+        self.constraint_name = constraint_name
+
+
+class _FakePostgresError:
+    def __init__(self, sqlstate: str, constraint_name: str) -> None:
+        self.sqlstate = sqlstate
+        self.diag = _FakePostgresDiagnostic(constraint_name)
+
+
+@pytest.mark.parametrize(
+    ("identity", "message"),
+    [
+        (
+            LearnerIdentity("learner_alpha"),
+            (
+                "UNIQUE constraint failed: vocab_items.learner_key, "
+                "vocab_items.language, vocab_items.normalized_headword"
+            ),
+        ),
+        (
+            LearnerIdentity(
+                "learner_alpha", "00000000-0000-0000-0000-000000000001"
+            ),
+            (
+                "UNIQUE constraint failed: vocab_items.user_id, "
+                "vocab_items.language, vocab_items.normalized_headword"
+            ),
+        ),
+    ],
+)
+def test_unique_race_classifier_accepts_exact_sqlite_owner_columns(
+    identity: LearnerIdentity, message: str
+) -> None:
+    service = importlib.import_module("app.vocab.service")
+    error = IntegrityError("INSERT", {}, sqlite3.IntegrityError(message))
+
+    assert service._is_owner_unique_race(error, identity)
+
+
+@pytest.mark.parametrize(
+    ("identity", "constraint_name"),
+    [
+        (LearnerIdentity("learner_alpha"), "uq_vocab_anon_word"),
+        (
+            LearnerIdentity(
+                "learner_alpha", "00000000-0000-0000-0000-000000000001"
+            ),
+            "uq_vocab_user_word",
+        ),
+    ],
+)
+def test_unique_race_classifier_accepts_exact_postgres_owner_constraint(
+    identity: LearnerIdentity, constraint_name: str
+) -> None:
+    service = importlib.import_module("app.vocab.service")
+    error = IntegrityError(
+        "INSERT",
+        {},
+        _FakePostgresError("23505", constraint_name),
+    )
+
+    assert service._is_owner_unique_race(error, identity)
+
+
+@pytest.mark.parametrize(
+    ("identity", "original"),
+    [
+        (
+            LearnerIdentity("learner_alpha"),
+            _FakePostgresError("23505", "uq_vocab_user_word"),
+        ),
+        (
+            LearnerIdentity("learner_alpha"),
+            _FakePostgresError("23503", "uq_vocab_anon_word"),
+        ),
+        (
+            LearnerIdentity("learner_alpha"),
+            sqlite3.IntegrityError(
+                "UNIQUE constraint failed: vocab_items.language, "
+                "vocab_items.learner_key, vocab_items.normalized_headword"
+            ),
+        ),
+        (
+            LearnerIdentity("learner_alpha"),
+            sqlite3.IntegrityError(
+                "UNIQUE constraint failed: vocab_items.learner_key, "
+                "vocab_items.language"
+            ),
+        ),
+        (
+            LearnerIdentity("learner_alpha"),
+            sqlite3.IntegrityError(
+                "UNIQUE constraint failed: vocab_items.learner_key, "
+                "vocab_items.language, vocab_items.normalized_headword_extra"
+            ),
+        ),
+        (
+            LearnerIdentity("learner_alpha"),
+            sqlite3.IntegrityError("FOREIGN KEY constraint failed"),
+        ),
+    ],
+)
+def test_unique_race_classifier_rejects_near_misses(
+    identity: LearnerIdentity, original: BaseException
+) -> None:
+    service = importlib.import_module("app.vocab.service")
+    error = IntegrityError("INSERT", {}, original)
+
+    assert not service._is_owner_unique_race(error, identity)
+
+
+@pytest.mark.parametrize(
+    "original",
+    [
+        _FakePostgresError("23505", "uq_vocab_user_word"),
+        _FakePostgresError("23503", "uq_vocab_anon_word"),
+        sqlite3.IntegrityError(
+            "UNIQUE constraint failed: vocab_items.language, "
+            "vocab_items.learner_key, vocab_items.normalized_headword"
+        ),
+        sqlite3.IntegrityError(
+            "UNIQUE constraint failed: vocab_items.learner_key, "
+            "vocab_items.language"
+        ),
+        sqlite3.IntegrityError(
+            "UNIQUE constraint failed: vocab_items.learner_key, "
+            "vocab_items.language, vocab_items.normalized_headword_extra"
+        ),
+        sqlite3.IntegrityError("FOREIGN KEY constraint failed"),
+    ],
+)
+def test_save_reraises_every_unrecognized_integrity_error(
+    original: BaseException,
+    api_db: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = importlib.import_module("app.vocab.service")
+    from app.schemas import VocabSaveIn
+
+    error = IntegrityError("INSERT", {}, original)
+
+    def _raise() -> None:
+        raise error
+
+    monkeypatch.setattr(api_db, "commit", _raise)
+    with pytest.raises(IntegrityError) as caught:
+        service.save_vocab(
+            api_db,
+            identity=LearnerIdentity("learner_alpha"),
+            payload=VocabSaveIn(language="fr", headword="mot"),
+        )
+
+    assert caught.value is error
+
+
+def test_authenticated_save_uses_user_id_across_learner_key_changes(
+    api_db: Session,
+) -> None:
+    service = importlib.import_module("app.vocab.service")
+    from app.schemas import VocabSaveIn
+
+    user_id = "00000000-0000-0000-0000-000000000001"
+    owned = _add_item(
+        api_db,
+        learner_key="old_key",
+        user_id=user_id,
+        headword="mot",
+        gloss=None,
+    )
+    anonymous = _add_item(
+        api_db,
+        learner_key="learner_current",
+        headword="anonymous display",
+        normalized_headword="mot",
+    )
+    foreign = _add_item(
+        api_db,
+        learner_key="learner_current",
+        user_id="00000000-0000-0000-0000-000000000002",
+        headword="foreign display",
+        normalized_headword="mot",
+    )
+    api_db.commit()
+
+    result = service.save_vocab(
+        api_db,
+        identity=LearnerIdentity("learner_current", user_id),
+        payload=VocabSaveIn(
+            language="fr",
+            headword="MOT",
+            gloss_en="meaning",
+        ),
+    )
+
+    assert result.id == owned.id
+    assert result.id not in {anonymous.id, foreign.id}
+    assert result.gloss_en == "meaning"
+    assert api_db.scalar(text("SELECT count(*) FROM vocab_items")) == 3
+
+
+def test_authenticated_unique_race_reselects_only_winning_user_row(
+    api_db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = importlib.import_module("app.vocab.service")
+    from app.schemas import VocabSaveIn
+
+    user_id = "00000000-0000-0000-0000-000000000001"
+    anonymous = _add_item(
+        api_db,
+        learner_key="learner_current",
+        headword="anonymous display",
+        normalized_headword="mot",
+    )
+    foreign = _add_item(
+        api_db,
+        learner_key="learner_current",
+        user_id="00000000-0000-0000-0000-000000000002",
+        headword="foreign display",
+        normalized_headword="mot",
+    )
+    api_db.commit()
+    original_commit = api_db.commit
+    raced = False
+    winner: VocabItem | None = None
+
+    def _racing_commit() -> None:
+        nonlocal raced, winner
+        if raced:
+            original_commit()
+            return
+        raced = True
+        api_db.rollback()
+        winner = _add_item(
+            api_db,
+            learner_key="winner_old_key",
+            user_id=user_id,
+            headword="winner display",
+            normalized_headword="mot",
+            gloss=None,
+        )
+        original_commit()
+        raise IntegrityError(
+            "INSERT",
+            {},
+            sqlite3.IntegrityError(
+                "UNIQUE constraint failed: vocab_items.user_id, "
+                "vocab_items.language, vocab_items.normalized_headword"
+            ),
+        )
+
+    monkeypatch.setattr(api_db, "commit", _racing_commit)
+    result = service.save_vocab(
+        api_db,
+        identity=LearnerIdentity("learner_current", user_id),
+        payload=VocabSaveIn(
+            language="fr",
+            headword="MOT",
+            gloss_en="meaning",
+        ),
+    )
+
+    assert winner is not None
+    assert result.id == winner.id
+    assert result.id not in {anonymous.id, foreign.id}
+    assert result.headword == "winner display"
+    assert result.gloss_en == "meaning"
+
+
+def test_edit_empty_clear_and_nonempty_gloss_recompute_normalized_gloss(
+    client: TestClient, api_db: Session
+) -> None:
+    item = _add_item(
+        api_db,
+        learner_key="learner_alpha",
+        headword="mot",
+        gloss="old",
+        normalized_gloss="old",
+    )
+    api_db.commit()
+
+    updated = client.patch(
+        f"/api/vocab/{item.id}",
+        json={"gloss_en": "  ÉCOUTER  "},
+        headers=_headers(),
+    )
+    assert updated.status_code == 200
+    api_db.refresh(item)
+    assert item.gloss_en == "  ÉCOUTER  "
+    assert item.normalized_gloss == "écouter"
+
+    cleared = client.patch(
+        f"/api/vocab/{item.id}",
+        json={"gloss_en": ""},
+        headers=_headers(),
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["gloss_en"] == ""
+    api_db.refresh(item)
+    assert item.gloss_en == ""
+    assert item.normalized_gloss == ""
+
+
+def test_authenticated_edit_delete_sql_and_404_are_user_scoped(
+    client: TestClient, api_db: Session
+) -> None:
+    user_id = "00000000-0000-0000-0000-000000000001"
+    identity = LearnerIdentity("learner_current", user_id)
+    edited = _add_item(
+        api_db,
+        learner_key="old_key",
+        user_id=user_id,
+        headword="edit me",
+    )
+    deleted = _add_item(
+        api_db,
+        learner_key="old_key",
+        user_id=user_id,
+        headword="delete me",
+    )
+    foreign = _add_item(
+        api_db,
+        learner_key="learner_current",
+        user_id="00000000-0000-0000-0000-000000000002",
+        headword="foreign",
+    )
+    api_db.commit()
+    updates: list[str] = []
+    deletes: list[str] = []
+
+    def _capture(_conn: object, _cursor: object, statement: str, *_args: object) -> None:
+        sql = statement.lstrip().lower()
+        if sql.startswith("update"):
+            updates.append(sql)
+        elif sql.startswith("delete"):
+            deletes.append(sql)
+
+    app.dependency_overrides[get_learner_identity] = lambda: identity
+    engine = api_db.get_bind()
+    event.listen(engine, "before_cursor_execute", _capture)
+    try:
+        edit_response = client.patch(
+            f"/api/vocab/{edited.id}",
+            json={"example": "edited"},
+        )
+        edit_foreign = client.patch(
+            f"/api/vocab/{foreign.id}",
+            json={"example": "forbidden"},
+        )
+        edit_missing = client.patch(
+            "/api/vocab/999998",
+            json={"example": "missing"},
+        )
+        delete_response = client.delete(f"/api/vocab/{deleted.id}")
+        delete_foreign = client.delete(f"/api/vocab/{foreign.id}")
+        delete_missing = client.delete("/api/vocab/999999")
+    finally:
+        event.remove(engine, "before_cursor_execute", _capture)
+        app.dependency_overrides.pop(get_learner_identity, None)
+
+    assert edit_response.status_code == 200
+    assert delete_response.status_code == 204
+    assert edit_foreign.status_code == edit_missing.status_code == 404
+    assert edit_foreign.json() == edit_missing.json() == {
+        "detail": "vocabulary item not found"
+    }
+    assert delete_foreign.status_code == delete_missing.status_code == 404
+    assert delete_foreign.json() == delete_missing.json() == {
+        "detail": "vocabulary item not found"
+    }
+    assert updates and deletes
+    for statement in updates + deletes:
+        assert "vocab_items.id" in statement
+        assert "vocab_items.user_id" in statement
+        assert "learner_key" not in statement
