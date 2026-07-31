@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { Profiler } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import { IdentityProvider } from '../identity/IdentityContext'
@@ -110,23 +111,24 @@ describe('My Words route and navigation', () => {
     }
   })
 
-  it('enters My Words from a skill and follows hash history changes', async () => {
-    window.location.hash = '#/listening'
+  it('enters My Words from a skill and follows browser back and forward history', async () => {
+    window.history.replaceState(null, '', '#/listening')
     renderApp()
 
     expect(screen.getByText('Listening library')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'My Words' }))
-    await act(async () => window.dispatchEvent(new HashChangeEvent('hashchange')))
-    expect(window.location.hash).toBe('#/vocabulary')
-    expect(screen.getByRole('heading', { level: 1, name: 'My Words' })).toBeInTheDocument()
+    await waitFor(() => expect(window.location.hash).toBe('#/vocabulary'))
+    await screen.findByRole('heading', { level: 1, name: 'My Words' })
 
-    window.location.hash = '#/listening'
-    await act(async () => window.dispatchEvent(new HashChangeEvent('hashchange')))
-    expect(screen.getByText('Listening library')).toBeInTheDocument()
+    await act(async () => window.history.back())
+    await waitFor(() => expect(window.location.hash).toBe('#/listening'))
+    expect(await screen.findByText('Listening library')).toBeInTheDocument()
 
-    window.location.hash = '#/vocabulary'
-    await act(async () => window.dispatchEvent(new HashChangeEvent('hashchange')))
-    expect(screen.getByRole('heading', { level: 1, name: 'My Words' })).toBeInTheDocument()
+    await act(async () => window.history.forward())
+    await waitFor(() => expect(window.location.hash).toBe('#/vocabulary'))
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'My Words' }),
+    ).toBeInTheDocument()
   })
 
   it('keeps the utility route when switching language and reloads that language', async () => {
@@ -265,6 +267,90 @@ describe('VocabularyPage', () => {
       limit: 50,
       cursor: 'next-page',
     })
+  })
+
+  it('invalidates a paginating cursor in the first sort commit and ignores its response', async () => {
+    const oldPage = deferred<VocabList>()
+    const newFirstPage = deferred<VocabList>()
+    vocabMocks.list
+      .mockResolvedValueOnce(page([word()], 'old-cursor'))
+      .mockReturnValueOnce(oldPage.promise)
+      .mockReturnValueOnce(newFirstPage.promise)
+    const sortCommits: boolean[] = []
+
+    render(
+      <Profiler
+        id="sort-race"
+        onRender={() => {
+          const select = document.querySelector<HTMLSelectElement>(
+            'select[aria-label="Sort saved words"]',
+          )
+          if (select?.value === 'alphabetical') {
+            sortCommits.push(
+              Boolean(screen.queryByRole('button', { name: /Load(?:ing)? more/ })),
+            )
+          }
+        }}
+      >
+        <VocabularyPage language="fr" navigate={vi.fn()} />
+      </Profiler>,
+    )
+    await screen.findByText('écouter')
+    await userEvent.click(screen.getByRole('button', { name: 'Load more' }))
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Sort saved words' }), {
+      target: { value: 'alphabetical' },
+    })
+    expect(sortCommits[0]).toBe(false)
+
+    oldPage.resolve(page([word({ id: 8, headword: 'stale sort word' })]))
+    await act(async () => oldPage.promise)
+    expect(screen.queryByText('stale sort word')).not.toBeInTheDocument()
+
+    newFirstPage.resolve(page([word({ id: 9, headword: 'sorted word' })]))
+    expect(await screen.findByText('sorted word')).toBeInTheDocument()
+  })
+
+  it('invalidates a paginating cursor in the first language commit and ignores its response', async () => {
+    const oldPage = deferred<VocabList>()
+    const newFirstPage = deferred<VocabList>()
+    vocabMocks.list
+      .mockResolvedValueOnce(page([word()], 'old-cursor'))
+      .mockReturnValueOnce(oldPage.promise)
+      .mockReturnValueOnce(newFirstPage.promise)
+    const languageCommits: boolean[] = []
+    let observeRussian = false
+    const onRender = () => {
+      if (observeRussian) {
+        languageCommits.push(
+          Boolean(screen.queryByRole('button', { name: /Load(?:ing)? more/ })),
+        )
+      }
+    }
+    const view = render(
+      <Profiler id="language-race" onRender={onRender}>
+        <VocabularyPage language="fr" navigate={vi.fn()} />
+      </Profiler>,
+    )
+    await screen.findByText('écouter')
+    await userEvent.click(screen.getByRole('button', { name: 'Load more' }))
+
+    observeRussian = true
+    view.rerender(
+      <Profiler id="language-race" onRender={onRender}>
+        <VocabularyPage language="ru" navigate={vi.fn()} />
+      </Profiler>,
+    )
+    expect(languageCommits[0]).toBe(false)
+
+    oldPage.resolve(page([word({ id: 8, headword: 'stale language word' })]))
+    await act(async () => oldPage.promise)
+    expect(screen.queryByText('stale language word')).not.toBeInTheDocument()
+
+    newFirstPage.resolve(
+      page([word({ id: 9, language: 'ru', headword: 'слово', normalized_headword: 'слово' })]),
+    )
+    expect(await screen.findByText('слово')).toBeInTheDocument()
   })
 
   it('clears the old cursor immediately and replaces rather than appends on a new query', async () => {

@@ -12,6 +12,11 @@ function errorMessage(reason: unknown): string {
   return reason instanceof Error ? reason.message : 'Unable to load saved words'
 }
 
+type CursorState = {
+  value: string
+  criteria: string
+}
+
 export function VocabularyPage({
   language,
   navigate,
@@ -24,7 +29,7 @@ export function VocabularyPage({
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [sort, setSort] = useState<VocabularySort>('recent')
   const [items, setItems] = useState<VocabItem[]>([])
-  const [cursor, setCursor] = useState<string | null>(null)
+  const [cursor, setCursor] = useState<CursorState | null>(null)
   const [hasLoaded, setHasLoaded] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -45,6 +50,7 @@ export function VocabularyPage({
     const criteria = activeCriteriaRef.current
     setCursor(null)
     setLoadMoreError(null)
+    setLoadingMore(false)
     setLoading(true)
     setError(null)
     try {
@@ -56,7 +62,7 @@ export function VocabularyPage({
       })
       if (requestId.current !== id || activeCriteriaRef.current !== criteria) return
       setItems(response.items)
-      setCursor(response.next_cursor)
+      setCursor(response.next_cursor ? { value: response.next_cursor, criteria } : null)
       setHasLoaded(true)
     } catch (reason) {
       if (requestId.current !== id || activeCriteriaRef.current !== criteria) return
@@ -71,9 +77,10 @@ export function VocabularyPage({
   }, [loadFirst])
 
   const loadMore = async () => {
-    if (!cursor || loadingMore) return
+    if (!cursor || cursor.criteria !== activeCriteria || loadingMore) return
     const activeRequest = requestId.current
-    const requestedCursor = cursor
+    const criteria = activeCriteria
+    const requestedCursor = cursor.value
     setLoadingMore(true)
     setLoadMoreError(null)
     try {
@@ -84,14 +91,25 @@ export function VocabularyPage({
         limit: 50,
         cursor: requestedCursor,
       })
-      if (requestId.current !== activeRequest) return
+      if (
+        requestId.current !== activeRequest ||
+        activeCriteriaRef.current !== criteria
+      ) return
       setItems((current) => [...current, ...response.items])
-      setCursor(response.next_cursor)
+      setCursor(
+        response.next_cursor ? { value: response.next_cursor, criteria } : null,
+      )
     } catch (reason) {
-      if (requestId.current !== activeRequest) return
+      if (
+        requestId.current !== activeRequest ||
+        activeCriteriaRef.current !== criteria
+      ) return
       setLoadMoreError(errorMessage(reason))
     } finally {
-      if (requestId.current === activeRequest) setLoadingMore(false)
+      if (
+        requestId.current === activeRequest &&
+        activeCriteriaRef.current === criteria
+      ) setLoadingMore(false)
     }
   }
 
@@ -180,7 +198,7 @@ export function VocabularyPage({
         </div>
       )}
 
-      {cursor && !loading && (
+      {cursor?.criteria === activeCriteria && !loading && (
         <div className="wordbook-more">
           <button type="button" onClick={() => void loadMore()} disabled={loadingMore}>
             {loadingMore ? 'Loading more' : 'Load more'}
