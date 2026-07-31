@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -193,16 +193,3 @@ def save_vocab(payload: VocabSaveIn, db: Session = Depends(get_db)) -> VocabItem
     db.commit()
     db.refresh(item)
     return VocabItemOut.model_validate(item)
-
-
-@router.get("/vocab", response_model=list[VocabItemOut])
-def list_vocab(
-    db: Session = Depends(get_db),
-    learner_key: str = Query(default="anonymous"),
-    language: str | None = None,
-) -> list[VocabItemOut]:
-    stmt = select(VocabItem).where(VocabItem.learner_key == learner_key)
-    if language:
-        stmt = stmt.where(VocabItem.language == language)
-    rows = db.scalars(stmt.order_by(VocabItem.created_at.desc())).all()
-    return [VocabItemOut.model_validate(r) for r in rows]

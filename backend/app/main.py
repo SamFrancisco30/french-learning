@@ -13,7 +13,8 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .db import init_db
-from .routers import attempts, ingest, lessons, lexicon
+from .errors import register_database_error_handler
+from .routers import attempts, ingest, lessons, lexicon, vocab
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,10 +39,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+register_database_error_handler(app)
 app.include_router(lessons.router)
 app.include_router(attempts.router)
 app.include_router(ingest.router)
 app.include_router(lexicon.router)
+app.include_router(vocab.router)
 
 
 @app.on_event("startup")
