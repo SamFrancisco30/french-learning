@@ -189,7 +189,6 @@ function Drill({
     <LookupProvider
       language={language}
       unitId={unit.id}
-      learnerKey={learnerKey}
       play={player.playWindow}
     >
       <FollowProvider

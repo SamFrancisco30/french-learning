@@ -134,9 +134,10 @@ describe('My Words route and navigation', () => {
 
   it('keeps the utility route when switching language and reloads that language', async () => {
     renderApp()
-    await screen.findByRole('button', { name: 'Russian' })
+    const russian = await screen.findByRole('button', { name: 'Russian' })
+    expect(russian).toHaveAttribute('aria-label', 'Russian')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Russian' }))
+    await userEvent.click(russian)
 
     expect(window.location.hash).toBe('#/vocabulary')
     await waitFor(() =>
@@ -185,6 +186,8 @@ describe('VocabularyPage', () => {
     expect(screen.getByText(/Saved/)).toBeInTheDocument()
     const source = screen.getByRole('link', { name: /Morning news.*Unit 2/ })
     expect(source).toHaveAttribute('href', '#/listening/lesson/12/unit/34')
+    source.focus()
+    expect(source).toHaveFocus()
     await userEvent.click(source)
     expect(navigate).toHaveBeenCalledWith('/listening/lesson/12/unit/34')
   })
@@ -215,8 +218,12 @@ describe('VocabularyPage', () => {
       renderPage()
       await act(async () => Promise.resolve())
       expect(vocabMocks.list).toHaveBeenCalledTimes(1)
+      const search = screen.getByRole('searchbox', { name: 'Search saved words' })
+      const sortControl = screen.getByRole('combobox', { name: 'Sort saved words' })
+      expect(screen.getByText('Search').closest('label')).toContainElement(search)
+      expect(screen.getByText('Sort').closest('label')).toContainElement(sortControl)
 
-      fireEvent.change(screen.getByRole('searchbox', { name: 'Search saved words' }), {
+      fireEvent.change(search, {
         target: { value: 'écou' },
       })
       expect(screen.getByRole('searchbox')).toHaveValue('écou')
@@ -230,7 +237,7 @@ describe('VocabularyPage', () => {
         limit: 50,
       })
 
-      fireEvent.change(screen.getByRole('combobox', { name: 'Sort saved words' }), {
+      fireEvent.change(sortControl, {
         target: { value: 'alphabetical' },
       })
       await act(async () => Promise.resolve())
@@ -395,7 +402,11 @@ describe('VocabularyPage', () => {
       await act(async () => Promise.resolve())
       expect(screen.getByText('écouter')).toBeInTheDocument()
 
+      fireEvent.click(screen.getByRole('button', { name: 'Delete écouter' }))
+      expect(screen.getByRole('alertdialog', { name: /Delete écouter/i })).toBeInTheDocument()
+
       fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'par' } })
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
       expect(
         screen.getByRole('status', {
           name: 'Showing previous results while this view refreshes',
@@ -583,6 +594,7 @@ describe('VocabularyPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit écouter' }))
     const gloss = screen.getByRole('textbox', { name: 'Gloss' })
+    expect(screen.getByText('Gloss').closest('label')).toContainElement(gloss)
     await userEvent.clear(gloss)
     await userEvent.type(gloss, 'hear carefully')
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
@@ -595,24 +607,51 @@ describe('VocabularyPage', () => {
     vocabMocks.edit.mockRejectedValueOnce(new Error('Edit unavailable'))
     await userEvent.click(screen.getByRole('button', { name: 'Edit écouter' }))
     const example = screen.getByRole('textbox', { name: 'Example' })
+    expect(screen.getByText('Example').closest('label')).toContainElement(example)
     await userEvent.clear(example)
     await userEvent.type(example, 'Draft stays here')
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     const row = screen.getByRole('article', { name: 'écouter' })
-    expect(await within(row).findByRole('alert')).toHaveTextContent('Edit unavailable')
+    const editError = await within(row).findByRole('alert')
+    expect(editError).toHaveTextContent('Edit unavailable')
+    expect(editError).toHaveAttribute('aria-live', 'assertive')
     expect(within(row).getByRole('textbox', { name: 'Example' })).toHaveValue('Draft stays here')
   })
 
-  it('confirms deletion and removes a row only after success while retaining failures', async () => {
+  it('opens an accessible permanent-delete confirmation and restores focus on cancel or Escape', async () => {
+    vocabMocks.list.mockResolvedValue(page([word()]))
+    renderPage()
+    await screen.findByText('écouter')
+
+    const deleteButton = screen.getByRole('button', { name: 'Delete écouter' })
+    await userEvent.click(deleteButton)
+    expect(vocabMocks.remove).not.toHaveBeenCalled()
+    const dialog = screen.getByRole('alertdialog', { name: /Delete écouter/i })
+    expect(dialog).toHaveAccessibleDescription(/permanently/i)
+    expect(screen.getByRole('button', { name: 'Confirm delete' })).toHaveFocus()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(deleteButton).toHaveFocus()
+
+    await userEvent.click(deleteButton)
+    fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' })
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(deleteButton).toHaveFocus()
+    expect(vocabMocks.remove).not.toHaveBeenCalled()
+  })
+
+  it('deletes only after confirmation and keeps a failed row in a retryable live dialog', async () => {
     const removing = deferred<void>()
     vocabMocks.list.mockResolvedValue(page([word()]))
     vocabMocks.remove.mockReturnValueOnce(removing.promise)
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
     renderPage()
     await screen.findByText('écouter')
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete écouter' }))
-    expect(confirm).toHaveBeenCalled()
+    expect(vocabMocks.remove).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm delete' }))
+    expect(screen.getByRole('button', { name: 'Deleting' })).toBeDisabled()
     expect(screen.getByText('écouter')).toBeInTheDocument()
     removing.resolve()
     await waitFor(() => expect(screen.queryByText('écouter')).not.toBeInTheDocument())
@@ -622,7 +661,13 @@ describe('VocabularyPage', () => {
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'alphabetical' } })
     await screen.findByText('rester')
     await userEvent.click(screen.getByRole('button', { name: 'Delete rester' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Delete unavailable')
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm delete' }))
+    const deleteError = await screen.findByRole('alert')
+    expect(deleteError).toHaveTextContent('Delete unavailable')
+    expect(deleteError).toHaveAttribute('aria-live', 'assertive')
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Confirm delete' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
     expect(screen.getByText('rester')).toBeInTheDocument()
   })
 })

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { api, lexicon, vocab } from './api'
+import { api, vocab } from './api'
 import type { VocabEditInput, VocabSaveInput } from './types'
 
 const fetchMock = vi.fn()
@@ -178,27 +178,4 @@ describe('API request boundaries', () => {
     expect(failed.json).not.toHaveBeenCalled()
   })
 
-  it('adapts legacy saveVocab identity into a header without JSON leakage', async () => {
-    fetchMock.mockResolvedValue(response())
-
-    await lexicon.saveVocab({
-      language: 'fr',
-      headword: 'mot',
-      gloss_en: 'word',
-      learner_key: 'learner_legacy',
-    })
-    await lexicon.saveVocab({ language: 'fr', headword: 'sans identité' })
-
-    expect(new Headers(requestAt(0)[1]?.headers).get('X-Learner-Key')).toBe('learner_legacy')
-    expect(JSON.parse(String(requestAt(0)[1]?.body))).toEqual({
-      language: 'fr',
-      headword: 'mot',
-      gloss_en: 'word',
-    })
-    expect(new Headers(requestAt(1)[1]?.headers).has('X-Learner-Key')).toBe(false)
-    expect(JSON.parse(String(requestAt(1)[1]?.body))).toEqual({
-      language: 'fr',
-      headword: 'sans identité',
-    })
-  })
 })

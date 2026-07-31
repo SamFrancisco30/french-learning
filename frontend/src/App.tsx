@@ -118,7 +118,7 @@ export default function App() {
       )}
 
       {!isVocabulary && skill.key === 'reading' && (
-        <ReadingPage language={language} learnerKey={learnerKey} />
+        <ReadingPage language={language} />
       )}
 
       {!isVocabulary &&

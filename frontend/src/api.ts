@@ -150,17 +150,6 @@ export const lexicon = {
     get<{ unit_id: number; expressions: import('./types').UnitExpressionSpan[] }>(
       `/api/units/${unitId}/expressions`,
     ),
-
-  saveVocab: ({
-    learner_key,
-    ...input
-  }: VocabSaveInput & {
-    learner_key?: string
-  }) =>
-    vocab.save(
-      input,
-      learner_key === undefined ? undefined : { 'X-Learner-Key': learner_key },
-    ),
 }
 
 export const grammar = {

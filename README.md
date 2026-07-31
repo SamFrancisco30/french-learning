@@ -60,6 +60,17 @@ cd ../frontend && npm install
 
 Requires `ffmpeg` on PATH (`brew install ffmpeg`).
 
+### Database migrations
+
+From the repository root, apply production migrations with:
+
+```bash
+uv run --project backend alembic -c backend/alembic.ini upgrade head
+```
+
+Back up the production database before any rollback. Do not run `alembic downgrade`
+blindly: inspect the target revision and its data-loss implications first.
+
 ---
 
 ## Model choices
@@ -188,6 +199,18 @@ to the card instead of the viewport.
 falls back to headwords — fine for nouns and compounds, but `mis` no longer resolves to
 `mettre`, so inflected verbs stop matching in unseen text. Degraded, not broken; the
 response reports which lemmatizer was used.
+
+## My Words
+
+Open `#/vocabulary` to search, sort, edit and delete vocabulary saved from lookup popups.
+The vocabulary API is `GET /api/vocab`, `GET /api/vocab/saved-keys`, `POST /api/vocab`,
+and `PATCH` / `DELETE /api/vocab/{id}`.
+
+Vocabulary requests identify the learner only with the `X-Learner-Key` header; never put
+that identity in a vocabulary query string or JSON body. Attempts and progress retain their
+legacy contracts for now: attempts send `learner_key` in the body and progress sends it in
+the query. Vocabulary endpoints deliberately reject Bearer tokens until the account-auth
+phase defines their validation and ownership rules.
 
 ## Sentence grammar
 
@@ -375,6 +398,10 @@ plus new kinds in that registry — the media, ASR, storage and attempt layers a
 | GET  | `/api/units/{id}/transcript` | transcript reveal |
 | POST | `/api/attempts` | submit + grade; returns answer & explanation |
 | GET  | `/api/progress?learner_key=…` | accuracy overall and by exercise kind |
+| GET  | `/api/vocab` | list and search saved vocabulary |
+| GET  | `/api/vocab/saved-keys` | normalized keys for lookup synchronization |
+| POST | `/api/vocab` | save a word or expression (`X-Learner-Key` header) |
+| PATCH / DELETE | `/api/vocab/{id}` | edit or permanently remove a saved item |
 | POST | `/api/ingest` | start an ingest job (202 + job id) |
 | GET  | `/api/ingest/{job_id}` | poll job |
 

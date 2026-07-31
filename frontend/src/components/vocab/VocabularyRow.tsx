@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import type { VocabEditInput, VocabItem } from '../../types'
 
 function message(reason: unknown): string {
@@ -33,13 +33,35 @@ export function VocabularyRow({
   const [example, setExample] = useState(item.example ?? '')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const deleteButtonRef = useRef<HTMLButtonElement | null>(null)
+  const confirmButtonRef = useRef<HTMLButtonElement | null>(null)
+  const returnFocus = useRef(false)
+  const confirmTitleId = useId()
+  const confirmDescriptionId = useId()
 
   useEffect(() => {
     if (editing) return
     setGloss(item.gloss_en ?? '')
     setExample(item.example ?? '')
   }, [editing, item.example, item.gloss_en])
+
+  useEffect(() => {
+    if (confirming) {
+      confirmButtonRef.current?.focus()
+    } else if (returnFocus.current) {
+      returnFocus.current = false
+      deleteButtonRef.current?.focus()
+    }
+  }, [confirming])
+
+  useEffect(() => {
+    if (!mutationsDisabled || !confirming) return
+    returnFocus.current = false
+    setConfirming(false)
+    setError(null)
+  }, [confirming, mutationsDisabled])
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -60,11 +82,7 @@ export function VocabularyRow({
   }
 
   const deleteItem = async () => {
-    if (
-      deleting ||
-      mutationsDisabled ||
-      !window.confirm(`Delete “${item.headword}” from My Words?`)
-    ) return
+    if (deleting || mutationsDisabled) return
     setDeleting(true)
     setError(null)
     try {
@@ -73,6 +91,13 @@ export function VocabularyRow({
       setError(message(reason))
       setDeleting(false)
     }
+  }
+
+  const cancelDelete = () => {
+    if (deleting) return
+    returnFocus.current = true
+    setConfirming(false)
+    setError(null)
   }
 
   return (
@@ -104,7 +129,7 @@ export function VocabularyRow({
             />
           </label>
           {error && (
-            <p className="wordbook-row-error" role="alert">
+            <p className="wordbook-row-error" role="alert" aria-live="assertive">
               {error}
             </p>
           )}
@@ -152,8 +177,8 @@ export function VocabularyRow({
               {item.source.lesson_title} · Unit {item.source.unit_index}
             </a>
           )}
-          {error && (
-            <p className="wordbook-row-error" role="alert">
+          {error && !confirming && (
+            <p className="wordbook-row-error" role="alert" aria-live="assertive">
               {error}
             </p>
           )}
@@ -170,15 +195,56 @@ export function VocabularyRow({
               Edit
             </button>
             <button
+              ref={deleteButtonRef}
               className="wordbook-delete"
               type="button"
               aria-label={`Delete ${item.headword}`}
-              onClick={deleteItem}
-              disabled={deleting || mutationsDisabled}
+              onClick={() => {
+                setError(null)
+                setConfirming(true)
+              }}
+              disabled={deleting || confirming || mutationsDisabled}
             >
-              {deleting ? 'Deleting' : 'Delete'}
+              Delete
             </button>
           </div>
+          {confirming && (
+            <div
+              className="wordbook-confirm"
+              role="alertdialog"
+              aria-labelledby={confirmTitleId}
+              aria-describedby={confirmDescriptionId}
+              onKeyDown={(event) => {
+                if (event.key !== 'Escape' || deleting) return
+                event.preventDefault()
+                cancelDelete()
+              }}
+            >
+              <h4 id={confirmTitleId}>Delete {item.headword}?</h4>
+              <p id={confirmDescriptionId}>
+                This permanently removes this word from My Words. This cannot be undone.
+              </p>
+              {error && (
+                <p className="wordbook-row-error" role="alert" aria-live="assertive">
+                  {error}
+                </p>
+              )}
+              <div className="wordbook-row-actions wordbook-confirm-actions">
+                <button
+                  ref={confirmButtonRef}
+                  className="wordbook-delete"
+                  type="button"
+                  onClick={() => void deleteItem()}
+                  disabled={deleting || mutationsDisabled}
+                >
+                  {deleting ? 'Deleting' : 'Confirm delete'}
+                </button>
+                <button type="button" onClick={cancelDelete} disabled={deleting}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </article>
