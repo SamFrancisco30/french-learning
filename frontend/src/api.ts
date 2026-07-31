@@ -6,22 +6,68 @@ import type {
   Progress,
   Transcript,
   UnitDetail,
+  VocabEditInput,
+  VocabItem,
+  VocabList,
+  VocabSavedKeys,
+  VocabSaveInput,
 } from './types'
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(path)
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  expectsJson = true,
+): Promise<T> {
+  const res = await fetch(path, init)
   if (!res.ok) throw new Error(`${res.status} ${res.statusText} — ${path}`)
+  if (
+    !expectsJson ||
+    res.status === 204 ||
+    res.status === 205 ||
+    res.headers?.get('Content-Length') === '0'
+  ) {
+    return undefined as T
+  }
   return res.json() as Promise<T>
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+function jsonHeaders(headers?: HeadersInit): Headers {
+  const merged = new Headers(headers)
+  if (!merged.has('Content-Type')) merged.set('Content-Type', 'application/json')
+  return merged
+}
+
+function get<T>(path: string, headers?: HeadersInit): Promise<T> {
+  return request<T>(path, headers ? { headers: new Headers(headers) } : undefined)
+}
+
+function sendJson<T>(
+  method: 'POST' | 'PATCH',
+  path: string,
+  body: unknown,
+  headers?: HeadersInit,
+): Promise<T> {
+  return request<T>(path, {
+    method,
+    headers: jsonHeaders(headers),
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText} — ${path}`)
-  return res.json() as Promise<T>
+}
+
+function post<T>(path: string, body: unknown, headers?: HeadersInit): Promise<T> {
+  return sendJson<T>('POST', path, body, headers)
+}
+
+function patch<T>(path: string, body: unknown, headers?: HeadersInit): Promise<T> {
+  return sendJson<T>('PATCH', path, body, headers)
+}
+
+function remove(path: string, headers?: HeadersInit): Promise<void> {
+  return request<void>(
+    path,
+    { method: 'DELETE', headers: headers ? new Headers(headers) : undefined },
+    false,
+  )
 }
 
 export const api = {
@@ -47,6 +93,40 @@ export const api = {
     ),
 }
 
+export type VocabListParams = {
+  language?: string | null
+  q?: string | null
+  sort?: 'recent' | 'alphabetical'
+  limit?: number
+  cursor?: string | null
+}
+
+export const vocab = {
+  list: (params: VocabListParams = {}, headers?: HeadersInit) => {
+    const query = new URLSearchParams()
+    if (params.language != null && params.language !== '') query.set('language', params.language)
+    if (params.q != null && params.q !== '') query.set('q', params.q)
+    if (params.sort !== undefined) query.set('sort', params.sort)
+    if (params.limit !== undefined) query.set('limit', String(params.limit))
+    if (params.cursor != null && params.cursor !== '') query.set('cursor', params.cursor)
+    const suffix = query.size > 0 ? `?${query.toString()}` : ''
+    return get<VocabList>(`/api/vocab${suffix}`, headers)
+  },
+
+  savedKeys: (language: string, headers?: HeadersInit) => {
+    const query = new URLSearchParams({ language })
+    return get<VocabSavedKeys>(`/api/vocab/saved-keys?${query.toString()}`, headers)
+  },
+
+  save: (input: VocabSaveInput, headers?: HeadersInit) =>
+    post<VocabItem>('/api/vocab', input, headers),
+
+  edit: (id: number, input: VocabEditInput, headers?: HeadersInit) =>
+    patch<VocabItem>(`/api/vocab/${id}`, input, headers),
+
+  remove: (id: number, headers?: HeadersInit) => remove(`/api/vocab/${id}`, headers),
+}
+
 export const lexicon = {
   lookup: (body: {
     language: string
@@ -61,14 +141,16 @@ export const lexicon = {
       `/api/units/${unitId}/expressions`,
     ),
 
-  saveVocab: (body: {
-    language: string
-    headword: string
-    gloss_en?: string | null
-    example?: string | null
-    unit_id?: number | null
+  saveVocab: ({
+    learner_key,
+    ...input
+  }: VocabSaveInput & {
     learner_key?: string
-  }) => post<import('./types').SavedVocab>('/api/vocab', body),
+  }) =>
+    vocab.save(
+      input,
+      learner_key === undefined ? undefined : { 'X-Learner-Key': learner_key },
+    ),
 }
 
 export const grammar = {
