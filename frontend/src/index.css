@@ -847,21 +847,30 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   transition: background .16s ease, box-shadow .16s ease;
 }
 /*
- * The mark, seen THROUGH the body rather than printed on it.
+ * The mark as a SOLID OBJECT SUSPENDED IN the glass, not a shape printed on it and not a smudge
+ * behind it.
  *
- * Two things do that. It is blurred, because glass does not transmit a hard edge — a crisp black
- * triangle is a sticker on the front, and half a pixel at this size is the difference. And it is
- * softened in weight, because anything viewed through a translucent body loses contrast against it.
+ * The first attempt blurred it, on the reasoning that glass does not transmit a hard edge. Wrong
+ * reasoning: an object embedded in clear glass is seen sharply — what tells you it is inside is not
+ * softness but LIGHTING. So the blur is gone and three lights do the work instead:
  *
- * The layer order is the other half: the beams sit on ::after, above this, so light crosses the mark
- * instead of stopping at it.
+ *   a bright edge along the top, where the beam crossing the body strikes the object's upper face;
+ *   a tight dark contact shadow directly under it, which is what fixes it in place — a shadow needs
+ *     something to fall on, and here that something is the glass itself;
+ *   a wider, fainter shadow below that, the same shadow losing definition as it travels through the
+ *     body.
+ *
+ * Opaque, because it is an object rather than a tint. The sense of depth comes from the beams
+ * crossing it — they are on ::after, above this — and from the shadows, not from transparency.
  */
 .play-glyph {
   position: relative;
   z-index: 0;
-  color: var(--text-dim);
-  opacity: .72;
-  filter: blur(.5px);
+  color: #46505f;
+  text-shadow:
+    0 -0.5px 0.5px rgba(255, 255, 255, .95),
+    0 1px 1px rgba(24, 33, 46, .5),
+    0 2.5px 4px rgba(24, 33, 46, .26);
   /* The pause bars are a heavier glyph than the triangle and read as two solid slabs at this size,
      so they get a little air between them. */
   letter-spacing: .5px;
