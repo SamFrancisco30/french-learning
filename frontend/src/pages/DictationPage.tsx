@@ -257,6 +257,15 @@ function DictationDrill({
   onNext: () => void
   boxRef: React.RefObject<HTMLTextAreaElement | null>
 }) {
+  // The keyboard shortcut announces itself when an item opens and then gets out of the way. The
+  // component is keyed on the exercise id in the parent, so this remounts per item and the hint
+  // reappears for each new one — which is what makes it a reminder rather than a permanent label.
+  const [hintOn, setHintOn] = useState(true)
+  useEffect(() => {
+    const t = window.setTimeout(() => setHintOn(false), 3800)
+    return () => window.clearTimeout(t)
+  }, [])
+
   // Dictation plays the item's OWN audio file rather than a window inside the unit clip. It has to:
   // the punctuation announcements are spliced into that file, so there is no window of the original
   // that contains them, and once the server owns the cutting the client no longer needs a time map.
@@ -332,11 +341,20 @@ function DictationDrill({
         >
           ▶
         </button>
-        <button className="btn ghost" onClick={playItem} disabled={loadingAudio || !audio?.url}>
-          ↺ replay
+        {/* Glyph only, the same compact control the listening transport uses — the word "replay" was
+            costing 60px and making this button the tallest thing in the row, which set the row's
+            height on its own. The accessible name carries what the glyph cannot say. */}
+        <button
+          className="replay icon"
+          onClick={playItem}
+          disabled={loadingAudio || !audio?.url}
+          title="Play from the start"
+          aria-label="Play from the start"
+        >
+          ↺
         </button>
         <button
-          className={`rate-btn ${punctuation ? 'on' : ''}`}
+          className={`glass-btn ${punctuation ? 'on' : ''}`}
           onClick={() => setPunctuation((p) => !p)}
           disabled={loadingAudio}
           title={
@@ -347,12 +365,15 @@ function DictationDrill({
         >
           , point
         </button>
-        <span className="bar-label">
+        {/* The speed control belongs on this line, not on one of its own — same as the listening
+            transport, which this now matches. */}
+        <SpeedSlider speed={speed} onChange={setSpeed} disabled={loadingAudio} />
+        <span className="dict-meta">
           {loadingAudio
             ? 'preparing the audio…'
             : `${plays} plays${heard ? ` · ${fmt(heard)}` : ''}`}
         </span>
-        {audioError && <span className="bar-label">audio unavailable — {audioError}</span>}
+        {audioError && <span className="dict-meta">audio unavailable — {audioError}</span>}
         {audio?.url && (
           <audio
             ref={audioRef}
@@ -361,10 +382,6 @@ function DictationDrill({
             onLoadedMetadata={(e) => setHeard(e.currentTarget.duration)}
           />
         )}
-      </div>
-
-      <div className="dict-speed">
-        <SpeedSlider speed={speed} onChange={setSpeed} disabled={loadingAudio} />
       </div>
 
       <textarea
@@ -386,7 +403,16 @@ function DictationDrill({
           <button className="btn" onClick={onSubmit} disabled={busy || !typed.trim()}>
             {busy ? 'Checking…' : 'Check'}
           </button>
-          <span className="bar-label">
+          {/*
+            A shortcut worth knowing once, not worth reading every time. It shows itself when the
+            item opens and then fades, rather than sitting beside the button for the whole exercise.
+
+            Always rendered and hidden on a class, never unmounted: an element that leaves the DOM
+            cannot fade, and it would also take its space with it and shift the button sideways
+            mid-exercise. Absolutely positioned for the same reason — it occupies no layout at all,
+            so its arrival and departure move nothing.
+          */}
+          <span className={`kbd-hint ${hintOn ? 'on' : ''}`} aria-hidden="true">
             <kbd>{navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}</kbd>+<kbd>Enter</kbd> to
             check
           </span>

@@ -938,14 +938,50 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 }
 .ex-prompt { font-size: 15.5px; font-weight: 500; margin: 4px 0 14px; }
 
-.replay {
-  background: var(--bg-raised); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); padding: 3px 9px;
+/*
+ * The small transport buttons, in the same glass as the play button and the speed handle.
+ *
+ * Borderless for the reason the others are: a drawn outline reads as a ring placed around the glass
+ * rather than as the glass's own edge. What shapes them is the inset rim light along the top and the
+ * lift underneath, both from the shadow stack, plus the beams crossing the body.
+ *
+ * The beams have to be a pseudo-element rather than part of `background`, because these buttons have
+ * a label and text always paints above its own element's background — as a background layer the
+ * light would pass UNDER the glyph instead of over it, which is the wrong way round for something
+ * meant to sit inside the glass.
+ */
+.replay, .glass-btn {
+  position: relative;
+  background: rgba(255, 255, 255, .1);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 0;
+  border-radius: 999px;
+  padding: 4px 10px;
   font-size: 12px; color: var(--text-dim); white-space: nowrap;
+  box-shadow: var(--glass-shadow);
+  transition: background .16s ease, color .16s ease;
 }
-.replay:hover { border-color: var(--accent); color: var(--accent); }
-/* Square for a single glyph, so it does not read as a truncated text button. */
-.replay.icon { padding: 3px 8px; font-size: 14px; line-height: 1.1; flex: none; }
+.replay::after, .glass-btn::after {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background: var(--glass-beams);
+  pointer-events: none;
+}
+/* Hover changes how much light the glass holds. No ring — same as the play button. */
+.replay:hover, .glass-btn:hover { background: rgba(255, 255, 255, .24); color: var(--text); }
+.replay:active, .glass-btn:active { background: rgba(255, 255, 255, .36); }
+/* A toggle still has to say which way it is set. Thicker glass and accent ink, rather than a border
+   or a fill, so the state reads without breaking the material. */
+.glass-btn.on {
+  background: rgba(255, 255, 255, .4);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+.replay:disabled, .glass-btn:disabled { box-shadow: none; background: none; }
+/* Square-ish for a single glyph, so it does not read as a truncated text button. */
+.replay.icon { padding: 4px 9px; font-size: 14px; line-height: 1.1; flex: none; }
 
 /* cloze */
 /* Centred rather than left-aligned in the wider card: symmetric space either side reads as a
@@ -1042,7 +1078,32 @@ select:focus, textarea:focus { outline: none; border-color: var(--accent); backg
 .feedback ul { margin: 6px 0 0; padding-left: 18px; }
 
 /* actions */
-.actions { display: flex; gap: 10px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
+.actions { display: flex; gap: 10px; align-items: center; margin-top: 16px; flex-wrap: wrap; position: relative; }
+
+/* The shortcut reminder: shown when the item opens, gone a few seconds later.
+   Taken out of flow so that appearing and disappearing moves nothing around it, and faded rather
+   than switched so the exit is not a blink. `visibility` rather than `display` for the same reason —
+   display has nothing to animate — and it also takes the text out of the accessibility tree and
+   out of find-in-page once it is gone. */
+.kbd-hint {
+  position: absolute; left: 0; bottom: calc(100% + 8px);
+  display: flex; align-items: center; gap: 4px;
+  padding: 5px 9px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  font-size: 11.5px; color: var(--text-dim); white-space: nowrap;
+  opacity: 0; visibility: hidden;
+  transform: translateY(3px);
+  transition: opacity .45s ease, transform .45s ease, visibility .45s;
+  pointer-events: none;
+}
+.kbd-hint.on { opacity: 1; visibility: visible; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .kbd-hint { transition: none; }
+}
 .btn {
   padding: 8px 15px; border-radius: var(--radius-sm); border: 1px solid transparent;
   background: var(--accent); color: var(--text-onaccent); font-weight: 600; font-size: 14px;
@@ -1498,9 +1559,22 @@ kbd {
 .dict-level-reason { font-size: 12.5px; color: var(--text-dim); }
 .dict-level-pick { display: flex; align-items: center; gap: 4px; }
 
+/* One line, like the listening transport: play, replay, the punctuation toggle, the speed control,
+   and the counts pushed to the far end. Padding trimmed with it — the slider used to sit on a row of
+   its own below, and the space that separated them is no longer separating anything. */
 .dict-player {
   display: flex; align-items: center; gap: 11px; flex-wrap: wrap;
-  padding: 12px 0 14px;
+  padding: 8px 0 10px;
+}
+/* Same compact basis the slider gets in the listening transport, so the two controls are the same
+   size on both pages. */
+.dict-player .speed { flex: 0 1 190px; min-width: 120px; margin: 0; }
+/* Pushed right, and allowed to shrink before anything interactive does. */
+.dict-meta {
+  margin-left: auto;
+  font-size: 12px; color: var(--text-faint);
+  white-space: nowrap; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis;
 }
 
 .dict-input {
@@ -1812,4 +1886,3 @@ kbd {
   .speed.is-open .speed-pop { transform: none; }
 }
 
-.dict-speed { max-width: 240px; margin: 2px 0 14px; }
