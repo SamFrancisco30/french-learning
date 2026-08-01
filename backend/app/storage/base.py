@@ -122,7 +122,10 @@ def variant_map_key(provider_id: str, unit_idx: int, speed: float) -> str:
 
 
 #   v1  spoken punctuation spliced into a per-item clip
-DICTATION_VERSION = "v1"
+#   v2  punctuation re-recorded in a clear female voice, so it is audibly the reader and not the
+#       speaker. The announcements are spliced INTO these clips, so every cached one still carries
+#       the old voice — bumping the version is what actually retires them.
+DICTATION_VERSION = "v2"
 
 
 def dictation_clip_key(

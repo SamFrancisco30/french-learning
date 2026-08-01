@@ -156,6 +156,13 @@ export function useClipPlayer(
     return () => cancelAnimationFrame(raf)
   }, [playing, emit])
 
+  // Whether a variant has already been loaded for this unit. The restore below must not run on the
+  // first one, and this is what tells them apart.
+  const loadedBefore = useRef(false)
+  useEffect(() => {
+    loadedBefore.current = false
+  }, [unitId])
+
   // Fetch the variant whenever the chosen speed changes. Position is preserved as a
   // fraction of the clip: the two timelines are not linearly related, and re-deriving an
   // exact offset would need the inverse map for a benefit nobody would notice.
@@ -172,6 +179,23 @@ export function useClipPlayer(
       .then((v) => {
         if (!live) return
         setVariant(v)
+
+        // FIRST load: there is no previous position to preserve, so do not touch currentTime.
+        //
+        // It used to, and the write was not harmless. `fraction` is 0 before any audio has loaded,
+        // so the restore below set currentTime = 0 — a no-op on its own, but it also raced anything
+        // else that had set a starting position. Arriving from a dictation "source" link, which seeks
+        // to the sentence's own moment on the same `loadedmetadata` event, the two listeners fired in
+        // whichever order they happened to be registered: when this one ran second the audio jumped
+        // back to the top of the unit, which is exactly the reported symptom. Not writing at all is
+        // both correct and unraceable.
+        const first = !loadedBefore.current
+        loadedBefore.current = true
+        if (first) {
+          emit()
+          return
+        }
+
         // Restore roughly where the learner was, then resume if they were listening.
         requestAnimationFrame(() => {
           const a = ref.current

@@ -17,6 +17,13 @@ venv/
 backend/data/
 !backend/data/.gitkeep
 *.wav
+
+# ...except the spoken-punctuation clips, which are deliberately committed assets rather than
+# downloaded media. `*.wav` above was written for ingested audio and caught these too, so the
+# dictée's punctuation announcements existed only on the machine that rendered them: anywhere else
+# _load_assets raises MissingAssets and the feature is simply unavailable. They are twelve short
+# words, 660KB, and never change.
+!backend/app/media/assets/punctuation/**/*.wav
 *.m4a
 *.mp3
 *.webm

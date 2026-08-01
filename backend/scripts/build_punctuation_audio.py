@@ -11,8 +11,15 @@ way to make them but only exists on a Mac, so depending on it at runtime would m
 works in development and quietly does not in production. Rendering once and committing ~12 small
 files makes it work everywhere with no TTS installed and nothing to pay per request.
 
-The voice is deliberately a neutral one. This is the reader's voice, not the speaker's — a learner
-should hear immediately that "virgule" is an instruction and not part of the passage.
+The voice is deliberately a neutral one, and deliberately NOT the voice in the passage. This is the
+reader's voice: a learner should hear immediately that "virgule" is an instruction and not something
+the speaker said. A clear female narrator does that job, and it contrasts with the male speakers in
+most of the ingested material.
+
+The committed assets are rendered with the `openai` engine rather than macOS `say`. Not for quality
+alone — it is that `say` only offers whatever voices a given Mac happens to have installed, so the
+one word a learner hears most in a dictée would depend on whose machine last rebuilt these. The
+hosted voice is the same everywhere.
 """
 
 from __future__ import annotations
@@ -31,8 +38,21 @@ from app.media.punctuation import ASSET_ROOT, asset_name  # noqa: E402
 # 22.05 kHz mono is plenty for a single spoken word and keeps the committed assets small.
 SAMPLE_RATE = 22_050
 
-SAY_VOICE = {"fr": "Thomas"}
-OPENAI_VOICE = "alloy"
+# Fallback engine only. Female fr_FR voices vary between macOS versions; Thomas (male) was the
+# original and is kept only as a last resort for a machine with no API key.
+SAY_VOICE = {"fr": "Audrey"}
+# Chosen by measurement, not by the description in the docs. Rendering "virgule" with each candidate
+# and taking its median fundamental frequency: alloy (the original) 132Hz and nova 145Hz both sit in
+# the male range, sage 179Hz, coral 204Hz. Adult female speech is roughly 165-255Hz, so coral is the
+# only one that is unambiguously in it rather than on the boundary.
+OPENAI_VOICE = "coral"
+# gpt-4o-mini-tts takes direction as well as text. These words are instructions being read over a
+# learner's shoulder, so they want to be articulated and flat — not performed.
+OPENAI_INSTRUCTIONS = (
+    "Speak as a calm, clear female narrator dictating punctuation to a language learner. "
+    "Articulate crisply and evenly, at a measured pace, with a neutral, matter-of-fact tone. "
+    "No warmth, no rising intonation, no performance — this is an instruction, not speech."
+)
 
 
 def render_say(text: str, dest: Path, voice: str) -> None:
@@ -56,7 +76,11 @@ def render_openai(text: str, dest: Path) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         raw = Path(tmp) / "out.mp3"
         with client.audio.speech.with_streaming_response.create(
-            model="gpt-4o-mini-tts", voice=OPENAI_VOICE, input=text, response_format="mp3"
+            model="gpt-4o-mini-tts",
+            voice=OPENAI_VOICE,
+            input=text,
+            instructions=OPENAI_INSTRUCTIONS,
+            response_format="mp3",
         ) as resp:
             resp.stream_to_file(raw)
         _encode(raw, dest)

@@ -135,25 +135,40 @@ function Drill({
   const player = useClipPlayer(unit.id, unit.start_s, unit.end_s, unit.clip_url)
 
   // Arriving from a dictation source link, open at the moment that sentence was taken from rather
-  // than at the top of the unit. Waits for `loadedmetadata`, because seeking before the browser knows
-  // the duration is silently dropped — and only fires once per arrival, so it does not fight the
-  // learner if they scrub away afterwards.
-  const jumped = useRef(false)
+  // than at the top of the unit.
+  //
+  // Re-applied on EVERY media load, not once, because the element loads more than one source on the
+  // way in: the unit arrives with a fallback clip_url and the speed variant replaces it a moment
+  // later, and a new src resets currentTime to 0 and pauses. A one-shot seek landed on the fallback
+  // and was wiped when the variant took over, which is why this looked like "it just starts from the
+  // beginning".
+  //
+  // It stops re-applying once the seek has actually stuck — once playback has carried past the
+  // requested moment — so a later source change, such as choosing a slower speed, does not drag the
+  // learner back here. That is a state about the audio, so it is checked against the audio rather
+  // than against a timer.
+  const pendingSeek = useRef(false)
   useEffect(() => {
-    jumped.current = false
+    pendingSeek.current = startAt != null
   }, [unit.id, startAt])
   useEffect(() => {
     const el = player.ref.current
-    if (el == null || startAt == null || jumped.current) return
-    const go = () => {
-      if (jumped.current) return
-      jumped.current = true
-      player.seekTo(startAt)
+    if (el == null || startAt == null) return
+    const apply = () => {
+      if (pendingSeek.current) player.seekTo(startAt)
     }
-    if (el.readyState >= 1) go()
-    else el.addEventListener('loadedmetadata', go, { once: true })
-    return () => el.removeEventListener('loadedmetadata', go)
-  }, [startAt, player.src, player.ref, player.seekTo])
+    const settle = () => {
+      // toOriginal maps playback seconds back onto the video's timeline, which is what startAt is in.
+      if (player.toOriginal(el.currentTime) > startAt + 0.75) pendingSeek.current = false
+    }
+    if (el.readyState >= 1) apply()
+    el.addEventListener('loadedmetadata', apply)
+    el.addEventListener('timeupdate', settle)
+    return () => {
+      el.removeEventListener('loadedmetadata', apply)
+      el.removeEventListener('timeupdate', settle)
+    }
+  }, [startAt, unit.id, player.src, player.ref, player.seekTo, player.toOriginal])
 
   // Known expression spans, so the transcript can mark them before anything is clicked.
   const [exprSpans, setExprSpans] = useState<UnitExpressionSpan[]>([])
