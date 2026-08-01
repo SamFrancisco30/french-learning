@@ -70,8 +70,12 @@ export function ListeningPage({
     }
   }, [lessonId])
 
+  // Each depth is wrapped and KEYED, so React mounts a new node when the route changes and the
+  // enter animation actually replays. Without the key, moving from one unit to another reuses the
+  // same element and nothing animates.
   if (unitId != null && lessonId != null) {
     return (
+      <div className="route" key={`unit-${unitId}`}>
       <UnitDrill
         unitId={unitId}
         lessonTitle={lesson?.title ?? 'Lesson'}
@@ -79,11 +83,13 @@ export function ListeningPage({
         learnerKey={learnerKey}
         onExit={() => navigate(`/listening/lesson/${lessonId}`)}
       />
+      </div>
     )
   }
 
   if (lessonId != null) {
     return (
+      <div className="route" key={`lesson-${lessonId}`}>
       <LessonView
         lessonId={lessonId}
         backLabel={lesson ? topicMeta(lesson.topic).label : 'Topics'}
@@ -92,6 +98,7 @@ export function ListeningPage({
         onBack={() => navigate(`/listening/topic/${lesson?.topic || 'all'}`)}
         onOpenUnit={(uid) => navigate(`/listening/lesson/${lessonId}/unit/${uid}`)}
       />
+      </div>
     )
   }
 
@@ -110,6 +117,7 @@ export function ListeningPage({
 
   if (topic) {
     return (
+      <div className="route" key={`topic-${topic}`}>
       <LessonLibrary
         lessons={lessons}
         topic={topic}
@@ -117,11 +125,12 @@ export function ListeningPage({
         onOpen={(l) => navigate(`/listening/lesson/${l.id}`)}
         onBack={() => navigate('/listening')}
       />
+      </div>
     )
   }
 
   return (
-    <>
+    <div className="route" key="index">
       <div className="pagehead">
         <h2>Listening</h2>
         <p>
@@ -135,6 +144,6 @@ export function ListeningPage({
         language={language}
         onOpenTopic={(slug) => navigate(`/listening/topic/${slug}`)}
       />
-    </>
+    </div>
   )
 }

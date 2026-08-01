@@ -512,6 +512,68 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .crumbs button { background: none; border: none; padding: 0; color: var(--accent); }
 .crumbs button:hover { text-decoration: underline; }
 
+/* ---------------- view transitions ---------------- */
+
+/*
+ * Two animations, and the difference between them is not taste.
+ *
+ * `route-in` is OPACITY ONLY, because it wraps whole views including the listening drill, and the
+ * drill contains a sticky audio player and a `position: fixed` lookup popup. A transform on an
+ * ancestor becomes the containing block for fixed descendants, which would tear the popup off the
+ * viewport and anchor it to the drill instead. Opacity creates a stacking context but not a
+ * containing block, so it is safe to put over anything.
+ *
+ * `item-in` may use transform, because it is applied to cards in a list and nothing inside a card
+ * is positioned against the viewport.
+ */
+@keyframes route-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes item-in {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.route { animation: route-in .24s ease both; }
+
+/* Staggered, so a list assembles itself rather than appearing as a block. `--i` is set per item
+   where it is rendered; the min() caps the stagger at eight steps so a lesson with 21 units does
+   not spend two thirds of a second dealing itself out. */
+.enters {
+  animation: item-in .34s cubic-bezier(.2, .7, .3, 1) both;
+  animation-delay: calc(min(var(--i, 0), 8) * 30ms);
+}
+
+/* Opening a topic draws the tiles up and away, in order, before the route changes. Scale and lift
+   together read as being pulled off the top of the page rather than merely fading.
+
+   The stagger is NOT capped the way `.enters` is. There, the cap stops a 21-item list dealing itself
+   out for two thirds of a second; here the stagger sets how long the whole exit lasts, and capping
+   it would make the last few tiles leave simultaneously — which is the one thing "one by one" rules
+   out. Ten tiles at 26ms is 234ms of sequence plus 210ms of travel. */
+@keyframes suck-up {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateY(-28px) scale(.93); }
+}
+.topic-grid.is-leaving .topic-card {
+  animation: suck-up .21s cubic-bezier(.45, 0, .75, .25) both;
+  animation-delay: calc(var(--i, 0) * 26ms);
+  /* Nothing is clickable once the grid has committed to leaving. */
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Collapsed to nothing rather than removed. `animation: none` would also be correct — the element
+     falls back to its own computed style, which is opacity 1 — but zeroing the duration and delay
+     keeps one mechanism in play instead of two, so there is no question of which state wins. */
+  .route, .enters { animation-duration: 0s; animation-delay: 0s; }
+  /* The exit is skipped in JS as well — TopicGrid navigates immediately rather than waiting on an
+     animationend that a zero-duration animation would still fire, but this keeps the paint honest
+     if the preference changes mid-exit. */
+  .topic-grid.is-leaving .topic-card { animation-duration: 0s; animation-delay: 0s; }
+}
+
 /* ---------------- topic grid ---------------- */
 
 .topic-grid {

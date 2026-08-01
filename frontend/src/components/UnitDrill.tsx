@@ -219,6 +219,11 @@ function Drill({
         toOriginal={player.toOriginal}
         seekTo={player.seekTo}
       >
+      {/* Fades the drill in when the unit's data lands, so the audio page arrives rather than
+          replacing "Loading unit…" in a single frame. Opacity only — see the note on `route-in`:
+          this element is an ancestor of both the sticky player and the fixed lookup popup, and a
+          transform here would re-anchor that popup to this div instead of the viewport. */}
+      <div className="route">
       {error && <div className="error">{error}</div>}
 
       <div className="crumbs">
@@ -402,6 +407,7 @@ function Drill({
             Loading…
           </div>
         ))}
+      </div>
       </FollowProvider>
     </LookupProvider>
   )

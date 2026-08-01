@@ -96,8 +96,13 @@ export function LessonLibrary({
         </div>
       )}
 
-      {shown.map((l) => (
-        <div className="card clickable" key={l.id} onClick={() => onOpen(l)}>
+      {shown.map((l, i) => (
+        <div
+          className="card clickable enters"
+          style={{ ['--i' as string]: i }}
+          key={l.id}
+          onClick={() => onOpen(l)}
+        >
           <h3>{l.title}</h3>
           <div className="sub">
             {l.source.channel ?? 'unknown channel'}
@@ -166,8 +171,13 @@ export function LessonView({
         </div>
       </div>
 
-      {lesson.units.map((u) => (
-        <div className="card clickable" key={u.id} onClick={() => onOpenUnit(u.id)}>
+      {lesson.units.map((u, i) => (
+        <div
+          className="card clickable enters"
+          style={{ ['--i' as string]: i }}
+          key={u.id}
+          onClick={() => onOpenUnit(u.id)}
+        >
           <h3>
             Unit {u.idx + 1} · {fmt(u.start_s)}–{fmt(u.end_s)}
           </h3>

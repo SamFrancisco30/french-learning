@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { LessonSummary } from '../types'
 import { ALL, TOPICS, TopicArt, hasPhoto, topicMeta } from '../topics'
 
@@ -54,17 +54,66 @@ export function TopicGrid({
 
   const totalUnits = lessons.reduce((n, l) => n + l.unit_count, 0)
 
+  // Opening a topic plays the tiles out before the route changes: they lift and fade one after the
+  // other, and the page scrolls back to the top while they go, so the lesson list is not entered
+  // half way down. `leaving` holds the slug that has been asked for but not yet navigated to.
+  const [leaving, setLeaving] = useState<string | null>(null)
+  const grid = useRef<HTMLDivElement | null>(null)
+
+  const open = (slug: string) => {
+    if (leaving) return // a second click during the exit would queue a second navigation
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      onOpenTopic(slug)
+      return
+    }
+    setLeaving(slug)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  // Navigate when the animation is actually over, rather than after a duration copied from the
+  // stylesheet. The last tile carries the largest stagger delay, so its `animationend` is the end
+  // of the sequence — and reading it from the DOM means the timing cannot drift out of step with
+  // the CSS. The timeout is only a backstop for the case where no animation runs at all and the
+  // event therefore never fires.
+  useEffect(() => {
+    if (!leaving) return
+    const tiles = grid.current?.querySelectorAll<HTMLElement>('.topic-card')
+    const last = tiles?.[tiles.length - 1]
+    let done = false
+    const go = () => {
+      if (done) return
+      done = true
+      onOpenTopic(leaving)
+    }
+    last?.addEventListener('animationend', go, { once: true })
+
+    // The backstop covers the case where no animation runs and `animationend` never arrives — a
+    // background tab suspends them, and some environments disable them outright. Its budget is read
+    // off the last tile's own computed style rather than hardcoded, so it stays just past the real
+    // end of the sequence however many topics there are. A fixed number would either cut a longer
+    // grid's exit short or make a shorter one sit waiting.
+    const secs = (v: string) => (v.endsWith('ms') ? parseFloat(v) : parseFloat(v) * 1000) || 0
+    const style = last && getComputedStyle(last)
+    const budget = style ? secs(style.animationDelay) + secs(style.animationDuration) + 120 : 500
+    const backstop = window.setTimeout(go, budget)
+    return () => {
+      last?.removeEventListener('animationend', go)
+      window.clearTimeout(backstop)
+    }
+  }, [leaving, onOpenTopic])
+
   return (
-    <div className="topic-grid">
-      {groups.map(({ slug, lessons: group }) => {
+    <div className={`topic-grid ${leaving ? 'is-leaving' : ''}`} ref={grid}>
+      {groups.map(({ slug, lessons: group }, i) => {
         const meta = topicMeta(slug)
         const units = group.reduce((n, l) => n + l.unit_count, 0)
         const range = levelRange(group)
         return (
           <button
-            className={`topic-card ${hasPhoto(slug) ? 'has-photo' : ''}`}
+            className={`topic-card enters ${hasPhoto(slug) ? 'has-photo' : ''}`}
+            style={{ ['--i' as string]: i }}
             key={slug}
-            onClick={() => onOpenTopic(slug)}
+            onClick={() => open(slug)}
             aria-label={`${meta.label} — ${group.length} lessons`}
           >
             <span className="topic-art" aria-hidden="true">
@@ -90,8 +139,9 @@ export function TopicGrid({
 
       {groups.length > 1 && (
         <button
-          className={`topic-card wide ${hasPhoto(ALL.slug) ? 'has-photo' : ''}`}
-          onClick={() => onOpenTopic(ALL.slug)}
+          className={`topic-card wide enters ${hasPhoto(ALL.slug) ? 'has-photo' : ''}`}
+          style={{ ['--i' as string]: groups.length }}
+          onClick={() => open(ALL.slug)}
           aria-label={`${ALL.label} — ${lessons.length} lessons`}
         >
             <span className="topic-art" aria-hidden="true">

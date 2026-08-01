@@ -14,7 +14,7 @@ import type { Language } from './types'
 
 export default function App() {
   const { learnerKey } = useIdentity()
-  const { segments, navigate } = useHashRoute()
+  const { path, segments, navigate } = useHashRoute()
   const mastheadRef = useRef<HTMLElement | null>(null)
   const [languages, setLanguages] = useState<Language[]>([])
   const [language, setLanguage] = useState('fr')
@@ -22,6 +22,17 @@ export default function App() {
   useEffect(() => {
     api.languages().then(setLanguages).catch(() => undefined)
   }, [])
+
+  // Every view opens at its own top. Without this the browser keeps the outgoing page's scroll
+  // offset, so choosing a topic from half way down the grid dropped you half way down the lesson
+  // list — past the heading, and on a short list past the content entirely.
+  //
+  // Instant, not smooth: the smooth scroll belongs to the OUTGOING page, where it runs alongside the
+  // tiles lifting away and has something to animate over. By the time this fires the content has
+  // already been replaced, so animating the scroll would just slide unfamiliar content around.
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'auto' })
+  }, [path])
 
   // Publish the masthead's real height so the sticky audio player sits flush beneath it.
   // Measured every render via offsetHeight (border-box) rather than with a ResizeObserver:
