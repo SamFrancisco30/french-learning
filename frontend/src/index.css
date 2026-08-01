@@ -130,15 +130,27 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 /* ---------------- saved-words star ---------------- */
 
 .utilitytab.starbtn {
-  /* Square-ish, because the label is gone and 5px 10px around a 20px icon reads as lopsided. */
-  padding: 5px 7px;
+  /* No box. The border, fill and rounded corners that .utilitytab draws for a text chip are chrome
+     around a mark that already has its own silhouette — the star reads as a button without being
+     put in a rectangle. What replaces the box as feedback is the star itself: colour on hover, a
+     tilt on hover, and a filled body on the page it leads to.
+
+     It sits last, past Speaking, so the right margin .utilitytab carries is zeroed and only the
+     bottom one is kept — and that one is alignment rather than spacing, lifting the mark onto the
+     same line as the skill-tab labels, which sit above their own box centre because of the space
+     their underline needs. Separation from Speaking comes from the row's own 18px gap. */
+  padding: 2px;
+  margin: 1px 0 7px;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
   line-height: 0;
   color: var(--text-faint);
 }
-.utilitytab.starbtn:hover { color: var(--accent); }
-.utilitytab.starbtn.on { color: var(--accent); }
+.utilitytab.starbtn:hover { color: var(--accent); background: none; }
+.utilitytab.starbtn.on { color: var(--accent); background: none; border: 0; font-weight: inherit; }
 
-.star-mark { display: block; width: 20px; height: 20px; overflow: visible; }
+.star-mark { display: block; width: 27px; height: 27px; overflow: visible; }
 
 .star-body {
   fill: none;
@@ -187,32 +199,47 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .langpick { position: relative; display: flex; flex: none; }
 
 .langpick-trigger {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 3px 5px 3px 4px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 2px;
+  /* No box here either — the flag is a picture with four hard edges of its own and does not need a
+     second rectangle drawn around it. The caret is what says "this opens", and the caret turning
+     over is what says "it is open", which is a truer signal than a changed background anyway. */
+  background: none;
+  border: 0;
   /* The flag is the only thing setting this button's height, and an inline svg would otherwise
      reserve room for a text baseline underneath it. */
   line-height: 0;
 }
-.langpick-trigger:hover { border-color: var(--border-hover); }
-.langpick-trigger[aria-expanded='true'] {
-  border-color: var(--accent-border); background: var(--accent-soft);
+.langpick-caret { transition: transform .18s ease, color .18s; }
+.langpick-trigger:hover .langpick-caret { color: var(--text-dim); }
+.langpick-trigger[aria-expanded='true'] .langpick-caret {
+  transform: rotate(180deg); color: var(--accent);
 }
 
 .flag {
   display: block;
-  width: 24px;
-  /* aspect-ratio rather than a second length: all three flags are 3:2, and stating the ratio keeps
-     them exact instead of rounding a height to 16px and squashing the bands. */
+  /* 27 x 18, not 24 x 16, and the numbers matter: both divide by three, so France's vertical thirds
+     are exactly 9px and Russia's horizontal thirds exactly 6px. A width of 24 makes France's bands
+     8px each — fine — but 16px of height gives Russia thirds of 5.33px, and a band boundary landing
+     mid-pixel is antialiased into a soft seam. That softness is what reads as low resolution in an
+     icon this size, not the number of pixels. */
+  width: 27px;
   aspect-ratio: 3 / 2;
   border-radius: 2px;
-  /* France and Russia both have a white band that runs to the edge. Against a white surface the
-     flag would look clipped without an outline of its own. */
-  box-shadow: 0 0 0 1px rgba(24, 33, 46, .18);
+  /* Sizing the flag to whole pixels is only half of it: the flag's own left edge lands wherever the
+     brand text ends, which is fractional, so every band boundary inherits that fraction and gets
+     antialiased anyway. crispEdges snaps the band edges onto the device pixel grid regardless of
+     where the flag sits. It is applied to the RECTS only — the same property on a star polygon
+     would strip its antialiasing and leave the points jagged. */
 }
-.langpick-caret { width: 8px; height: 5px; color: var(--text-faint); flex: none; }
+.flag rect { shape-rendering: crispEdges; }
+.flag polygon, .flag text { shape-rendering: geometricPrecision;
+  /* Not a box around the control — the flag's own edge. Russia's top band and France's centre band
+     are white, and on a near-white masthead the flag would otherwise appear to be missing them.
+     Kept as faint as it can be while still closing the shape. */
+  box-shadow: inset 0 0 0 1px rgba(24, 33, 46, .13);
+}
+.langpick-caret { width: 9px; height: 6px; color: var(--text-faint); flex: none; }
 
 .langpick-menu {
   position: absolute; top: calc(100% + 7px); left: 0; z-index: 40;
@@ -244,12 +271,19 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .skillnav {
   display: flex;
   gap: 2px;
-  /* Takes whatever is left after the brand and My Words, and spreads the tabs across it, so the
-     row reads as one bar rather than a cluster on each side. `min-width: 0` because a nowrap flex
-     item will otherwise refuse to shrink below its content and push the row wider than the page. */
+  /* Claims the space between the brand and the star, and puts the tabs at the RIGHT end of it, so
+     the bar reads brand-left / nav-right — the conventional header shape. It used to spread them
+     across the full width with space-between, which at 1440px put 109px between each tab and made
+     five related items read as five unrelated ones.
+
+     The star is not part of this. It sits in its own flex item past this one, so right-aligning the
+     tabs moves them up against the star without moving the star itself.
+
+     `min-width: 0` because a nowrap flex item will otherwise refuse to shrink below its content and
+     push the row wider than the page. */
   flex: 1 1 auto;
   min-width: 0;
-  justify-content: space-between;
+  justify-content: flex-end;
   flex-wrap: nowrap;
   white-space: nowrap;
 }
@@ -1103,7 +1137,17 @@ select:focus, textarea:focus { outline: none; border-color: var(--accent); backg
      and space-between is dropped with it — spreading four visible tabs across a scrolling row puts
      gaps in the middle of a list you are swiping through. */
   .masthead-inner { padding-bottom: 0; flex-wrap: wrap; }
+  /* The star sits after the tabs in the DOM so that on a desktop, where it is the last thing on the
+     row, tab order matches what you see. Here the tabs claim a whole row of their own, which would
+     push the star onto a third one — 166px of masthead on a 375px screen to show one icon. So on a
+     phone only, it is ordered back up beside the brand.
+     The cost is that a keyboard user on a narrow screen reaches the tabs before the star while
+     seeing it first. That is the lesser of the two, and it is the reason the desktop version does
+     this with DOM order rather than with `order` everywhere. */
+  .brand { order: 1; }
+  .utilitynav { order: 2; }
   .skillnav {
+    order: 3;
     flex: 1 1 100%;
     justify-content: flex-start;
     overflow-x: auto;

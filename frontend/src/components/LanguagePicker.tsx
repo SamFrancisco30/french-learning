@@ -10,10 +10,18 @@ import { starPoints } from './icons'
  * platform ships flag glyphs: on Windows they fall back to the two letters, so "🇫🇷" reads as a
  * boxed "FR". Drawing them costs a few lines and looks the same everywhere.
  *
- * Proportions and colours follow each flag's own specification, including China's star geometry —
- * at 20px wide the small stars are barely two pixels across, but placing them by the official grid
- * costs nothing over guessing and means the shape is right if it is ever drawn larger.
+ * Proportions and colours follow each flag's own specification, including China's star geometry.
+ *
+ * The coordinate space is 900x600 rather than a tidy 30x20, and that is what makes the bands look
+ * sharp instead of smeared. Russia is three equal horizontal thirds; at a height of 20 those land
+ * on 6.67 and 13.33, and a band edge on a fractional coordinate gets antialiased into a soft grey
+ * seam. 600 divides by three exactly, so every edge is a whole number. The rendered size is chosen
+ * to match: 27 x 18 css px means France's vertical thirds are exactly 9px and Russia's horizontal
+ * thirds exactly 6px, whole pixels at 1x and 2x alike.
  */
+
+/** The official construction grid is 30 x 20; everything below is that grid at 30x. */
+const U = 30
 
 /** China's four small stars each point at the centre of the large one, per the flag's spec. */
 const CN_SMALL: Array<[number, number]> = [
@@ -25,34 +33,39 @@ const CN_SMALL: Array<[number, number]> = [
 
 function Flag({ code }: { code: string }) {
   // 3:2, the ratio all three of these flags share.
-  const box = { viewBox: '0 0 30 20', className: 'flag', role: 'presentation' as const }
+  const box = { viewBox: '0 0 900 600', className: 'flag', role: 'presentation' as const }
   if (code === 'fr') {
     return (
       <svg {...box}>
-        <rect width="10" height="20" fill="#002395" />
-        <rect x="10" width="10" height="20" fill="#fff" />
-        <rect x="20" width="10" height="20" fill="#ED2939" />
+        <rect width="300" height="600" fill="#002395" />
+        <rect x="300" width="300" height="600" fill="#fff" />
+        <rect x="600" width="300" height="600" fill="#ED2939" />
       </svg>
     )
   }
   if (code === 'ru') {
     return (
       <svg {...box}>
-        <rect width="30" height="6.67" fill="#fff" />
-        <rect y="6.67" width="30" height="6.67" fill="#0039A6" />
-        <rect y="13.33" width="30" height="6.67" fill="#D52B1E" />
+        <rect width="900" height="200" fill="#fff" />
+        <rect y="200" width="900" height="200" fill="#0039A6" />
+        <rect y="400" width="900" height="200" fill="#D52B1E" />
       </svg>
     )
   }
   if (code === 'zh') {
     return (
       <svg {...box}>
-        <rect width="30" height="20" fill="#DE2910" />
-        <polygon points={starPoints(5, 5, 3)} fill="#FFDE00" />
+        <rect width="900" height="600" fill="#DE2910" />
+        <polygon points={starPoints(5 * U, 5 * U, 3 * U)} fill="#FFDE00" />
         {CN_SMALL.map(([cx, cy]) => (
           <polygon
             key={`${cx}-${cy}`}
-            points={starPoints(cx, cy, 1, (Math.atan2(5 - cy, 5 - cx) * 180) / Math.PI + 90)}
+            points={starPoints(
+              cx * U,
+              cy * U,
+              1 * U,
+              (Math.atan2(5 - cy, 5 - cx) * 180) / Math.PI + 90,
+            )}
             fill="#FFDE00"
           />
         ))}
@@ -62,8 +75,8 @@ function Flag({ code }: { code: string }) {
   // An unknown language still gets a chip of the right size, showing its code.
   return (
     <svg {...box}>
-      <rect width="30" height="20" fill="var(--bg-sunken)" />
-      <text x="15" y="14" textAnchor="middle" fontSize="11" fill="var(--text-dim)">
+      <rect width="900" height="600" fill="var(--bg-sunken)" />
+      <text x="450" y="420" textAnchor="middle" fontSize="330" fill="var(--text-dim)">
         {code}
       </text>
     </svg>

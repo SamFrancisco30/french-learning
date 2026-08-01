@@ -76,19 +76,6 @@ export default function App() {
             />
           </div>
 
-          <nav className="utilitynav" aria-label="Utilities">
-            {/* Icon-only, so the name has to come from aria-label — there is no text to read, and
-                "My Words" is the whole meaning of the control. */}
-            <button
-              className={`utilitytab starbtn ${isVocabulary ? 'on' : ''}`}
-              onClick={() => navigate('/vocabulary')}
-              aria-current={isVocabulary ? 'page' : undefined}
-              aria-label="My Words"
-              title="My Words — the vocabulary you have saved"
-            >
-              <StarMark />
-            </button>
-          </nav>
           <nav className="skillnav" aria-label="Skills">
             {SKILLS.map((s) => (
               <button
@@ -109,6 +96,22 @@ export default function App() {
                 <span className="native">{s.native}</span>
               </button>
             ))}
+          </nav>
+
+          {/* Last, and last in the DOM on purpose. Moving it here with CSS `order` would leave a
+              keyboard user tabbing to the star before the skill tabs while seeing it after them. */}
+          <nav className="utilitynav" aria-label="Utilities">
+            {/* Icon-only, so the name has to come from aria-label — there is no text to read, and
+                "My Words" is the whole meaning of the control. */}
+            <button
+              className={`utilitytab starbtn ${isVocabulary ? 'on' : ''}`}
+              onClick={() => navigate('/vocabulary')}
+              aria-current={isVocabulary ? 'page' : undefined}
+              aria-label="My Words"
+              title="My Words — the vocabulary you have saved"
+            >
+              <StarMark />
+            </button>
           </nav>
         </div>
       </header>
