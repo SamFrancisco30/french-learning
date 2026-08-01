@@ -50,6 +50,51 @@
   --violet-border: #d8d1ea;
   --violet-ink: #57499a;
 
+  /* Reading measure. The shell is 1240 so the topic grid and the panels can use the screen, but a
+     line of French is not improved by being 1240 wide — at that width the cloze passage ran 146
+     characters and the dictation field 151, against a typographic comfort range that tops out around
+     90. 880 is deliberately the width these blocks already had when the shell was 940, so widening
+     the frame costs the text nothing: same measure, less dead page around it. */
+  --prose: 880px;
+
+  /* Glass. Shared because two controls wear it — the speed thumb and the play button — and one of
+     them is a ::-webkit-slider-thumb, which cannot take a class. Tokens are the only way those two
+     stay identical. Translucency is the whole point: whatever is behind shows through and tints it. */
+  --glass-blur: blur(3px) saturate(160%);
+  --glass-rim: rgba(255, 255, 255, .85);
+  /* White light across the glass, and the piece that actually sells it. Translucency alone only reads
+     as glass when there is something behind to refract — true of the speed thumb, which has blocks
+     travelling under it, and not true of the play button on its plain white card, where a see-through
+     fill is indistinguishable from a pale flat one. Beams are what a curved transparent body does to
+     light regardless of what is behind it, so they work on both.
+     
+     Two of them, at the same angle: one broad across the upper body and one narrow below it. A single
+     highlight reads as a gloss coating; two read as light passing through a solid transparent object.
+     Both are pure white — no tint, so the glass has no colour of its own and takes whatever is
+     behind it. */
+  --glass-beams:
+    linear-gradient(
+      148deg,
+      rgba(255, 255, 255, .95) 0%,
+      rgba(255, 255, 255, .28) 30%,
+      rgba(255, 255, 255, 0) 48%
+    ),
+    linear-gradient(
+      148deg,
+      rgba(255, 255, 255, 0) 54%,
+      rgba(255, 255, 255, .5) 66%,
+      rgba(255, 255, 255, 0) 78%
+    );
+  /* Lift, a hard rim light along the top edge, and a darker inner edge along the bottom — the three
+     together read as thickness rather than as a flat disc. */
+  --glass-shadow:
+    0 2px 6px rgba(24, 33, 46, .18),
+    inset 0 1px 1.5px rgba(255, 255, 255, .95),
+    inset 0 -2px 3px rgba(24, 33, 46, .14);
+  /* The ellipse the two share. Taller than wide, so both read as something to grab. */
+  --glass-w: 15px;
+  --glass-h: 21px;
+
   --radius: 10px;
   --radius-sm: 7px;
   --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
@@ -78,22 +123,20 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 /* ---------------- shell + nav ---------------- */
 
-.shell { max-width: 940px; margin: 0 auto; padding: 0 16px 80px; }
+/* One width for every page. 1240 is not a round number, it is the width at which the topic grid
+   fits four columns at the same 293px tile the three-column layout used: 4 x 293 + 3 x 12 gaps + 32
+   padding. The grid is what set it, and everything else now follows so the app does not change shape
+   as you move through it — at 940 the reading, dictation and drill pages were leaving 250px of dead
+   page either side while the listening index left 100.
 
-/* The listening index only. A grid of photographs earns width in a way a French passage does not,
-   and at 940px it was leaving 394px of empty page either side of it on a 1728px screen — most of
-   the window unused to show three tiles.
+   The tile cannot be made narrower to reach four columns in less width: below 268px the blurb wraps
+   to a third line, the footer grows 145px -> 192px, and the photograph is crushed from 115px to
+   68px. Measured, and the same trap the card height was originally tuned around.
 
-   1240 is not a round number, it is the width at which four columns come out the same size as the
-   three used to be: 4 x 293 + 3 x 12 gaps + 32 padding. So the tile design is untouched and only
-   the count changes, which matters because the tile cannot be made narrower — below 268px the
-   blurb wraps to a third line, the footer grows 145px -> 192px and the photograph is crushed from
-   115px to 68px. Measured, not guessed; it is the same trap the card height was tuned around.
-
-   No media query is needed for the steps down. The grid is auto-fit over minmax(268px, 1fr), so
-   the column count falls out of the width available: four from 1140px of viewport, three from 860,
-   two from 580, one below that. */
-.shell.shell-wide { max-width: 1240px; }
+   The grid needs no media query for the steps down — it is auto-fit over minmax(268px, 1fr), so the
+   column count falls out of the width available: four from 1140px of viewport, three from 860, two
+   from 580, one below that. */
+.shell { max-width: 1240px; margin: 0 auto; padding: 0 16px 80px; }
 
 .masthead {
   position: sticky; top: 0; z-index: 30;
@@ -109,14 +152,13 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .masthead-inner {
   /* The shell's content width, so the nav sits directly above the content it belongs to rather than
      ending short of it. Follows shell-wide for the same reason. */
-  max-width: 908px; margin: 0 auto;
+  max-width: 1208px; margin: 0 auto;
   display: flex; align-items: center; gap: 18px;
   /* ONE line. This used to wrap, which put the five skill tabs on a row of their own and made the
      bar 103px tall. What made it wrap was the brand carrying the language name AND the skill name
      AND three language-code buttons beside it — about 230px that the flag now does in 44px. */
   flex-wrap: nowrap; padding: 14px 0 0;
 }
-.shell.shell-wide .masthead-inner { max-width: 1208px; }
 /* The bottom margin is alignment, not spacing. `align-items: center` lines up the flex items' BOXES,
    but a skill tab carries 13px of bottom padding to leave room for its underline, so its text sits
    about 3px above its box centre. Six pixels of bottom margin here shifts the brand up by half that
@@ -334,7 +376,10 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 /* ---------------- My Words utility ---------------- */
 
-.wordbook-page { max-width: 820px; margin: 0 auto; }
+/* No cap. This is a list of saved words, not running prose — its own grid gives the gloss column a
+   sane share of whatever width it gets, and an 820px column inside a 1240px shell was the same
+   stranded-margin problem one level down. */
+.wordbook-page { margin: 0 auto; }
 .wordbook-pagehead {
   display: flex;
   justify-content: space-between;
@@ -753,17 +798,96 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 }
 .player-row { display: flex; align-items: center; gap: 12px; }
 
-.play-btn {
-  width: 40px; height: 40px; flex: 0 0 40px;
-  border-radius: 50%; border: none;
-  background: var(--accent); color: var(--text-onaccent);
-  font-size: 14px; display: grid; place-items: center;
-  box-shadow: var(--shadow-sm);
+/* Pushed to the far end, and allowed to disappear before anything interactive does: on a narrow
+   frame the numbers are the one part of this row that is nice-to-know rather than needed. */
+.player-meta {
+  margin-left: auto;
+  font-size: 12px; color: var(--text-faint);
+  white-space: nowrap; text-align: right;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
 }
-.play-btn:hover { background: var(--accent-hover); }
 
+/*
+ * The play button wears the speed thumb's glass, so the two controls at either end of this row read
+ * as the same object. Same ellipse, same rim, same inner highlights.
+ *
+ * The tint is accent rather than white, because glass only shows as glass when something shows
+ * through it. The thumb sits over the animated blue blocks and takes its colour from them; this sits
+ * on a white card with nothing behind, so a white translucent fill would be invisible. A blue-tinted
+ * body keeps it the primary action AND keeps it transparent — the card still reads through it.
+ *
+ * 24 x 32 rather than the thumb's own 15 x 21: this is a button, and 21px tall is under the 24px
+ * minimum target size, which on the control that starts the audio is not a trade worth making. Same
+ * ratio, so it still looks like the thumb's sibling.
+ */
+.play-btn {
+  width: 24px; height: 32px; flex: 0 0 24px;
+  border-radius: 50%;
+  /* Clear glass: white beams over a barely-there neutral body. No accent tint — the blue made it a
+     blue button that happened to be shiny, where the point is a colourless object with light on it.
+     What defines its edge instead is the rim, the drop shadow and the beams. */
+  /* Only the body here. The beams move to ::after so they can be painted OVER the glyph — see below.
+     Text always paints above its own element's background, so as long as the beams were part of this
+     background the mark sat in front of them, which is the opposite of being behind glass. */
+  position: relative;
+  background: rgba(255, 255, 255, .16);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  /* No border. A drawn outline reads as a ring around the glass rather than as the glass's own edge;
+     what shapes it instead is the inset rim light along the top and the lift underneath, both of
+     which come from the shadow stack. The speed thumb keeps its rim because it sits over a busy
+     travelling grid and would otherwise dissolve into it — this sits on a plain card and does not. */
+  border: 0;
+  box-shadow: var(--glass-shadow);
+  /* Neutral, for the same reason as the body. Near-black on clear glass over a white card is the
+     strongest contrast available without reintroducing a colour. */
+  color: var(--text);
+  font-size: 11px; line-height: 1;
+  display: grid; place-items: center;
+  transition: background .16s ease, box-shadow .16s ease;
+}
+/*
+ * The mark, seen THROUGH the body rather than printed on it.
+ *
+ * Two things do that. It is blurred, because glass does not transmit a hard edge — a crisp black
+ * triangle is a sticker on the front, and half a pixel at this size is the difference. And it is
+ * softened in weight, because anything viewed through a translucent body loses contrast against it.
+ *
+ * The layer order is the other half: the beams sit on ::after, above this, so light crosses the mark
+ * instead of stopping at it.
+ */
+.play-glyph {
+  position: relative;
+  z-index: 0;
+  color: var(--text-dim);
+  opacity: .72;
+  filter: blur(.5px);
+  /* The pause bars are a heavier glyph than the triangle and read as two solid slabs at this size,
+     so they get a little air between them. */
+  letter-spacing: .5px;
+}
+
+.play-btn::after {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background: var(--glass-beams);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Hover and press change only how much light the glass is holding. No added ring: an outer glow on
+   press reads as a second border appearing, which is the one thing the borderless body is avoiding.
+   Keyboard focus still gets the app's focus ring from the global :focus-visible rule — that fires on
+   keyboard only, so it never appears on a click. */
+.play-btn:hover { background: rgba(255, 255, 255, .34); }
+.play-btn:active { background: rgba(255, 255, 255, .5); }
+
+/* Shrinks from a comfortable 340px but does not stretch, so width freed on a 1208px frame goes to
+   the speed control and the meta rather than into a progress bar a metre long — a 1:09 clip does not
+   need one. */
 .scrub {
-  position: relative; flex: 1; height: 7px;
+  position: relative; flex: 0 1 340px; height: 7px;
   background: var(--bg-sunken); border: 1px solid var(--border);
   border-radius: 999px; cursor: pointer; overflow: hidden;
 }
@@ -771,7 +895,7 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 .time {
   font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums;
-  color: var(--text-dim); min-width: 84px; text-align: right;
+  color: var(--text-dim); min-width: 84px; text-align: right; flex: none;
 }
 
 .rates { display: flex; gap: 3px; }
@@ -785,7 +909,6 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent-ink);
 }
 
-.player-hint { margin-top: 9px; font-size: 12px; color: var(--text-faint); }
 
 /* ---------------- exercises ---------------- */
 
@@ -807,9 +930,13 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   font-size: 12px; color: var(--text-dim); white-space: nowrap;
 }
 .replay:hover { border-color: var(--accent); color: var(--accent); }
+/* Square for a single glyph, so it does not read as a truncated text button. */
+.replay.icon { padding: 3px 8px; font-size: 14px; line-height: 1.1; flex: none; }
 
 /* cloze */
-.cloze-text { font-size: 16px; line-height: 2.5; }
+/* Centred rather than left-aligned in the wider card: symmetric space either side reads as a
+   deliberate column, where 330px of white on one side only reads as a bug. */
+.cloze-text { font-size: 16px; line-height: 2.5; max-width: var(--prose); margin-inline: auto; }
 .cloze-input {
   display: inline-block; vertical-align: baseline;
   background: var(--bg-input);
@@ -916,6 +1043,10 @@ select:focus, textarea:focus { outline: none; border-color: var(--accent); backg
 
 /* transcript */
 .transcript {
+  /* The transcript is its own panel, so the cap narrows the panel and not just the text inside it.
+     That leaves it inset from the player above, which is the intended reading: the top of the page
+     is controls and spans the frame, this is the passage and sits in a column. */
+  max-width: var(--prose); margin-left: auto; margin-right: auto;
   margin-top: 8px; padding: 15px 17px;
   background: var(--bg-raised); border: 1px solid var(--border);
   border-radius: var(--radius); font-size: 15px; line-height: 1.85;
@@ -1022,9 +1153,11 @@ select:focus, textarea:focus { outline: none; border-color: var(--accent); backg
 
 .reading-input { display: flex; flex-direction: column; gap: 10px; }
 .reading-input textarea {
+  max-width: var(--prose);
   min-height: 150px; resize: vertical; line-height: 1.65; font-size: 14.5px;
 }
 .reading-passage {
+  max-width: var(--prose); margin-inline: auto;
   font-size: 17px; line-height: 2.0;
   padding: 20px 22px; background: var(--bg-raised);
   border: 1px solid var(--border); border-radius: var(--radius);
@@ -1358,6 +1491,7 @@ kbd {
 
 .dict-input {
   width: 100%;
+  max-width: var(--prose);
   padding: 12px 14px;
   background: var(--bg-input);
   border: 1px solid var(--border-strong);
@@ -1371,6 +1505,7 @@ kbd {
 /* The marked-up reference. Reading your own errors in place is what makes the correction stick,
    so the whole passage is rendered with each word carrying its verdict. */
 .dict-diff {
+  max-width: var(--prose);
   margin: 10px 0 12px; padding: 12px 14px;
   background: var(--bg-raised); border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1412,21 +1547,56 @@ kbd {
    the left stop stretches every word and inserts seconds of pause, the right stop is the
    untouched recording. */
 
-.speed { --pos: 100%; margin: 4px 0 2px; min-width: 210px; }
+.speed { --pos: 100%; margin: 4px 0 2px; min-width: 210px; position: relative; }
 
-.speed-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.speed-title {
-  font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em;
-  color: var(--text-faint); font-weight: 700;
-}
-.speed-now { display: flex; align-items: baseline; gap: 6px; }
-.speed-now b { font-size: 13.5px; font-weight: 650; color: var(--accent-ink); }
 .speed-x {
   font-family: var(--mono); font-size: 11px; color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
 
 .speed-rail { position: relative; height: 28px; margin-top: 5px; }
+
+/* The level, its multiplier and what it does to the audio — raised on hover, focus, change or while
+   a variant is being prepared, and otherwise absent. See SpeedSlider for why it is always in the DOM
+   rather than conditionally rendered.
+
+   Positioned above the rail, not below: below is where the transcript and the exercises are, and a
+   panel that opens downward over the passage covers the thing the control is for. */
+.speed-pop {
+  /* Centred on the slider rather than anchored to its left edge. The slider sits near the right of
+     the transport but near the left on the dictation page, so a popup that only ever grows one way
+     runs off the edge on one of them. Growing equally in both directions fits either. */
+  position: absolute; bottom: calc(100% + 6px); left: 50%; z-index: 25;
+  display: flex; align-items: baseline; gap: 7px;
+  /* max-content, or the shrink-to-fit width of an absolutely positioned box is capped by its
+     containing block — the 190px slider — so max-width: 340px never applied and the detail line
+     wrapped to three cramped rows instead of using the space it was allowed. */
+  width: max-content; max-width: 340px;
+  padding: 6px 10px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  font-size: 12px; line-height: 1.45;
+  white-space: nowrap;
+  /* Out of the way when closed in every sense: invisible, unhittable, and not a tab stop or a
+     search-in-page hit. visibility rather than display, so the fade has something to animate. */
+  opacity: 0; visibility: hidden;
+  /* The X half is the centring, the Y half is the animation — both live in one transform, so the
+     rise cannot cancel the centring. */
+  transform: translate(-50%, 3px);
+  transition: opacity .14s ease, transform .14s ease, visibility .14s;
+  pointer-events: none;
+}
+.speed.is-open .speed-pop { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
+.speed-pop b { font-size: 13px; font-weight: 650; color: var(--accent-ink); }
+/* The detail line is the only part that can be long — "words at 78%, 0.32s added at each of 182
+   pauses" — so it is the only part allowed to wrap. */
+.speed-pop-note { color: var(--text-dim); white-space: normal; }
+
+@media (prefers-reduced-motion: reduce) {
+  .speed-pop { transition: none; }
+}
 
 .speed-track {
   position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
@@ -1497,34 +1667,60 @@ kbd {
 .speed-input::-webkit-slider-runnable-track { height: 100%; background: none; }
 .speed-input::-moz-range-track { height: 100%; background: none; }
 
+/*
+ * THE THUMB: an ellipse, and made of glass rather than painted white.
+ *
+ * Glass means the blocks behind it show THROUGH it. It used to be an opaque #fff disc, so the
+ * travelling sparkles vanished under it and reappeared on the far side — the one object on the track
+ * that the animation could not touch. A translucent fill lets each block tint it blue as it passes,
+ * which is the whole effect: the handle takes its colour from whatever is underneath at that moment.
+ *
+ * The pieces that make it read as glass rather than as a hole:
+ *   - a fill light enough to see through, but not so light the handle loses its edge against a pale
+ *     stretch of track;
+ *   - backdrop-filter, so what shows through is diffused rather than merely dimmed. Where it is
+ *     unsupported the fill alone still tints, which is why the tint does not depend on it;
+ *   - a bright inner rim along the top and a darker one along the bottom, which is how a curved
+ *     transparent body actually catches light;
+ *   - a soft drop shadow, so it sits above the track instead of in it.
+ *
+ * Taller than wide, so it reads as something to grab rather than as a dot, and the ellipse keeps it
+ * from looking like the round scrubber head on the same row.
+ */
 .speed-input::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
-  width: 22px; height: 22px; border-radius: 50%;
-  background: #fff;
-  border: 1px solid var(--border-strong);
-  box-shadow: 0 1px 3px rgba(24, 33, 46, .22), 0 0 0 0 var(--accent-soft);
-  transition: box-shadow .16s ease, transform .12s ease;
+  width: var(--glass-w); height: var(--glass-h); border-radius: 50%;
+  /* Base kept low to pay for the beams' brightness — the blocks travelling underneath have to stay
+     visible through it, which is this control's entire glass effect. */
+  background: var(--glass-beams), rgba(255, 255, 255, .2);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-rim);
+  box-shadow: var(--glass-shadow);
+  transition: box-shadow .16s ease, transform .12s ease, background .16s ease;
 }
 .speed-input::-moz-range-thumb {
-  width: 22px; height: 22px; border-radius: 50%;
-  background: #fff;
-  border: 1px solid var(--border-strong);
-  box-shadow: 0 1px 3px rgba(24, 33, 46, .22);
-  transition: box-shadow .16s ease, transform .12s ease;
+  width: var(--glass-w); height: var(--glass-h); border-radius: 50%;
+  background: var(--glass-beams), rgba(255, 255, 255, .2);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-rim);
+  box-shadow: var(--glass-shadow);
+  transition: box-shadow .16s ease, transform .12s ease, background .16s ease;
 }
-.speed-input:hover::-webkit-slider-thumb { box-shadow: 0 1px 3px rgba(24,33,46,.22), 0 0 0 5px var(--accent-soft); }
-.speed-input:hover::-moz-range-thumb { box-shadow: 0 1px 3px rgba(24,33,46,.22), 0 0 0 5px var(--accent-soft); }
-.speed-input:active::-webkit-slider-thumb { transform: scale(1.06); }
-.speed-input:active::-moz-range-thumb { transform: scale(1.06); }
+.speed-input:hover::-webkit-slider-thumb {
+  background: var(--glass-beams), rgba(255, 255, 255, .32);
+  box-shadow: var(--glass-shadow), 0 0 0 4px rgba(58,110,165,.14);
+}
+.speed-input:hover::-moz-range-thumb {
+  background: var(--glass-beams), rgba(255, 255, 255, .32);
+  box-shadow: var(--glass-shadow), 0 0 0 4px rgba(58,110,165,.14);
+}
+.speed-input:active::-webkit-slider-thumb { background: var(--glass-beams), rgba(255, 255, 255, .4); transform: scaleY(1.06); }
+.speed-input:active::-moz-range-thumb { background: var(--glass-beams), rgba(255, 255, 255, .4); transform: scaleY(1.06); }
 .speed-input:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent); }
 .speed-input:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--accent); }
 .speed-input:focus-visible { outline: none; }
 
-.speed-ends {
-  display: flex; justify-content: space-between;
-  font-size: 10.5px; color: var(--text-faint); margin-top: 1px;
-}
-.speed-hint { font-size: 11.5px; color: var(--text-dim); margin-top: 4px; max-width: 46ch; }
 
 .speed.is-busy .speed-track { opacity: .6; }
 /* While a slower variant is being generated the sparkles spawn and travel faster — the one place
@@ -1537,11 +1733,31 @@ kbd {
   .speed-track::after, .speed-input::-webkit-slider-thumb { transition: none; }
 }
 
-.player-speed {
-  display: flex; align-items: flex-end; justify-content: space-between;
-  gap: 18px; flex-wrap: wrap; margin-top: 11px;
-}
-.player-speed .speed { flex: 1 1 240px; max-width: 340px; }
-.player-speed .player-hint { margin-top: 0; }
+/* In the transport the slider is one compact item among several, so it drops the 210px floor it
+   needed when it owned a whole row and carried four labels. */
+.player-row .speed { flex: 0 1 190px; min-width: 120px; margin: 0; }
 
-.dict-speed { max-width: 340px; margin: 2px 0 14px; }
+@media (max-width: 760px) {
+  /* One line is a claim about a 1208px frame. Below this the six items cannot honestly share a row —
+     measured, the scrubber was squeezed to 2px and the meta to 0 and it still overflowed by 195px —
+     so the row wraps and the meta, the only part that is nice-to-know rather than needed, takes the
+     second line. */
+  .player-row { flex-wrap: wrap; row-gap: 10px; }
+  .scrub { flex: 1 1 140px; }
+  .player-meta { flex: 1 1 100%; margin-left: 0; text-align: left; }
+
+  /* Centring the popup on the slider is right on a wide frame, where there is room either side. On a
+     phone there is not: measured at 420px it hung 32px off the left edge, because half of a 318px
+     panel is wider than the distance from the slider's centre to the screen. Anchored to the
+     slider's left edge instead, and capped to the viewport, it stays on screen — and on a narrow
+     frame the slider sits in the left half of the wrapped row, so growing rightward is the safe
+     direction. */
+  .speed-pop {
+    left: 0;
+    max-width: calc(100vw - 24px);
+    transform: translateY(3px);
+  }
+  .speed.is-open .speed-pop { transform: none; }
+}
+
+.dict-speed { max-width: 240px; margin: 2px 0 14px; }

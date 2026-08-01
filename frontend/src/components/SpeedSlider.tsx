@@ -1,4 +1,4 @@
-import { useId } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { SPEED_LEVELS, speedIndex } from '../useClipPlayer'
 import { SpeedSparkle } from './SpeedSparkle'
 
@@ -36,18 +36,35 @@ export function SpeedSlider({
   // Where the thumb sits, so the fill and the glow can follow it.
   const pct = (idx / max) * 100
 
-  return (
-    <div className={`speed ${disabled ? 'is-busy' : ''}`}>
-      <div className="speed-head">
-        <label className="speed-title" htmlFor={id}>
-          Speed
-        </label>
-        <span className="speed-now">
-          <b>{level.label}</b>
-          <span className="speed-x">{level.speed}×</span>
-        </span>
-      </div>
+  // The level's name, its multiplier and what it does to the audio used to sit around the rail
+  // permanently: a "SPEED" label, the current level, two end labels and a line of detail — five
+  // pieces of text for one control, on a transport that now has to fit on a single line. They are
+  // all still available, but only while the control is in use.
+  //
+  // `peek` is hover and keyboard focus, which last as long as the attention does. `flash` is a
+  // change, which does not — so it times out. Both are needed: dragging the thumb with a mouse
+  // never fires focus in some browsers, and a keyboard user never fires hover.
+  const [peek, setPeek] = useState(false)
+  const [flash, setFlash] = useState(false)
+  const timer = useRef<number | undefined>(undefined)
 
+  const flashOpen = () => {
+    setFlash(true)
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => setFlash(false), 1600)
+  }
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+
+  // A speed that is still being prepared reports itself regardless of whether anyone is pointing at
+  // it: the audio is about to change under the learner and that is worth saying unprompted.
+  const open = peek || flash || disabled
+
+  return (
+    <div
+      className={`speed ${disabled ? 'is-busy' : ''} ${open ? 'is-open' : ''}`}
+      onPointerEnter={() => setPeek(true)}
+      onPointerLeave={() => setPeek(false)}
+    >
       <div className="speed-rail" style={{ ['--pos' as string]: `${pct}%` }}>
         <span className="speed-track" aria-hidden="true">
           {/* One canvas draws the block grid AND the sparkles. Two grids — a CSS gradient under a
@@ -64,7 +81,12 @@ export function SpeedSlider({
           step={1}
           value={idx}
           disabled={disabled}
-          onChange={(e) => onChange(SPEED_LEVELS[Number(e.target.value)].speed)}
+          onChange={(e) => {
+            onChange(SPEED_LEVELS[Number(e.target.value)].speed)
+            flashOpen()
+          }}
+          onFocus={() => setPeek(true)}
+          onBlur={() => setPeek(false)}
           aria-label="Playback speed"
           // The thumb reads as "Slower", not "1" — the number would tell a screen-reader user
           // nothing, and the label is the whole point of the redesign.
@@ -73,12 +95,20 @@ export function SpeedSlider({
         />
       </div>
 
-      <div className="speed-ends" aria-hidden="true">
-        <span>{SPEED_LEVELS[0].label}</span>
-        <span>{SPEED_LEVELS[max].label}</span>
+      {/*
+        Not conditionally rendered. It is always in the DOM and animated in and out on a class, so
+        that it can fade rather than blink, and so a screen reader is not told the region appeared
+        and vanished on every hover. `aria-live` is deliberately absent for the same reason: the
+        input's own aria-valuetext already announces the level on change, and a live region would
+        say it a second time.
+      */}
+      <div className="speed-pop" role="note">
+        <b>{level.label}</b>
+        <span className="speed-x">{level.speed}×</span>
+        <span className="speed-pop-note">
+          {disabled ? 'preparing the audio…' : (detail ?? level.hint)}
+        </span>
       </div>
-
-      <div className="speed-hint">{disabled ? 'preparing the audio…' : (detail ?? level.hint)}</div>
     </div>
   )
 }

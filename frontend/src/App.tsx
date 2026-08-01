@@ -52,18 +52,10 @@ export default function App() {
   const skill = skillFromPath(segments)
   const isVocabulary = segments[0] === 'vocabulary'
 
-  // The listening index — the grid of topic photographs — is the one view that is pictures rather
-  // than prose, so it gets the wide shell. Everything else keeps a reading column: the drills,
-  // dictation and reading pages are all long French passages, and a line of French running the
-  // width of a large monitor is a worse place to read it, not a better one.
-  //
-  // `segments.length <= 1` is the same test ListeningPage uses to decide it is showing the grid: no
-  // /topic, /lesson or /unit segment. The empty hash also lands here, which is correct — it is the
-  // page you get on first load.
-  const isTopicIndex = !isVocabulary && skill.key === 'listening' && segments.length <= 1
+
 
   return (
-    <div className={`shell ${isTopicIndex ? 'shell-wide' : ''}`}>
+    <div className="shell">
       <header className="masthead" ref={mastheadRef}>
         <div className="masthead-inner">
           <div className="brand">

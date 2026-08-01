@@ -235,10 +235,18 @@ function Drill({
       </div>
 
       {/* ---- player ---- */}
+      {/* One line. The transport, the speed control and the unit's own numbers used to occupy three
+          stacked rows — scrubber, then a labelled slider with two end labels and a line of detail,
+          then a meta line. On a 1208px frame that was mostly empty space held open by text that is
+          only worth reading while you are changing something, so the slider's labels moved into a
+          popup it raises on use and everything else fits across. */}
       <div className="player">
         <div className="player-row">
           <button className="play-btn" onClick={player.toggle} title="Play / pause">
-            {player.playing ? '❚❚' : '▶'}
+            {/* Wrapped so it can be pushed under the glass: the beams are drawn by a pseudo-element
+                ABOVE this, which is what makes the mark read as sitting inside the body rather than
+                printed on the front of it. */}
+            <span className="play-glyph">{player.playing ? '❚❚' : '▶'}</span>
           </button>
           <div
             className="scrub"
@@ -255,15 +263,17 @@ function Drill({
           <span className="time">
             {fmt(player.position)} / {fmt(player.duration)}
           </span>
-          <button className="replay" onClick={player.restart} title="Play from the start">
-            ↺ restart
+          {/* Glyph only. The word "restart" cost about 55px of a row that now has to hold the speed
+              control too, and the accessible name carries what the glyph cannot say. */}
+          <button
+            className="replay icon"
+            onClick={player.restart}
+            title="Play from the start"
+            aria-label="Play from the start"
+          >
+            ↺
           </button>
-        </div>
 
-        {/* The slider gets its own row rather than a slot in the transport: it carries a label, two
-            end labels and a line of detail, and squeezing that between the scrubber and the restart
-            button made both cramped. */}
-        <div className="player-speed">
           <SpeedSlider
             speed={player.speed}
             onChange={player.setSpeed}
@@ -275,8 +285,9 @@ function Drill({
             // talk, 2s on dense speech with few natural pauses.
             detail={reshapeDetail(player.variant, player.loadingSpeed)}
           />
-          <div className="player-hint">
-            {unit.cefr} · {unit.wpm?.toFixed(0)} words/min · {player.replays} replays
+
+          <div className="player-meta">
+            {unit.cefr} · {unit.wpm?.toFixed(0)} wpm · {player.replays} replays
           </div>
         </div>
         {player.src && <audio ref={player.ref} src={player.src} preload="auto" />}
