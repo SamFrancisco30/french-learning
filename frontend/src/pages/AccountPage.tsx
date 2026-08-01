@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
+import { GoogleMark } from '../components/icons'
 
 /**
  * One page for signing in and for the account itself.
@@ -252,6 +253,45 @@ export function AccountPage({ navigate }: { navigate: (to: string) => void }) {
 
       <h2>{copy.title}</h2>
       <p className="muted">{copy.hint}</p>
+
+      {/*
+        Google first, and above the form rather than below it.
+
+        Ordering is the whole point: someone who signed up with Google has no password to
+        remember, and burying the button under a password field they will fail to fill is how
+        people end up creating a second, duplicate account. It is hidden on the reset step, where
+        a Google account has no password to reset in the first place.
+
+        One button for both modes. Google does not distinguish signing up from signing in — the
+        first time through it creates the account, afterwards it signs in — so labelling it
+        "Continue with" rather than either one is the honest wording.
+      */}
+      {mode !== 'reset' && auth.googleEnabled && (
+        <>
+          <button
+            type="button"
+            className="oauthbtn"
+            disabled={busy}
+            onClick={async () => {
+              setError(null)
+              setBusy(true)
+              const { error: failed } = await auth.signInWithGoogle()
+              // On success the browser is already navigating to Google, so `busy` is only ever
+              // cleared on the failure path.
+              if (failed) {
+                setError(failed)
+                setBusy(false)
+              }
+            }}
+          >
+            <GoogleMark />
+            Continue with Google
+          </button>
+          <div className="authdivider">
+            <span>or use your email</span>
+          </div>
+        </>
+      )}
 
       <form className="authform" onSubmit={submit}>
         <label>

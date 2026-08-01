@@ -24,6 +24,8 @@ function poseAuth({
   billingEnabled = true,
   email = null as string | null,
   signIn = vi.fn().mockResolvedValue({}),
+  googleEnabled = true,
+  signInWithGoogle = vi.fn().mockResolvedValue({}),
   signUp = vi.fn().mockResolvedValue({}),
   signOut = vi.fn().mockResolvedValue(undefined),
   sendPasswordReset = vi.fn().mockResolvedValue({}),
@@ -48,6 +50,8 @@ function poseAuth({
     entitlement,
     config: { anon_unit_limit: 2, member_unit_limit: 5 },
     signIn,
+    googleEnabled,
+    signInWithGoogle,
     signUp,
     signOut,
     sendPasswordReset,
@@ -55,7 +59,15 @@ function poseAuth({
     openBillingPortal,
     refreshMe,
   })
-  return { signIn, signUp, signOut, sendPasswordReset, startCheckout, openBillingPortal }
+  return {
+    signIn,
+    signUp,
+    signOut,
+    sendPasswordReset,
+    startCheckout,
+    openBillingPortal,
+    signInWithGoogle,
+  }
 }
 
 describe('AccountPage — signed out', () => {
@@ -154,6 +166,75 @@ describe('AccountPage — signed out', () => {
 
     expect(screen.getByRole('heading', { name: 'Accounts are not set up' })).toBeInTheDocument()
     expect(screen.queryByLabelText('Password')).not.toBeInTheDocument()
+  })
+})
+
+describe('AccountPage — Google', () => {
+  it('offers Google above the email form', () => {
+    poseAuth()
+
+    render(<AccountPage navigate={vi.fn()} />)
+
+    // Above, not below: someone who signed up with Google has no password to remember, and
+    // burying the button under a password field is how duplicate accounts get created.
+    const card = screen.getByRole('button', { name: /Continue with Google/ })
+    const emailField = screen.getByLabelText('Email')
+    expect(card.compareDocumentPosition(emailField) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('starts the Google redirect', async () => {
+    const { signInWithGoogle } = poseAuth()
+
+    render(<AccountPage navigate={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: /Continue with Google/ }))
+
+    expect(signInWithGoogle).toHaveBeenCalled()
+  })
+
+  it('offers the same button when creating an account', async () => {
+    poseAuth()
+
+    render(<AccountPage navigate={vi.fn()} />)
+    await userEvent.click(screen.getByRole('tab', { name: 'Create account' }))
+
+    // Google makes no distinction between signing up and signing in, so one button serves both.
+    expect(screen.getByRole('button', { name: /Continue with Google/ })).toBeInTheDocument()
+  })
+
+  it('hides Google on the password-reset step', async () => {
+    poseAuth()
+
+    render(<AccountPage navigate={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: /Forgotten your password/ }))
+
+    // A Google account has no password here to reset.
+    expect(screen.queryByRole('button', { name: /Continue with Google/ })).not.toBeInTheDocument()
+  })
+
+  it('hides Google when the project does not have the provider switched on', () => {
+    poseAuth({ googleEnabled: false })
+
+    render(<AccountPage navigate={vi.fn()} />)
+
+    // A visible button that always errors reads as the app being broken.
+    expect(screen.queryByRole('button', { name: /Continue with Google/ })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Email')).toBeInTheDocument()
+  })
+
+  it('reports a failed redirect rather than hanging on "Working…"', async () => {
+    poseAuth({
+      signInWithGoogle: vi
+        .fn()
+        .mockResolvedValue({ error: 'Google sign-in is not switched on for this app yet.' }),
+    })
+
+    render(<AccountPage navigate={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: /Continue with Google/ }))
+
+    expect(
+      await screen.findByText('Google sign-in is not switched on for this app yet.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Continue with Google/ })).toBeEnabled()
   })
 })
 

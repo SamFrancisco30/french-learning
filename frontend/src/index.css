@@ -2137,3 +2137,34 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   .gateveil, .gatecard { animation: none; }
 }
+
+/* ---------------- social sign-in ---------------- */
+
+.oauthbtn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%;
+  padding: 10px 15px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  /* White rather than --bg-raised, and fixed in both themes. Google's brand terms ask for the
+     logo on white or on its own solid-blue button; a mark tuned for white on a dark surface is
+     the version people read as a fake. */
+  background: #ffffff;
+  color: #1f1f1f;
+  font-size: 14.5px; font-weight: 550;
+  box-shadow: var(--shadow-sm);
+}
+.oauthbtn:hover:not(:disabled) { border-color: var(--border-hover); background: #f8f9fa; }
+.oauthbtn:disabled { opacity: .6; }
+.googlemark { width: 18px; height: 18px; flex: none; display: block; }
+
+/* "or use your email" with a rule either side. The rules are pseudo-elements on a flex row rather
+   than a border on the text, so they fill whatever space the label leaves at any width. */
+.authdivider {
+  display: flex; align-items: center; gap: 12px;
+  margin: 16px 0;
+  color: var(--text-faint); font-size: 12.5px;
+}
+.authdivider::before, .authdivider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}

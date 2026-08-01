@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider, useAuth } from './AuthContext'
 import { IdentityProvider } from '../identity/IdentityContext'
@@ -30,6 +31,7 @@ const supabaseMocks = vi.hoisted(() => ({
   onAuthStateChange: vi.fn(),
   signInWithPassword: vi.fn(),
   signUp: vi.fn(),
+  signInWithOAuth: vi.fn(),
   signOut: vi.fn(),
   resetPasswordForEmail: vi.fn(),
   createClient: vi.fn(),
@@ -59,6 +61,7 @@ vi.mock('@supabase/supabase-js', () => ({
         onAuthStateChange: supabaseMocks.onAuthStateChange,
         signInWithPassword: supabaseMocks.signInWithPassword,
         signUp: supabaseMocks.signUp,
+        signInWithOAuth: supabaseMocks.signInWithOAuth,
         signOut: supabaseMocks.signOut,
         resetPasswordForEmail: supabaseMocks.resetPasswordForEmail,
       },
@@ -101,6 +104,7 @@ const SESSION = {
 
 function Probe() {
   const auth = useAuth()
+  const [lastError, setLastError] = useState('')
   return (
     <div>
       <output data-testid="ready">{String(auth.ready)}</output>
@@ -110,6 +114,13 @@ function Probe() {
       <output data-testid="email">{auth.email ?? ''}</output>
       <output data-testid="remaining">{String(auth.entitlement.remaining)}</output>
       <output data-testid="unlocked-7">{String(auth.isUnlocked(7))}</output>
+      <output data-testid="google">{String(auth.googleEnabled)}</output>
+      <output data-testid="error">{lastError}</output>
+      <button
+        onClick={() => void auth.signInWithGoogle().then((r) => setLastError(r.error ?? ''))}
+      >
+        google
+      </button>
       <button onClick={() => void auth.unlock(7)}>unlock 7</button>
       <button onClick={() => void auth.signIn('learner@example.com', 'password123')}>sign in</button>
     </div>
@@ -143,6 +154,15 @@ describe('AuthProvider', () => {
       sessions: 0,
       entitlement: me().entitlement,
     })
+    supabaseMocks.signInWithOAuth.mockResolvedValue({ data: {}, error: null })
+    // The Google-provider probe hits Supabase directly rather than through our api module.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ external: { google: true } }),
+      }),
+    )
     supabaseMocks.getSession.mockResolvedValue({ data: { session: null } })
     supabaseMocks.onAuthStateChange.mockReturnValue({
       data: { subscription: { unsubscribe: vi.fn() } },
@@ -360,5 +380,64 @@ describe('AuthProvider', () => {
       email: 'learner@example.com',
       password: 'password123',
     })
+  })
+})
+
+describe('AuthProvider — Google', () => {
+  it('asks Supabase which providers are actually on, and hides Google when it is off', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ external: { google: false } }) }),
+    )
+
+    renderAuth()
+
+    await waitFor(() => expect(screen.getByTestId('google')).toHaveTextContent('false'))
+  })
+
+  it('keeps Google when the probe fails, rather than losing a working button', async () => {
+    // "Unknown" is not "disabled". A transient network error must not remove a button that works,
+    // and the click path already reports a genuinely-disabled provider in words.
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
+
+    renderAuth()
+
+    await waitFor(() => expect(screen.getByTestId('ready')).toHaveTextContent('true'))
+    expect(screen.getByTestId('google')).toHaveTextContent('true')
+  })
+
+  it('sends the learner to Google and asks which account to use', async () => {
+    renderAuth()
+    await waitFor(() => expect(screen.getByTestId('ready')).toHaveTextContent('true'))
+    await userEvent.click(screen.getByRole('button', { name: 'google' }))
+
+    await waitFor(() => expect(supabaseMocks.signInWithOAuth).toHaveBeenCalled())
+    const [args] = supabaseMocks.signInWithOAuth.mock.calls[0] as [
+      { provider: string; options: { redirectTo: string; queryParams: Record<string, string> } },
+    ]
+    expect(args.provider).toBe('google')
+    // The hash route is carried through the round trip. Supabase appends `?code=` as a real query
+    // parameter, so the router and supabase-js read different parts of the returned URL.
+    expect(args.options.redirectTo).toContain('#/account')
+    expect(args.options.queryParams.prompt).toBe('select_account')
+  })
+
+  it('reports a provider that is switched off in words a learner can act on', async () => {
+    // Supabase says "Unsupported provider: provider is not enabled", which tells a learner nothing
+    // and reads as the app being broken.
+    supabaseMocks.signInWithOAuth.mockResolvedValue({
+      data: {},
+      error: { message: 'Unsupported provider: provider is not enabled' },
+    })
+
+    renderAuth()
+    await waitFor(() => expect(screen.getByTestId('ready')).toHaveTextContent('true'))
+    await userEvent.click(screen.getByRole('button', { name: 'google' }))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('error')).toHaveTextContent(
+        'Google sign-in is not switched on for this app yet.',
+      ),
+    )
   })
 })

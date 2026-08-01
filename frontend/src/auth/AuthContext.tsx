@@ -72,6 +72,9 @@ type Auth = Readonly<{
   isUnlocked: (unitId: number) => boolean
   signUp: (email: string, password: string) => Promise<{ error?: string; confirmEmail?: boolean }>
   signIn: (email: string, password: string) => Promise<{ error?: string }>
+  /** True unless this Supabase project reports the Google provider switched off. */
+  googleEnabled: boolean
+  signInWithGoogle: () => Promise<{ error?: string }>
   signOut: () => Promise<void>
   sendPasswordReset: (email: string) => Promise<{ error?: string }>
   refreshMe: () => Promise<void>
@@ -99,6 +102,12 @@ function friendlyAuthError(message: string): string {
     return 'Too many attempts just now. Wait a minute and try again.'
   }
   if (text.includes('unable to validate email')) return 'That does not look like a valid email.'
+  if (text.includes('unsupported provider') || text.includes('provider is not enabled')) {
+    return 'Google sign-in is not switched on for this app yet.'
+  }
+  if (text.includes('popup') || text.includes('redirect')) {
+    return 'Could not reach Google. Check that pop-ups and redirects are allowed.'
+  }
   return message
 }
 
@@ -112,6 +121,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [client, setClient] = useState<SupabaseClient | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [me, setMe] = useState<Me | null>(null)
+  // Whether this Supabase project has the Google provider switched on. Starts true so the button
+  // is present on the first paint and only disappears if the project positively reports it off —
+  // the opposite order would flash the button in a moment after the form has already been read.
+  const [googleEnabled, setGoogleEnabled] = useState(true)
 
   // The live session, for the header source. A ref as well as state because the header source is
   // registered once and would otherwise close over whatever session existed at registration.
@@ -150,19 +163,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((loaded) => {
         if (cancelled) return
         setConfig(loaded)
-        if (loaded.enabled && loaded.url && loaded.anon_key) {
+        if (!loaded.enabled || !loaded.url || !loaded.anon_key) return
+
+        // Construction is guarded separately from the fetch. Sharing one `.catch` meant a
+        // createClient failure — a malformed project URL, say — was reported as "this server has
+        // no Supabase project configured", which is a different problem with a different fix.
+        try {
           const created = createClient(loaded.url, loaded.anon_key, {
             auth: {
               persistSession: true,
               autoRefreshToken: true,
-              // See the note above: PKCE keeps auth out of the hash the router owns.
+              // See the note above: PKCE keeps auth out of the hash the router owns. It is also
+              // what makes the Google redirect safe — the provider returns `?code=` in the query
+              // string, so the round trip never touches the fragment the router reads.
               flowType: 'pkce',
               detectSessionInUrl: true,
             },
           })
           clientRef.current = created
           setClient(created)
+        } catch {
+          setClient(null)
+          return
         }
+
+        // Which social providers this project actually has switched on. Asked rather than assumed,
+        // so the sign-in page does not offer a Google button on a project where Google is not
+        // configured — clicking it would fail with "Unsupported provider", which reads as the app
+        // being broken. `/auth/v1/settings` is public and needs only the publishable key.
+        //
+        // Failure is treated as "unknown", not "disabled": on a transient network error, hiding a
+        // working button is worse than showing one whose error is already handled.
+        fetch(`${loaded.url.replace(/\/$/, '')}/auth/v1/settings`, {
+          headers: { apikey: loaded.anon_key },
+        })
+          .then((response) => (response.ok ? response.json() : null))
+          .then((settings) => {
+            if (cancelled || settings == null) return
+            setGoogleEnabled(settings?.external?.google === true)
+          })
+          .catch(() => undefined)
       })
       .catch(() => {
         // A server that cannot answer this is a server without accounts. The app still works.
@@ -257,6 +297,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [client],
   )
+
+  /**
+   * Hand off to Google, and come back signed in.
+   *
+   * This navigates the whole page away, so anything not already persisted is gone — which is
+   * exactly why the device key lives in localStorage rather than in React state. It survives the
+   * round trip, so the anonymous words and unlocks are still claimable when the learner returns.
+   *
+   * `redirectTo` carries the hash route deliberately. Supabase appends `?code=` as a real query
+   * parameter, producing `origin/?code=…#/account`: supabase-js reads the code from the search
+   * string and the router reads the fragment, so neither one sees the other's data. Under the
+   * implicit flow the token would come back *in* the fragment and the router would try to route
+   * on it.
+   */
+  const signInWithGoogle = useCallback(async () => {
+    if (!client) return { error: 'Accounts are not available on this server.' }
+    const { error } = await client.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/#/account`,
+        // Ask Google for a refresh token and let a learner with several Google accounts pick,
+        // rather than silently reusing whichever one their browser is already signed into.
+        queryParams: { access_type: 'offline', prompt: 'select_account' },
+      },
+    })
+    // Only reached when the redirect could not be started; on success the page is already leaving.
+    return error ? { error: friendlyAuthError(error.message) } : {}
+  }, [client])
 
   const signUp = useCallback(
     async (email: string, password: string) => {
@@ -360,6 +428,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isUnlocked,
       signUp,
       signIn,
+      googleEnabled: googleEnabled && config?.enabled === true,
+      signInWithGoogle,
       signOut,
       sendPasswordReset,
       refreshMe,
@@ -376,6 +446,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isUnlocked,
       signUp,
       signIn,
+      googleEnabled,
+      signInWithGoogle,
       signOut,
       sendPasswordReset,
       refreshMe,
