@@ -121,15 +121,6 @@ export function DictationPage({
 
   return (
     <>
-      <div className="pagehead">
-        <h2>Dictation</h2>
-        <p>
-          Listen and type what you hear. Spelling counts here — unlike the listening drills, this
-          is where accents, homophones and verb endings are the point. Every miss is named, so you
-          can see whether you misheard or just misspelled.
-        </p>
-      </div>
-
       <div className="dict-modes">
         {MODES.map((m) => (
           <button

@@ -22,8 +22,16 @@ export interface Skill {
    */
   titles: Record<string, string>
   status: SkillStatus
-  /** One line for the page header. */
+  /** One line for the page header, on the pages that still have one. */
   blurb: string
+  /**
+   * How to use the page, shown when the nav tab is hovered.
+   *
+   * Separate from `blurb` because they answer different questions: `blurb` says what the skill IS,
+   * which is what an unbuilt skill's status page needs, and this says how to WORK it, which is what
+   * someone reaching for the tab wants. Only the built skills have one.
+   */
+  tip?: string
   /** Percentage complete, for the status bar. Only used when status !== 'live'. */
   progress: number
   /** What already exists that this module reuses. */
@@ -40,6 +48,9 @@ export const SKILLS: Skill[] = [
     native: '听力',
     titles: { fr: 'Écoute', ru: 'Аудирование', zh: '听力' },
     status: 'live',
+    tip:
+      'Pick a subject, then a lesson, then a unit. Each unit is a 60–120 second passage ' +
+      'with its own difficulty estimate — slow it to 0.75× first, then confirm at full speed.',
     blurb:
       'Authentic media turned into calibrated comprehension practice — cloze, multiple ' +
       'choice, true/false, vocabulary and ordering, every item anchored to the audio.',
@@ -54,6 +65,9 @@ export const SKILLS: Skill[] = [
     native: '听写',
     titles: { fr: 'Dictée', ru: 'Диктант', zh: '听写' },
     status: 'live',
+    tip:
+      'Listen and type what you hear. Spelling counts here — unlike the listening drills, this ' +
+      'is where accents, homophones and verb endings are the point, and every miss is named.',
     blurb:
       'Hear it, type it. Sentence and paragraph length, at a level that follows your scores — ' +
       'and unlike the listening drills, spelling counts, because homophones and verb endings ' +
@@ -69,6 +83,9 @@ export const SKILLS: Skill[] = [
     native: '阅读',
     titles: { fr: 'Lecture', ru: 'Чтение', zh: '阅读' },
     status: 'partial',
+    tip:
+      'Paste any French text and select a word to translate it in context. If the word belongs ' +
+      'to a fixed expression, the popup shows the whole expression — not just the word.',
     blurb:
       'Read any French text with expression-aware lookup. Select a word for its meaning ' +
       'in context — and the idiom it belongs to, if it belongs to one.',

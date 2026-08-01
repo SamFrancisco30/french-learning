@@ -131,13 +131,6 @@ export function ListeningPage({
 
   return (
     <div className="route" key="index">
-      <div className="pagehead">
-        <h2>Listening</h2>
-        <p>
-          Pick a subject, then a lesson, then a unit. Each unit is a 60–120 second passage with
-          its own difficulty estimate — slow it to 0.75× first, then confirm at full speed.
-        </p>
-      </div>
       <ProgressSummary progress={progress} />
       <TopicGrid
         lessons={lessons}

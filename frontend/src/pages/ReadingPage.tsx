@@ -50,15 +50,6 @@ export function ReadingPage({ language }: { language: string }) {
 
   return (
     <LookupProvider language={language}>
-      <div className="pagehead">
-        <h2>Reading</h2>
-        <p>
-          Paste any French text and select a word to translate it in context. If the word
-          belongs to a fixed expression, the popup shows the whole expression — not just the
-          word.
-        </p>
-      </div>
-
       {!text ? (
         <div className="card">
           <div className="reading-input">

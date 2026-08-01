@@ -86,17 +86,27 @@ export default function App() {
                 className={`skilltab ${!isVocabulary && s.key === skill.key ? 'on' : ''}`}
                 onClick={() => navigate(s.route)}
                 aria-current={!isVocabulary && s.key === skill.key ? 'page' : undefined}
-                title={
-                  s.status === 'live'
-                    ? `${s.label}: ready`
-                    : s.status === 'partial'
-                      ? `${s.label}: partly built`
-                      : `${s.label}: not built yet`
-                }
               >
                 <span className={`dot ${s.status}`} />
                 {s.label}
                 <span className="native">{s.native}</span>
+                {/*
+                  What the page is for, raised from the tab rather than printed at the top of the
+                  page. The pages used to carry a heading repeating the tab's own label and a
+                  paragraph under it — on the listening index that was 110px above the topics,
+                  restating the word already underlined in the nav.
+
+                  A styled panel rather than the `title` attribute it replaces: title has no styling,
+                  a delay of about a second before it appears, and no way to hold more than one line
+                  comfortably. The status still reaches a mouse user, appended for the skills that
+                  are not finished, and the dot carries it at a glance.
+                */}
+                <span className="skilltab-tip" aria-hidden="true">
+                  {s.tip ?? s.blurb}
+                  {s.status !== 'live' && (
+                    <em>{s.status === 'partial' ? 'Partly built.' : 'Not built yet.'}</em>
+                  )}
+                </span>
               </button>
             ))}
           </nav>

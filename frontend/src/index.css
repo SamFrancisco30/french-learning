@@ -355,6 +355,44 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   background: var(--border-strong);
 }
 .skilltab .dot.live { background: var(--good); }
+
+/*
+ * What each skill is for, raised from its tab.
+ *
+ * Left-anchored and clamped to the frame, because these tabs run to the right edge of a 1208px bar:
+ * a panel centred on the last tab would hang off the page. `max-width` in ch rather than px so the
+ * measure stays readable rather than the box staying a fixed size.
+ *
+ * pointer-events: none matters more here than elsewhere. The panel opens directly below its tab and
+ * overlaps the row underneath, and the tab is a button — if the panel could take the pointer it
+ * would swallow clicks aimed at whatever it covers, and hovering the panel itself would keep it
+ * open indefinitely.
+ */
+.skilltab-tip {
+  position: absolute; top: calc(100% - 4px); left: 0; z-index: 40;
+  width: max-content; max-width: 46ch;
+  padding: 9px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  font-size: 12.5px; font-weight: 400; line-height: 1.5;
+  color: var(--text-dim); text-align: left; white-space: normal;
+  opacity: 0; visibility: hidden;
+  transform: translateY(3px);
+  transition: opacity .16s ease, transform .16s ease, visibility .16s;
+  pointer-events: none;
+}
+/* The last tabs sit at the right edge, so theirs open leftward instead of running off the page. */
+.skillnav .skilltab:nth-last-child(-n + 2) .skilltab-tip { left: auto; right: 0; }
+.skilltab:hover .skilltab-tip,
+.skilltab:focus-visible .skilltab-tip { opacity: 1; visibility: visible; transform: none; }
+/* The build status, for the skills that have one worth saying. */
+.skilltab-tip em { display: block; margin-top: 5px; color: var(--text-faint); font-style: normal; }
+
+@media (prefers-reduced-motion: reduce) {
+  .skilltab-tip { transition: none; }
+}
 .skilltab .dot.partial { background: var(--warn); }
 
 .utilitytab {
@@ -546,46 +584,14 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 /* ---------------- page headers ---------------- */
 
-/*
- * The page's blurb is an explanation, and an explanation is read once. It is hidden until the
- * heading is hovered, so the page opens on its content rather than on four lines describing it.
- *
- * Absolutely positioned, so revealing it moves nothing: the heading keeps its place and the panel
- * appears over what is beneath. And faded with OPACITY ONLY — not `visibility`, not `display` —
- * because both of those take the text out of the accessibility tree, which would mean hiding the
- * page's own description from a screen reader in order to tidy it away from a mouse. Opacity leaves
- * it readable to assistive tech at all times.
- *
- * `:focus-within` is here for completeness rather than as a real answer: a heading is not focusable,
- * so a sighted keyboard-only user has no way to raise this. The text being permanently in the
- * accessibility tree is what stops that from losing information.
- */
-.pagehead { margin-bottom: 18px; position: relative; }
+/* Only My Words and the not-built status pages still have a header. The three built skills carry
+   their description on the nav tab instead — see .skilltab-tip — because a heading repeating the
+   tab's own label with a paragraph under it was 110px of restatement above the content. */
+.pagehead { margin-bottom: 20px; }
 .pagehead h2 {
-  font-size: 24px; margin: 0; letter-spacing: -0.02em; font-weight: 650;
-  /* Only as wide as the words, so the hover target is the title and not the line it sits on. */
-  display: inline-block;
+  font-size: 24px; margin: 0 0 6px; letter-spacing: -0.02em; font-weight: 650;
 }
-.pagehead p {
-  position: absolute; top: calc(100% + 6px); left: 0; z-index: 20;
-  margin: 0; max-width: 62ch;
-  padding: 9px 12px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-md);
-  color: var(--text-dim); font-size: 13.5px; line-height: 1.5;
-  opacity: 0;
-  transform: translateY(3px);
-  transition: opacity .16s ease, transform .16s ease;
-  pointer-events: none;
-}
-.pagehead:hover p,
-.pagehead:focus-within p { opacity: 1; transform: none; }
-
-@media (prefers-reduced-motion: reduce) {
-  .pagehead p { transition: none; }
-}
+.pagehead p { margin: 0; color: var(--text-dim); max-width: 62ch; font-size: 14.5px; }
 
 .crumbs {
   display: flex; align-items: center; gap: 8px;
