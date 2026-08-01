@@ -3,12 +3,15 @@ import userEvent from '@testing-library/user-event'
 import { Profiler, StrictMode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
+import { AuthProvider } from '../auth/AuthContext'
 import { IdentityProvider } from '../identity/IdentityContext'
 import type { VocabItem, VocabList } from '../types'
 import { VocabularyPage } from './VocabularyPage'
 
 const apiMocks = vi.hoisted(() => ({
   languages: vi.fn(),
+  authConfig: vi.fn(),
+  me: vi.fn(),
 }))
 
 const vocabMocks = vi.hoisted(() => ({
@@ -17,7 +20,11 @@ const vocabMocks = vi.hoisted(() => ({
   remove: vi.fn(),
 }))
 
-vi.mock('../api', () => ({ api: apiMocks }))
+vi.mock('../api', () => ({
+  api: apiMocks,
+  setIdentityHeaderSource: vi.fn(),
+  LockedError: class LockedError extends Error {},
+}))
 vi.mock('../vocab/VocabContext', () => ({
   useVocab: () => vocabMocks,
 }))
@@ -78,7 +85,9 @@ function renderPage(language = 'fr', navigate = vi.fn()) {
 function renderApp() {
   return render(
     <IdentityProvider>
-      <App />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </IdentityProvider>,
   )
 }
@@ -86,6 +95,28 @@ function renderApp() {
 describe('My Words route and navigation', () => {
   beforeEach(() => {
     apiMocks.languages.mockReset()
+    apiMocks.authConfig.mockReset()
+    apiMocks.me.mockReset()
+    apiMocks.authConfig.mockResolvedValue({
+      enabled: false,
+      url: null,
+      anon_key: null,
+      billing_enabled: false,
+      anon_unit_limit: 2,
+      member_unit_limit: 5,
+    })
+    apiMocks.me.mockResolvedValue({
+      signed_in: false,
+      user_id: null,
+      email: null,
+      entitlement: {
+        tier: 'anon',
+        unit_limit: 2,
+        remaining: 2,
+        unlocked_unit_ids: [],
+        premium_until: null,
+      },
+    })
     vocabMocks.list.mockReset()
     vocabMocks.edit.mockReset()
     vocabMocks.remove.mockReset()
@@ -107,8 +138,14 @@ describe('My Words route and navigation', () => {
     for (const skill of ['Listening', 'Dictation', 'Reading', 'Writing', 'Speaking']) {
       const tab = screen.getByRole('button', { name: new RegExp(`^${skill}`) })
       expect(tab).not.toHaveAttribute('aria-current')
-      expect(tab.getAttribute('title')).toContain(':')
-      expect(tab.getAttribute('title')).not.toContain('—')
+      // Each tab still explains what its page is for, but through the styled `.tip` panel that
+      // replaced the `title` attribute this used to read. `title` has no styling, waits about a
+      // second to appear and cannot hold more than a line comfortably. The panel is aria-hidden
+      // because the tab's own label already names the skill, so it is read from the DOM rather
+      // than through the accessible name.
+      const tip = tab.querySelector('.tip')
+      expect(tip).not.toBeNull()
+      expect(tip?.textContent?.trim()).toBeTruthy()
     }
   })
 

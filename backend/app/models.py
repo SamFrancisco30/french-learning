@@ -10,6 +10,13 @@ ListeningUnit a 60-120s coherent chunk of a Lesson — what a learner actually d
 Exercise      one question attached to a ListeningUnit
 Attempt       one learner submission against an Exercise
 VocabItem     a word harvested for review, with SRS scheduling fields
+UserProfile   application-side account state: tier and Stripe billing ids
+UnitUnlock    one ListeningUnit a learner has spent a free-tier allowance slot on
+StudySession  one sitting, so progress can report time and streaks rather than raw answers
+
+Ownership is two columns wherever a row belongs to a learner: `user_id` for a signed-in Supabase
+account, or `learner_key` with a NULL `user_id` for an anonymous device. `identity.owner_clause`
+is the only place that chooses between them.
 
 `skill` on Lesson/Exercise is what lets speaking / writing / reading / dictation
 reuse this whole table set instead of forking it.
@@ -443,3 +450,125 @@ class GlossCache(Base):
     zipf: Mapped[float | None] = mapped_column(Float, nullable=True)
     hits: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# --- accounts, sessions and entitlements -------------------------------------------------
+#
+# `user_id` here is a Supabase Auth user id (`sub`), stored as a plain string with no foreign
+# key. Deliberately no FK: Supabase keeps its users in the `auth.users` table of the same
+# Postgres database, but referencing it would tie these tables to a schema this application does
+# not own and does not migrate, and would make the SQLite test database unbuildable — there is no
+# `auth.users` there. The existing `attempts.user_id` and `vocab_items.user_id` already use this
+# convention, so the new tables follow it rather than inventing a second one.
+
+
+class UserProfile(Base):
+    """Application-side facts about an account, alongside Supabase's own `auth.users` row.
+
+    A separate table rather than Supabase user metadata. Tier drives access to paid content, so
+    it has to be something only the server can write — user metadata is editable by the client
+    holding that user's token, which would let a learner promote themselves to premium. It also
+    keeps billing state next to the data the rest of the API already queries, instead of behind a
+    call into the auth service on every request.
+
+    Rows are created lazily on first authenticated request rather than by a signup hook, so an
+    account made directly in the Supabase dashboard works exactly like one made in the app.
+    """
+
+    __tablename__ = "user_profiles"
+
+    # The Supabase user id is the primary key: there is exactly one profile per account, and
+    # making it the PK means the uniqueness is structural rather than a constraint to remember.
+    user_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True, index=True)
+    # "free" | "premium". Anonymous visitors have no row at all and are treated as "anon".
+    tier: Mapped[str] = mapped_column(String(16), default="free")
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # When the paid period ends. Kept so a cancelled-but-not-yet-expired subscription keeps
+    # working to the end of the period the learner paid for, which is what Stripe bills for.
+    premium_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
+class UnitUnlock(Base):
+    """One listening unit a learner has spent an allowance slot on.
+
+    Recording *which* units were opened, rather than counting how many, is what makes the free
+    tier a choice instead of a prefix: the learner picks any two recordings in the library. It
+    also makes the allowance stable — the second unit you opened stays open, where a "first N by
+    id" rule would silently swap which units were free as the library grew.
+
+    Premium learners accumulate no rows here; they are not metered, so writing an unlock per unit
+    would be bookkeeping nobody reads.
+    """
+
+    __tablename__ = "unit_unlocks"
+    __table_args__ = (
+        # Mirrors the anon/user split used by vocab_items: one uniqueness rule per identity kind,
+        # each scoped by a partial index so the unused column's NULLs cannot collide. A single
+        # three-column unique index would not do it — in SQL, NULLs are never equal, so
+        # (learner_key, NULL, unit) would admit unlimited duplicates.
+        Index(
+            "uq_unlock_anon_unit",
+            "learner_key",
+            "unit_id",
+            unique=True,
+            postgresql_where=text("user_id IS NULL"),
+            sqlite_where=text("user_id IS NULL"),
+        ),
+        Index(
+            "uq_unlock_user_unit",
+            "user_id",
+            "unit_id",
+            unique=True,
+            postgresql_where=text("user_id IS NOT NULL"),
+            sqlite_where=text("user_id IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    learner_key: Mapped[str] = mapped_column(String(64), default="anonymous", index=True)
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    unit_id: Mapped[int] = mapped_column(
+        ForeignKey("listening_units.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class StudySession(Base):
+    """One sitting: when a learner started working on a skill, and what they got through.
+
+    Attempts already record every individual answer, so this is not where correctness lives. What
+    attempts cannot answer is "how long did you study, and how often do you come back" — a row
+    per answer has no notion of a sitting, and the gap between two answers is indistinguishable
+    from the gap between two weeks. Sessions carry that, and they are what a progress view reads
+    instead of aggregating every attempt ever made.
+    """
+
+    __tablename__ = "study_sessions"
+    __table_args__ = (
+        Index("ix_session_owner_started", "learner_key", "started_at"),
+        Index("ix_session_user_started", "user_id", "started_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    learner_key: Mapped[str] = mapped_column(String(64), default="anonymous", index=True)
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    language: Mapped[str] = mapped_column(String(8), default="fr", index=True)
+    skill: Mapped[str] = mapped_column(String(16), default="listening", index=True)
+    unit_id: Mapped[int | None] = mapped_column(
+        ForeignKey("listening_units.id", ondelete="SET NULL"), nullable=True
+    )
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # Advanced by a heartbeat from the client, so a session that ends by closing the tab still
+    # records a plausible length instead of being open forever or lost entirely.
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    correct: Mapped[int] = mapped_column(Integer, default=0)
+    seconds: Mapped[int] = mapped_column(Integer, default=0)

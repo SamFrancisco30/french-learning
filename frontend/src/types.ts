@@ -464,3 +464,48 @@ export interface DictationAudio {
   duration_s: number | null
   cached: boolean
 }
+
+// --- accounts and entitlements ---
+
+/** What the browser needs to reach Supabase Auth, served by the backend rather than baked in. */
+export type AuthConfig = {
+  enabled: boolean
+  url: string | null
+  anon_key: string | null
+  billing_enabled: boolean
+  anon_unit_limit: number
+  member_unit_limit: number
+}
+
+export type Tier = 'anon' | 'free' | 'premium'
+
+export type Entitlement = {
+  tier: Tier
+  /** null means unlimited. Must not be treated as zero — that would lock out paying learners. */
+  unit_limit: number | null
+  remaining: number | null
+  unlocked_unit_ids: number[]
+  premium_until: string | null
+}
+
+export type Me = {
+  signed_in: boolean
+  user_id: string | null
+  email: string | null
+  entitlement: Entitlement
+}
+
+export type UnlockResult = {
+  unit_id: number
+  unlocked: boolean
+  entitlement: Entitlement
+}
+
+export type ClaimResult = {
+  claimed: boolean
+  vocab_items: number
+  attempts: number
+  unlocks: number
+  sessions: number
+  entitlement: Entitlement
+}

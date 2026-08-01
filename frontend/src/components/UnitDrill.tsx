@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, lexicon } from '../api'
+import { LockedError, api, lexicon } from '../api'
 import type {
   AttemptResult,
   Exercise,
@@ -15,6 +15,7 @@ import {
   isAnswered,
   toApiResponse,
 } from './Exercises'
+import { UnlockGate } from './Entitlement'
 import { FollowProvider } from './Follow'
 import { FollowTranscript } from './FollowTranscript'
 import { LookupProvider, SelectableText } from './Lookup'
@@ -31,11 +32,25 @@ interface Props {
   language: string
   learnerKey: string
   onExit: () => void
+  /** Where to send a learner who needs an account or a subscription to open this unit. */
+  onSignIn: () => void
 }
 
-export function UnitDrill({ unitId, lessonTitle, language, learnerKey, onExit, startAt }: Props) {
+export function UnitDrill({
+  unitId,
+  lessonTitle,
+  language,
+  learnerKey,
+  onExit,
+  onSignIn,
+  startAt,
+}: Props) {
   const [unit, setUnit] = useState<UnitDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // A locked unit reached by URL rather than by clicking a row: a shared link, a bookmark, or a
+  // reload after the allowance was spent elsewhere. It gets the same decision panel the row would
+  // have opened, instead of "402 — /api/units/12" in an error box.
+  const [locked, setLocked] = useState(false)
   const [responses, setResponses] = useState<Record<number, unknown>>({})
   const [results, setResults] = useState<Record<number, AttemptResult>>({})
   const [busy, setBusy] = useState<number | null>(null)
@@ -48,6 +63,7 @@ export function UnitDrill({ unitId, lessonTitle, language, learnerKey, onExit, s
     setResponses({})
     setResults({})
     setShowTranscript(false)
+    setLocked(false)
     api
       .unit(unitId)
       .then((u) => {
@@ -55,7 +71,11 @@ export function UnitDrill({ unitId, lessonTitle, language, learnerKey, onExit, s
         setUnit(u)
         setResponses(Object.fromEntries(u.exercises.map((e) => [e.id, emptyResponse(e)])))
       })
-      .catch((e) => live && setError(String(e)))
+      .catch((e) => {
+        if (!live) return
+        if (e instanceof LockedError) setLocked(true)
+        else setError(String(e))
+      })
     return () => {
       live = false
     }
@@ -81,6 +101,16 @@ export function UnitDrill({ unitId, lessonTitle, language, learnerKey, onExit, s
       setShowTranscript={setShowTranscript}
       error={error}
       setError={setError}
+    />
+  ) : locked ? (
+    <UnlockGate
+      unitId={unitId}
+      unitLabel={lessonTitle}
+      // Reload the unit through the same effect rather than duplicating the fetch: clearing
+      // `locked` re-runs it, and this time the gate is open.
+      onUnlocked={() => setLocked(false)}
+      onClose={onExit}
+      onSignIn={onSignIn}
     />
   ) : (
     <>

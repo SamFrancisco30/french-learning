@@ -48,12 +48,62 @@ class Settings(BaseSettings):
     # applies to a cloud backend — under local storage those files ARE the library.
     cleanup_local_after_upload: bool = True
 
+    # --- auth (Supabase Auth) ---
+    # The project signs access tokens with ES256 and publishes the verifying public key at
+    # {supabase_url}/auth/v1/.well-known/jwks.json, so the API validates them offline and needs
+    # no shared secret of its own — there is deliberately no SUPABASE_JWT_SECRET here.
+    #
+    # The anon key is the browser's *publishable* key. Unlike supabase_service_key it does not
+    # bypass RLS, and it is meant to ship to clients; it lives here only so /api/auth/config can
+    # hand it to the frontend, which keeps SUPABASE_URL configured in exactly one place.
+    supabase_anon_key: str | None = None
+    # How long a fetched JWKS is reused. Ten minutes bounds how long a rotated-out key keeps
+    # verifying while still costing at most one key fetch per ten minutes of traffic.
+    auth_jwks_ttl_s: int = 600
+
+    # --- entitlements ---
+    # Listening units a learner may open, by tier. Premium is unlimited and has no setting.
+    free_unit_limit: int = 2
+    member_unit_limit: int = 5
+
+    # --- billing (Stripe) ---
+    # All three are absent by default and the billing endpoints answer 503 until they are set,
+    # so the app runs perfectly well with no Stripe account at all — only the upgrade path is
+    # unavailable. Secret key and webhook secret are server-side only.
+    stripe_secret_key: str | None = None
+    stripe_webhook_secret: str | None = None
+    stripe_price_id: str | None = None
+    # Where Stripe returns the learner after checkout. Also the base for email links.
+    app_base_url: str = "http://localhost:5173"
+
     # --- api ---
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def auth_enabled(self) -> bool:
+        """Whether sign-in can work at all. Without a project URL there is nothing to verify
+        tokens against, so the API stays anonymous-only rather than rejecting every caller."""
+        return bool(self.supabase_url and self.supabase_anon_key)
+
+    @property
+    def billing_enabled(self) -> bool:
+        return bool(self.stripe_secret_key and self.stripe_price_id)
+
+    @property
+    def jwks_url(self) -> str | None:
+        if not self.supabase_url:
+            return None
+        return f"{self.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+
+    @property
+    def auth_issuer(self) -> str | None:
+        if not self.supabase_url:
+            return None
+        return f"{self.supabase_url.rstrip('/')}/auth/v1"
 
     @property
     def audio_dir(self) -> Path:

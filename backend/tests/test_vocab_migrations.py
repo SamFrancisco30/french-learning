@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import MetaData, create_engine, inspect, text
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.schema import CreateIndex
@@ -450,8 +451,12 @@ def test_upgrade_empty_database_through_head(tmp_path: Path) -> None:
     engine = create_engine(f"sqlite:///{tmp_path / 'empty_to_head.sqlite'}")
     with engine.begin() as connection:
         _run_migration(connection, "head")
+        # Read the expected head out of the revision graph rather than naming a revision. This
+        # test is about the chain applying cleanly to an empty database, not about which revision
+        # happens to be last, and hardcoding that made every new migration fail here first.
+        expected_head = ScriptDirectory.from_config(_alembic_config()).get_current_head()
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-            "0002_vocabulary_book"
+            expected_head
         )
         assert {
             "normalized_headword",
@@ -485,7 +490,12 @@ def test_revision_0002_frozen_normalizer_matches_runtime(value: str, expected: s
 def test_downgrade_0002_rejects_authenticated_rows_before_ddl(tmp_path: Path) -> None:
     engine = create_engine(f"sqlite:///{tmp_path / 'downgrade_guard.sqlite'}")
     with engine.begin() as connection:
-        _run_migration(connection, "head")
+        # Upgraded to 0002 exactly, not to head. This test asserts that 0002's own downgrade guard
+        # fires *before* it touches anything, by checking the schema is byte-identical afterwards.
+        # Starting from head made it a test of the whole downgrade chain instead: later revisions
+        # downgrade first and legitimately drop their own tables, so the schema comparison failed
+        # on their absence rather than on anything 0002 did.
+        _run_migration(connection, "0002_vocabulary_book")
         connection.execute(
             text(
                 """

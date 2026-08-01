@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { useAuth } from '../auth/AuthContext'
 import { ALL, TopicArt, hasPhoto, topicMeta } from '../topics'
 import type { LessonDetail, LessonSummary, Progress } from '../types'
 import { fmt } from '../useClipPlayer'
+import { LockChip, QuotaBar, UnlockGate } from './Entitlement'
 
 export function ProgressSummary({ progress }: { progress: Progress | null }) {
   if (!progress || progress.attempts === 0) return null
@@ -129,15 +131,21 @@ export function LessonView({
   lessonId,
   onOpenUnit,
   onBack,
+  onSignIn,
   backLabel = 'Library',
 }: {
   lessonId: number
   onOpenUnit: (unitId: number) => void
   onBack: () => void
+  onSignIn: () => void
   backLabel?: string
 }) {
+  const auth = useAuth()
   const [lesson, setLesson] = useState<LessonDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // The unit whose lock the learner just clicked, if any. Held here rather than per row so only
+  // one decision can be open at a time.
+  const [gateFor, setGateFor] = useState<number | null>(null)
 
   useEffect(() => {
     api.lesson(lessonId).then(setLesson).catch((e) => setError(String(e)))
@@ -171,12 +179,16 @@ export function LessonView({
         </div>
       </div>
 
+      <QuotaBar onSignIn={onSignIn} />
+
       {lesson.units.map((u, i) => (
         <div
-          className="card clickable enters"
+          className={`card clickable enters ${auth.isUnlocked(u.id) ? '' : 'is-locked'}`}
           style={{ ['--i' as string]: i }}
           key={u.id}
-          onClick={() => onOpenUnit(u.id)}
+          // A locked unit opens the decision instead of the drill. Navigating first and letting the
+          // 402 land would mean the learner watches a page load and then get taken away again.
+          onClick={() => (auth.isUnlocked(u.id) ? onOpenUnit(u.id) : setGateFor(u.id))}
         >
           <h3>
             Unit {u.idx + 1} · {fmt(u.start_s)}–{fmt(u.end_s)}
@@ -192,9 +204,29 @@ export function LessonView({
             {u.wpm !== null && <span className="chip">{u.wpm.toFixed(0)} wpm</span>}
             <span className="chip">{Math.round(u.duration_s)}s</span>
             <span className="chip">{u.exercise_count} exercises</span>
+            <LockChip unitId={u.id} />
           </div>
         </div>
       ))}
+
+      {gateFor !== null && (
+        <UnlockGate
+          unitId={gateFor}
+          unitLabel={(() => {
+            const unit = lesson.units.find((u) => u.id === gateFor)
+            return unit
+              ? `${lesson.title} · Unit ${unit.idx + 1} (${fmt(unit.start_s)}–${fmt(unit.end_s)})`
+              : lesson.title
+          })()}
+          onUnlocked={() => {
+            const opened = gateFor
+            setGateFor(null)
+            if (opened !== null) onOpenUnit(opened)
+          }}
+          onClose={() => setGateFor(null)}
+          onSignIn={onSignIn}
+        />
+      )}
     </>
   )
 }

@@ -1,0 +1,210 @@
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
+import { AccountPage } from './AccountPage'
+import type { Entitlement, Tier } from '../types'
+
+/**
+ * The email login page, and the account it becomes once you are signed in.
+ *
+ * The auth context is stubbed, so what is asserted here is the page's own contract: that the form
+ * collects an email and password and hands them over, that a failure is reported in words a learner
+ * can act on rather than Supabase's developer text, and that nothing claims a subscription is active
+ * on the strength of a URL.
+ */
+
+const authMock = vi.hoisted(() => ({ useAuth: vi.fn() }))
+vi.mock('../auth/AuthContext', () => ({ useAuth: authMock.useAuth }))
+
+function poseAuth({
+  ready = true,
+  enabled = true,
+  signedIn = false,
+  tier = 'anon' as Tier,
+  billingEnabled = true,
+  email = null as string | null,
+  signIn = vi.fn().mockResolvedValue({}),
+  signUp = vi.fn().mockResolvedValue({}),
+  signOut = vi.fn().mockResolvedValue(undefined),
+  sendPasswordReset = vi.fn().mockResolvedValue({}),
+  startCheckout = vi.fn().mockResolvedValue({}),
+  openBillingPortal = vi.fn().mockResolvedValue({}),
+  refreshMe = vi.fn().mockResolvedValue(undefined),
+} = {}) {
+  const entitlement: Entitlement = {
+    tier,
+    unit_limit: tier === 'premium' ? null : tier === 'free' ? 5 : 2,
+    remaining: tier === 'premium' ? null : 1,
+    unlocked_unit_ids: [],
+    premium_until: tier === 'premium' ? '2027-03-01T00:00:00Z' : null,
+  }
+  authMock.useAuth.mockReturnValue({
+    ready,
+    enabled,
+    billingEnabled,
+    signedIn,
+    tier,
+    email,
+    entitlement,
+    config: { anon_unit_limit: 2, member_unit_limit: 5 },
+    signIn,
+    signUp,
+    signOut,
+    sendPasswordReset,
+    startCheckout,
+    openBillingPortal,
+    refreshMe,
+  })
+  return { signIn, signUp, signOut, sendPasswordReset, startCheckout, openBillingPortal }
+}
+
+describe('AccountPage — signed out', () => {
+  it('shows an email and password form', () => {
+    poseAuth()
+
+    render(<AccountPage navigate={vi.fn()} />)
+
+    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Email')).toHaveAttribute('type', 'email')
+    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password')
+  })
+
+  it('signs in with what was typed', async () => {
+    const { signIn } = poseAuth()
+
+    render(<AccountPage navigate={vi.fn()} />)
+    await userEvent.type(screen.getByLabelText('Email'), '  learner@example.com  ')
+    await userEvent.type(screen.getByLabelText('Password'), 'correct-horse')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in', hidden: false }))
+
+    // Trimmed: a trailing space copied out of an email client must not cause a mismatch.
+    expect(signIn).toHaveBeenCalledWith('learner@example.com', 'correct-horse')
+  })
+
+  it('reports a failed sign-in instead of appearing to do nothing', async () => {
+    poseAuth({ signIn: vi.fn().mockResolvedValue({ error: 'That email and password do not match.' }) })
+
+    render(<AccountPage navigate={vi.fn()} />)
+    await userEvent.type(screen.getByLabelText('Email'), 'learner@example.com')
+    await userEvent.type(screen.getByLabelText('Password'), 'wrong')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in', hidden: false }))
+
+    expect(await screen.findByText('That email and password do not match.')).toBeInTheDocument()
+  })
+
+  it('switches to creating an account, and asks the password manager for a new password', async () => {
+    const { signUp } = poseAuth()
+
+    render(<AccountPage navigate={vi.fn()} />)
+    await userEvent.click(screen.getByRole('tab', { name: 'Create account' }))
+
+    // autocomplete decides whether a manager offers a saved password or generates one. Getting it
+    // wrong is why managers sometimes save the wrong value.
+    expect(screen.getByLabelText('Password')).toHaveAttribute('autocomplete', 'new-password')
+    expect(screen.getByText(/raises your unlocked recordings from 2 to 5/)).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('Email'), 'new@example.com')
+    await userEvent.type(screen.getByLabelText('Password'), 'a-long-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Create account', hidden: false }))
+
+    expect(signUp).toHaveBeenCalledWith('new@example.com', 'a-long-password')
+  })
+
+  it('says to check the inbox when confirmation is required', async () => {
+    poseAuth({ signUp: vi.fn().mockResolvedValue({ confirmEmail: true }) })
+
+    render(<AccountPage navigate={vi.fn()} />)
+    await userEvent.click(screen.getByRole('tab', { name: 'Create account' }))
+    await userEvent.type(screen.getByLabelText('Email'), 'new@example.com')
+    await userEvent.type(screen.getByLabelText('Password'), 'a-long-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Create account', hidden: false }))
+
+    // Otherwise a successful signup looks like nothing happened.
+    expect(await screen.findByText(/confirm your address from the email/)).toBeInTheDocument()
+  })
+
+  it('sends a reset link without revealing whether the address has an account', async () => {
+    const { sendPasswordReset } = poseAuth()
+
+    render(<AccountPage navigate={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: /Forgotten your password/ }))
+    await userEvent.type(screen.getByLabelText('Email'), 'learner@example.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Send reset link' }))
+
+    expect(sendPasswordReset).toHaveBeenCalledWith('learner@example.com')
+    // Phrased as a conditional: confirming which addresses are registered would leak the user list.
+    expect(await screen.findByText(/If learner@example.com has an account/)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument()
+  })
+
+  it('offers a way to keep practising without an account', async () => {
+    const navigate = vi.fn()
+    poseAuth()
+
+    render(<AccountPage navigate={navigate} />)
+    await userEvent.click(screen.getByRole('button', { name: /Keep practising without an account/ }))
+
+    expect(navigate).toHaveBeenCalledWith('/listening')
+  })
+
+  it('explains itself rather than offering a dead form when accounts are not configured', () => {
+    poseAuth({ enabled: false })
+
+    render(<AccountPage navigate={vi.fn()} />)
+
+    expect(screen.getByRole('heading', { name: 'Accounts are not set up' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument()
+  })
+})
+
+describe('AccountPage — signed in', () => {
+  it('shows the free tier and what is left', () => {
+    poseAuth({ signedIn: true, tier: 'free', email: 'learner@example.com' })
+
+    render(<AccountPage navigate={vi.fn()} />)
+
+    expect(screen.getByText('learner@example.com')).toBeInTheDocument()
+    expect(screen.getByText('Free account')).toBeInTheDocument()
+    expect(screen.getByText(/1 of 5 recordings left/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Go premium' })).toBeInTheDocument()
+  })
+
+  it('starts checkout through the server, never with a key in the browser', async () => {
+    const { startCheckout } = poseAuth({ signedIn: true, tier: 'free', email: 'a@b.c' })
+
+    render(<AccountPage navigate={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Go premium' }))
+
+    expect(startCheckout).toHaveBeenCalled()
+  })
+
+  it('shows premium with its renewal date and a way to manage billing', () => {
+    poseAuth({ signedIn: true, tier: 'premium', email: 'learner@example.com' })
+
+    render(<AccountPage navigate={vi.fn()} />)
+
+    expect(screen.getByText('Premium')).toBeInTheDocument()
+    expect(screen.getByText(/Everything unlocked/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Manage billing' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Go premium' })).not.toBeInTheDocument()
+  })
+
+  it('hides the upgrade offer when billing is not configured', () => {
+    poseAuth({ signedIn: true, tier: 'free', email: 'a@b.c', billingEnabled: false })
+
+    render(<AccountPage navigate={vi.fn()} />)
+
+    expect(screen.queryByRole('button', { name: 'Go premium' })).not.toBeInTheDocument()
+  })
+
+  it('signs out and returns to the library', async () => {
+    const navigate = vi.fn()
+    const { signOut } = poseAuth({ signedIn: true, tier: 'free', email: 'a@b.c' })
+
+    render(<AccountPage navigate={navigate} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+
+    expect(signOut).toHaveBeenCalled()
+    expect(navigate).toHaveBeenCalledWith('/listening')
+  })
+})

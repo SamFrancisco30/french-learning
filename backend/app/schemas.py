@@ -462,3 +462,91 @@ class DictationAudioOut(BaseModel):
     # the note in routers/dictation.py: the window length is not the file length.
     duration_s: float | None = None
     cached: bool
+
+
+# --- accounts and entitlements ---
+
+
+class AuthConfigOut(BaseModel):
+    """What the browser needs to talk to Supabase Auth, served rather than baked into the bundle.
+
+    `anon_key` is Supabase's *publishable* key and is meant to be public: unlike the service key it
+    does not bypass row-level security. Serving it from here, instead of a VITE_ variable, keeps
+    SUPABASE_URL configured in exactly one file and means rotating the key does not need a rebuild.
+    """
+
+    enabled: bool
+    url: str | None = None
+    anon_key: str | None = None
+    billing_enabled: bool = False
+    # Tier allowances, so the UI can say "2 free recordings" without hardcoding a number that
+    # disagrees with the server's.
+    anon_unit_limit: int
+    member_unit_limit: int
+
+
+class EntitlementOut(BaseModel):
+    tier: str  # "anon" | "free" | "premium"
+    # None means unlimited; the client must not treat it as zero.
+    unit_limit: int | None = None
+    remaining: int | None = None
+    unlocked_unit_ids: list[int] = Field(default_factory=list)
+    premium_until: datetime | None = None
+
+
+class MeOut(BaseModel):
+    signed_in: bool
+    user_id: str | None = None
+    email: str | None = None
+    entitlement: EntitlementOut
+
+
+class ClaimIn(BaseModel):
+    """The device key whose anonymous work should be moved onto the signed-in account."""
+
+    learner_key: str = Field(min_length=1, max_length=64)
+
+
+class ClaimOut(BaseModel):
+    claimed: bool
+    vocab_items: int = 0
+    attempts: int = 0
+    unlocks: int = 0
+    sessions: int = 0
+    entitlement: EntitlementOut
+
+
+class UnlockOut(BaseModel):
+    unit_id: int
+    unlocked: bool
+    entitlement: EntitlementOut
+
+
+class CheckoutOut(BaseModel):
+    url: str
+
+
+class SessionHeartbeatIn(BaseModel):
+    session_id: int | None = None
+    language: str = "fr"
+    skill: str = "listening"
+    unit_id: int | None = None
+    # Seconds of study to add since the last heartbeat. Bounded so a client that sleeps and wakes
+    # cannot post an hour of "study" in one call.
+    seconds: int = Field(default=0, ge=0, le=600)
+    attempts: int = Field(default=0, ge=0, le=1000)
+    correct: int = Field(default=0, ge=0, le=1000)
+
+
+class StudySessionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    language: str
+    skill: str
+    unit_id: int | None
+    started_at: datetime
+    last_seen_at: datetime
+    attempts: int
+    correct: int
+    seconds: int

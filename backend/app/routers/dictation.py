@@ -18,12 +18,15 @@ import random
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from ..db import get_db
+from ..entitlements import Entitlement, resolve_entitlement
+from ..identity import LearnerIdentity, optional_learner_identity
 from ..languages import get_language
 from ..media.audio import extract_clip
 from ..media.punctuation import MissingAssets, find_marks, splice_announcements
@@ -38,6 +41,7 @@ from ..models import (
     Lesson,
     ListeningUnit,
 )
+from ..routers.account import require_unit_access
 from ..schemas import (
     DictationAudioOut,
     DictationItemOut,
@@ -144,14 +148,33 @@ def _item_out(ex: Exercise, *, with_audio: bool) -> DictationItemOut:
     )
 
 
-def _candidates(db: Session, kind: str, language: str):
-    return (
+def _candidates(
+    db: Session,
+    kind: str,
+    language: str,
+    entitlement: Entitlement | None = None,
+):
+    """Dictation items available to this learner.
+
+    Every dictation item is cut from a listening unit, so leaving this unrestricted would make the
+    dictation page a way around the listening allowance: a learner with two unlocked recordings
+    could dictate the whole library. Restricting it to unlocked units keeps one allowance rather
+    than inventing a second, and the framing stays honest — dictation practises the recordings you
+    have, and the listening quota is what says which those are.
+
+    An empty unlock set correctly yields nothing: SQLAlchemy renders `IN ()` as a false predicate,
+    so a learner who has unlocked no units sees no items rather than every item.
+    """
+    stmt = (
         select(Exercise)
         .join(ListeningUnit, Exercise.unit_id == ListeningUnit.id)
         .join(Lesson, ListeningUnit.lesson_id == Lesson.id)
         .where(Exercise.kind == kind, Lesson.language == language)
         .options(selectinload(Exercise.unit).selectinload(ListeningUnit.lesson))
     )
+    if entitlement is not None and not entitlement.is_premium:
+        stmt = stmt.where(Exercise.unit_id.in_(entitlement.unlocked_unit_ids))
+    return stmt
 
 
 @router.get("/levels", response_model=list[DictationLevelOut])
@@ -190,6 +213,7 @@ def inventory(language: str = "fr", db: Session = Depends(get_db)) -> dict:
 
 @router.get("/next", response_model=DictationNextOut)
 def next_item(
+    identity: Annotated[LearnerIdentity | None, Depends(optional_learner_identity)],
     mode: str = Query("sentence"),
     learner_key: str = Query("anonymous"),
     language: str = "fr",
@@ -219,10 +243,14 @@ def next_item(
         ).all()
     )
 
+    entitlement = resolve_entitlement(db, identity)
+
     # Search the target level first, then outwards by CEFR distance.
     order = sorted(CEFR_LEVELS, key=lambda c: abs(_level_index(c) - _level_index(target)))
     for candidate_level in order:
-        pool = db.scalars(_candidates(db, kind, language).where(Exercise.cefr == candidate_level)).all()
+        pool = db.scalars(
+            _candidates(db, kind, language, entitlement).where(Exercise.cefr == candidate_level)
+        ).all()
         if not pool:
             continue
         fresh = [e for e in pool if e.id not in done]
@@ -236,6 +264,23 @@ def next_item(
             off_level=candidate_level != target,
             repeat=not fresh,
             remaining_at_level=len(fresh),
+        )
+
+    # Nothing was found. Distinguish "the library has no items" from "you have not unlocked any
+    # recordings to dictate": the first is an ingest problem and its message tells a developer which
+    # script to run, which is the wrong thing to show a learner who simply needs to open a recording.
+    if not entitlement.is_premium and not entitlement.unlocked_unit_ids:
+        raise HTTPException(
+            402,
+            detail={
+                "error": "no_unlocked_units",
+                "entitlement": {
+                    "tier": entitlement.tier,
+                    "unit_limit": entitlement.unit_limit,
+                    "remaining": entitlement.remaining,
+                    "unlocked_unit_ids": list(entitlement.unlocked_unit_ids),
+                },
+            },
         )
 
     raise HTTPException(
@@ -268,6 +313,7 @@ def _interp(t: float, time_map: list[list[float]]) -> float:
 @router.get("/items/{exercise_id}/audio", response_model=DictationAudioOut)
 def item_audio(
     exercise_id: int,
+    identity: Annotated[LearnerIdentity | None, Depends(optional_learner_identity)],
     speed: float = Query(1.0, ge=0.4, le=1.0),
     punctuation: bool = Query(False, description="Read the punctuation aloud, as in a dictée."),
     db: Session = Depends(get_db),
@@ -285,6 +331,12 @@ def item_audio(
     unit = ex.unit
     if not unit.clip_key:
         raise HTTPException(409, "this item's unit has no audio")
+
+    # Gated on the unit the item was cut from. The listing endpoints already hide locked items, but
+    # this one takes an exercise id directly and is where the audio actually comes from, so it has
+    # to check independently rather than trusting that the caller went through a listing.
+    if ex.unit_id is not None:
+        require_unit_access(ex.unit_id, identity, db)
 
     lang = get_language(unit.lesson.language)
     store = get_store()
@@ -350,6 +402,7 @@ def item_audio(
 
 @router.get("/items", response_model=list[DictationItemOut])
 def list_items(
+    identity: Annotated[LearnerIdentity | None, Depends(optional_learner_identity)],
     mode: str = Query("sentence"),
     language: str = "fr",
     level: str | None = None,
@@ -359,7 +412,7 @@ def list_items(
     """Browse items. Audio URLs are omitted — signing 50 of them would be 50 network calls."""
     if mode not in MODES:
         raise HTTPException(400, f"mode must be one of {', '.join(MODES)}")
-    stmt = _candidates(db, MODES[mode], language)
+    stmt = _candidates(db, MODES[mode], language, resolve_entitlement(db, identity))
     if level:
         stmt = stmt.where(Exercise.cefr == level)
     rows = db.scalars(stmt.order_by(Exercise.unit_id, Exercise.order_idx).limit(limit)).all()

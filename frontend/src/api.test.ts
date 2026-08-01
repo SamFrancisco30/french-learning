@@ -170,7 +170,11 @@ describe('API request boundaries', () => {
     expect(message).toBe('503 Unavailable — /api/progress')
     const [, init] = requestAt()
     expect(requestAt()[0]).toBe('/api/progress?learner_key=learner_secret%26admin%3Dtrue')
-    expect(init).toBeUndefined()
+    // Every request now carries identity headers, so `init` is always present — it used to be
+    // undefined for a GET with no explicit headers. What this test is about is unchanged: no part
+    // of the identity, the query string or the response body reaches the thrown message.
+    expect(init).toBeDefined()
+    expect(init?.body).toBeUndefined()
     expect(message).not.toContain('learner_secret')
     expect(message).not.toContain('learner_key')
     expect(message).not.toContain('?')

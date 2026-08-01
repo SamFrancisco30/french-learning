@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { api } from './api'
+import { useAuth } from './auth/AuthContext'
 import { StarMark } from './components/icons'
 import { LanguagePicker } from './components/LanguagePicker'
+import { AccountPage } from './pages/AccountPage'
 import { DictationPage } from './pages/DictationPage'
 import { ListeningPage } from './pages/ListeningPage'
 import { ReadingPage } from './pages/ReadingPage'
@@ -14,6 +16,7 @@ import type { Language } from './types'
 
 export default function App() {
   const { learnerKey } = useIdentity()
+  const auth = useAuth()
   const { path, segments, navigate } = useHashRoute()
   const mastheadRef = useRef<HTMLElement | null>(null)
   const [languages, setLanguages] = useState<Language[]>([])
@@ -51,6 +54,10 @@ export default function App() {
 
   const skill = skillFromPath(segments)
   const isVocabulary = segments[0] === 'vocabulary'
+  const isAccount = segments[0] === 'account'
+  // Neither the vocabulary book nor the account page belongs to a skill, so both suppress the
+  // skill-specific rendering below rather than each being special-cased at every branch.
+  const isSkillRoute = !isVocabulary && !isAccount
 
 
 
@@ -62,8 +69,8 @@ export default function App() {
             {/* Title is the current skill's name in the target language, so it tracks both
                 the page and the chosen language rather than sitting on "Écoute" (which
                 means "listening" and is wrong everywhere else). */}
-            <h1 lang={isVocabulary ? 'en' : language}>
-              {isVocabulary ? 'My Words' : skillTitle(skill, language)}
+            <h1 lang={isSkillRoute ? language : 'en'}>
+              {isVocabulary ? 'My Words' : isAccount ? 'Account' : skillTitle(skill, language)}
             </h1>
             {/* The flag replaces both the language name and the three code buttons that used to
                 sit beside it. It says which language is loaded and is also how you change it, and
@@ -74,7 +81,7 @@ export default function App() {
               value={language}
               onChange={(code) => {
                 setLanguage(code)
-                navigate(isVocabulary ? '/vocabulary' : `/${skill.key}`)
+                navigate(isSkillRoute ? `/${skill.key}` : isVocabulary ? '/vocabulary' : '/account')
               }}
             />
           </div>
@@ -83,9 +90,9 @@ export default function App() {
             {SKILLS.map((s) => (
               <button
                 key={s.key}
-                className={`skilltab has-tip ${!isVocabulary && s.key === skill.key ? 'on' : ''}`}
+                className={`skilltab has-tip ${isSkillRoute && s.key === skill.key ? 'on' : ''}`}
                 onClick={() => navigate(s.route)}
-                aria-current={!isVocabulary && s.key === skill.key ? 'page' : undefined}
+                aria-current={isSkillRoute && s.key === skill.key ? 'page' : undefined}
               >
                 <span className={`dot ${s.status}`} />
                 {s.label}
@@ -125,11 +132,47 @@ export default function App() {
             >
               <StarMark />
             </button>
+
+            {/*
+              The account control, and the one place the tier is visible from every page.
+
+              Two states rather than an icon that means both. Signed out it is a labelled "Sign in",
+              because an avatar glyph asking to be recognised as a login is exactly the control
+              people miss; signed in it is the initial from their email, which is the compact form
+              that only becomes meaningful once there is an account to belong to.
+
+              Rendered only once `ready` is true. Before that it is unknown whether this server has
+              accounts at all, and flashing "Sign in" then removing it is worse than a brief gap.
+            */}
+            {auth.ready && auth.enabled && (
+              <button
+                className={`utilitytab accountbtn ${isAccount ? 'on' : ''} ${
+                  auth.signedIn ? 'is-signedin' : ''
+                }`}
+                onClick={() => navigate('/account')}
+                aria-current={isAccount ? 'page' : undefined}
+                aria-label={auth.signedIn ? `Account — ${auth.email ?? 'signed in'}` : 'Sign in'}
+                title={
+                  auth.signedIn
+                    ? `${auth.email ?? 'Signed in'}${auth.tier === 'premium' ? ' · Premium' : ''}`
+                    : 'Sign in to unlock more recordings'
+                }
+              >
+                {auth.signedIn ? (
+                  <span className="avatar" aria-hidden="true">
+                    {(auth.email ?? '?').trim().charAt(0).toUpperCase()}
+                    {auth.tier === 'premium' && <span className="premiumdot" />}
+                  </span>
+                ) : (
+                  'Sign in'
+                )}
+              </button>
+            )}
           </nav>
         </div>
       </header>
 
-      {!isVocabulary && skill.key === 'listening' && (
+      {isSkillRoute && skill.key === 'listening' && (
         <ListeningPage
           segments={segments}
           navigate={navigate}
@@ -138,7 +181,7 @@ export default function App() {
         />
       )}
 
-      {!isVocabulary && skill.key === 'reading' && (
+      {isSkillRoute && skill.key === 'reading' && (
         <ReadingPage language={language} />
       )}
 
@@ -146,15 +189,17 @@ export default function App() {
           placeholder this branch had it pointing at. The learner key comes from the shared
           identity context — the local useState(learnerKey) this used to read was replaced by
           IdentityContext, which is the one source of the key for every skill. */}
-      {!isVocabulary && skill.key === 'dictation' && (
+      {isSkillRoute && skill.key === 'dictation' && (
         <DictationPage language={language} learnerKey={learnerKey} navigate={navigate} />
       )}
 
-      {!isVocabulary && (skill.key === 'writing' || skill.key === 'speaking') && (
+      {isSkillRoute && (skill.key === 'writing' || skill.key === 'speaking') && (
         <SkillStatusPage skill={skill} onGoListening={() => navigate('/listening')} />
       )}
 
       {isVocabulary && <VocabularyPage language={language} navigate={navigate} />}
+
+      {isAccount && <AccountPage navigate={navigate} />}
     </div>
   )
 }

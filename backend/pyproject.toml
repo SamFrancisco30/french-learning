@@ -21,6 +21,14 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "alembic>=1.14",
     "supabase>=2.10",
+    # Verifying Supabase access tokens. Already present transitively via `supabase`, but declared
+    # because app/auth.py imports it directly — an indirect dependency can be dropped by an
+    # unrelated upgrade. The [crypto] extra is what supplies ES256; without it verification of
+    # this project's asymmetric tokens fails at runtime rather than at install time.
+    "pyjwt[crypto]>=2.10",
+    # Billing. Server-side only: the browser is redirected to Stripe-hosted Checkout, so no card
+    # details ever reach this application and there is no Stripe.js in the bundle.
+    "stripe>=11.0",
 ]
 
 [project.optional-dependencies]

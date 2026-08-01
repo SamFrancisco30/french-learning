@@ -86,6 +86,7 @@ export function ListeningPage({
         language={lesson?.language ?? language}
         learnerKey={learnerKey}
         onExit={() => navigate(`/listening/lesson/${lessonId}`)}
+        onSignIn={() => navigate('/account')}
       />
       </div>
     )
@@ -101,6 +102,7 @@ export function ListeningPage({
         // route carries no topic, so it is read off the lesson itself.
         onBack={() => navigate(`/listening/topic/${lesson?.topic || 'all'}`)}
         onOpenUnit={(uid) => navigate(`/listening/lesson/${lessonId}/unit/${uid}`)}
+        onSignIn={() => navigate('/account')}
       />
       </div>
     )

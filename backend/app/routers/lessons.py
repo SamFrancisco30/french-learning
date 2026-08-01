@@ -6,16 +6,18 @@ import json
 import logging
 import tempfile
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from ..db import get_db
+from ..entitlements import Entitlement
 from ..languages import supported_languages
-from ..models import SKILL_LISTENING, Exercise, Lesson, ListeningUnit, Segment, Source, Transcript
 from ..media.timestretch import TimeStretchError, natural_slow
-from ..storage import get_store, variant_clip_key, variant_map_key
+from ..models import SKILL_LISTENING, Exercise, Lesson, ListeningUnit, Segment, Source, Transcript
+from ..routers.account import require_unit_access
 from ..schemas import (
     ClipVariantOut,
     ExercisePublic,
@@ -27,6 +29,7 @@ from ..schemas import (
     UnitDetail,
     UnitSummary,
 )
+from ..storage import get_store, variant_clip_key, variant_map_key
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["lessons"])
@@ -142,7 +145,13 @@ def get_lesson(lesson_id: int, db: Session = Depends(get_db)) -> LessonDetail:
 
 
 @router.get("/units/{unit_id}", response_model=UnitDetail)
-def get_unit(unit_id: int, db: Session = Depends(get_db)) -> UnitDetail:
+def get_unit(
+    unit_id: int,
+    # The entitlement gate. Browsing the library stays free — /lessons and /lessons/{id} list every
+    # unit — but opening one spends an allowance slot, so this is where the tier is enforced.
+    _access: Annotated[Entitlement, Depends(require_unit_access)],
+    db: Session = Depends(get_db),
+) -> UnitDetail:
     unit = db.scalar(
         select(ListeningUnit)
         .where(ListeningUnit.id == unit_id)
@@ -184,6 +193,7 @@ def get_unit(unit_id: int, db: Session = Depends(get_db)) -> UnitDetail:
 @router.get("/units/{unit_id}/clip", response_model=ClipVariantOut)
 def get_unit_clip(
     unit_id: int,
+    _access: Annotated[Entitlement, Depends(require_unit_access)],
     speed: float = Query(default=1.0, ge=0.4, le=1.0),
     db: Session = Depends(get_db),
 ) -> ClipVariantOut:
@@ -311,7 +321,11 @@ def _located_words(unit: ListeningUnit) -> list[dict]:
 
 
 @router.get("/units/{unit_id}/transcript", response_model=TranscriptOut)
-def get_unit_transcript(unit_id: int, db: Session = Depends(get_db)) -> TranscriptOut:
+def get_unit_transcript(
+    unit_id: int,
+    _access: Annotated[Entitlement, Depends(require_unit_access)],
+    db: Session = Depends(get_db),
+) -> TranscriptOut:
     """Full text for a unit. The UI gates this behind 'reveal transcript'."""
     unit = db.get(ListeningUnit, unit_id)
     if not unit:

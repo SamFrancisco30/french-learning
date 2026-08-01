@@ -1,11 +1,15 @@
 import type {
   AttemptResult,
+  AuthConfig,
+  ClaimResult,
   Language,
   LessonDetail,
   LessonSummary,
+  Me,
   Progress,
   Transcript,
   UnitDetail,
+  UnlockResult,
   VocabEditInput,
   VocabItem,
   VocabList,
@@ -21,13 +25,72 @@ function requestPathname(path: string): string {
   }
 }
 
+/**
+ * Identity headers attached to every request: the anonymous device key, and a bearer token once
+ * the learner has signed in.
+ *
+ * A registered function rather than a parameter because entitlements made identity relevant to
+ * nearly every endpoint — units, clips, transcripts, dictation — where before only the six vocab
+ * calls needed it. Threading a `headers` argument through each of those call sites would mean any
+ * new call is anonymous by omission, which for a gated endpoint reads as "locked" rather than as a
+ * bug. One injection point makes carrying identity the default.
+ *
+ * Async, and read per call rather than captured once: the access token expires roughly hourly and
+ * supabase-js refreshes it in the background, so a token snapshotted at mount would start failing
+ * mid-session.
+ */
+export type IdentityHeaders = Record<string, string>
+let identityHeaderSource: () => IdentityHeaders | Promise<IdentityHeaders> = () => ({})
+
+export function setIdentityHeaderSource(
+  source: () => IdentityHeaders | Promise<IdentityHeaders>,
+): void {
+  identityHeaderSource = source
+}
+
+/** The error thrown for a gated response, carrying the tier detail the paywall renders. */
+export class LockedError extends Error {
+  readonly status: number
+  readonly detail: unknown
+
+  constructor(status: number, detail: unknown, path: string) {
+    super(`${status} — ${path}`)
+    this.name = 'LockedError'
+    this.status = status
+    this.detail = detail
+  }
+}
+
 async function request<T>(
   path: string,
   init?: RequestInit,
   expectsJson = true,
 ): Promise<T> {
-  const res = await fetch(path, init)
+  let injected: IdentityHeaders = {}
+  try {
+    injected = await identityHeaderSource()
+  } catch {
+    // A failure to read the session must not stop the request. Sent without identity it is simply
+    // an anonymous call, which every endpoint still answers — just with the anonymous tier.
+    injected = {}
+  }
+
+  const headers = new Headers(injected)
+  // Explicit headers win: a caller passing its own X-Learner-Key is being deliberate, and the
+  // vocab calls still do exactly that.
+  new Headers(init?.headers).forEach((value, key) => headers.set(key, value))
+
+  const res = await fetch(path, { ...init, headers })
   if (!res.ok) {
+    // 402 and 409 are the entitlement responses and carry a structured body the UI needs, so they
+    // are not flattened into a plain message like every other failure.
+    if (res.status === 402 || res.status === 409) {
+      const detail = await res
+        .json()
+        .then((body) => body?.detail ?? body)
+        .catch(() => null)
+      throw new LockedError(res.status, detail, requestPathname(path))
+    }
     throw new Error(`${res.status} ${res.statusText} — ${requestPathname(path)}`)
   }
   if (
@@ -101,6 +164,16 @@ export const api = {
     get<{ job_id: string; status: string; message: string | null; lesson_id: number | null }>(
       `/api/ingest/${id}`,
     ),
+
+  // --- accounts, entitlements and billing ---
+  authConfig: () => get<AuthConfig>('/api/auth/config'),
+  me: () => get<Me>('/api/me'),
+  /** Spend one allowance slot on a recording. Throws LockedError(409) when the allowance is gone. */
+  unlockUnit: (id: number) => post<UnlockResult>(`/api/units/${id}/unlock`, {}),
+  /** Move this device's anonymous work onto the account that just signed in. */
+  claim: (learnerKey: string) => post<ClaimResult>('/api/me/claim', { learner_key: learnerKey }),
+  checkout: () => post<{ url: string }>('/api/billing/checkout', {}),
+  billingPortal: () => post<{ url: string }>('/api/billing/portal', {}),
 }
 
 export type VocabListParams = {

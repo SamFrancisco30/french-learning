@@ -60,8 +60,26 @@ def test_rejects_missing_overlong_malformed_or_unprefixed_keys(
         assert learner_key not in response.text
 
 
-@pytest.mark.parametrize("authorization", ["Bearer bearer-secret", ""])
-def test_rejects_any_authorization_header_even_with_valid_anonymous_key(
+# A malformed Authorization header is refused before anything is verified, and a *well-formed*
+# header whose token does not verify is refused by app.auth (see test_auth_tokens.py). What this
+# case guards is that a valid anonymous key alongside a bad token does NOT fall back to the
+# anonymous identity: the caller asked to act as an account, and quietly serving them as a device
+# instead would apply the wrong tier and write to the wrong rows.
+#
+# This replaces an assertion that *any* Authorization header was a 401, which was the placeholder
+# for auth not existing yet. It has been superseded by real verification, not relaxed.
+@pytest.mark.parametrize(
+    "authorization",
+    [
+        "",
+        "bearer-secret",
+        "Basic dXNlcjpwYXNz",
+        "Bearer",
+        "Bearer ",
+        "Bearer one two",
+    ],
+)
+def test_rejects_malformed_authorization_without_falling_back_to_anonymous(
     authorization: str,
 ) -> None:
     learner_key = "learner_abc123"
