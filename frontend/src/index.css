@@ -795,7 +795,10 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 13px 15px; margin-bottom: 16px;
+  /* Vertical padding trimmed to the minimum that still keeps the controls off the border. Nothing in
+     the row is taller than the 28px handle now, so the card is 28 + 12 + 2 = 42px against the 65 it
+     was when the slider carried a label and its own margins. */
+  padding: 6px 14px; margin-bottom: 16px;
   box-shadow: var(--shadow-md);
 }
 .player-row { display: flex; align-items: center; gap: 12px; }
@@ -818,12 +821,12 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
  * on a white card with nothing behind, so a white translucent fill would be invisible. A blue-tinted
  * body keeps it the primary action AND keeps it transparent — the card still reads through it.
  *
- * 24 x 32 rather than the thumb's own 15 x 21: this is a button, and 21px tall is under the 24px
- * minimum target size, which on the control that starts the audio is not a trade worth making. Same
- * ratio, so it still looks like the thumb's sibling.
+ * 24 x 28: the handle's height, so the two are the same object and neither sets the row's height on
+ * its own. Wider than the handle's 18px because this is a button and 18 is under the 24px minimum
+ * target size — on the control that starts the audio that is not a trade worth making.
  */
 .play-btn {
-  width: 24px; height: 32px; flex: 0 0 24px;
+  width: 24px; height: var(--glass-h); flex: 0 0 24px;
   border-radius: 50%;
   /* Clear glass: white beams over a barely-there neutral body. No accent tint — the blue made it a
      blue button that happened to be shiny, where the point is a colourless object with light on it.
@@ -1565,9 +1568,10 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
-/* Four pixels taller than the thumb, so the handle has somewhere to stand out into. The visible
-   pill inside stays 20.5px and centred, which is what the thumb now overhangs. */
-.speed-rail { position: relative; height: 32px; margin-top: 5px; }
+/* Exactly the handle's height — the handle is what sets it, and there is nothing else in here. The
+   visible pill inside stays 20.5px and centred, which is what the handle overhangs.
+   The 5px top margin is gone with the "SPEED" label it used to clear. */
+.speed-rail { position: relative; height: var(--glass-h); }
 
 /* The level, its multiplier and what it does to the audio — raised on hover, focus, change or while
    a variant is being prepared, and otherwise absent. See SpeedSlider for why it is always in the DOM
