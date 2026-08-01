@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, lexicon } from '../api'
 import type {
   AttemptResult,
-  ClipVariant,
   Exercise,
   Transcript,
   UnitDetail,
@@ -20,25 +19,6 @@ import { FollowProvider } from './Follow'
 import { FollowTranscript } from './FollowTranscript'
 import { LookupProvider, SelectableText } from './Lookup'
 import { SpeedSlider } from './SpeedSlider'
-
-/**
- * What the reshaping actually did to this clip, for the line under the speed slider.
- *
- * Reports the mean gap rather than the total, because the same requested speed lands very
- * differently depending on how much silence a clip already had — 0.3s between words on a measured
- * talk, 2s on dense speech with few natural pauses.
- *
- * Returns undefined at 1x and while loading, so the slider falls back to describing the setting.
- */
-function reshapeDetail(variant: ClipVariant | null, loading: boolean): string | undefined {
-  if (loading || !variant || variant.natural) return undefined
-  const words = `words at ${Math.round((variant.word_factor ?? 1) * 100)}%`
-  const added = variant.inserted_silence_s ?? 0
-  // At 0.9x the word stretch alone reaches the target, so nothing is inserted. Saying "0.00s added
-  // at each of 192 pauses" is technically true and reads as a bug.
-  if (added < 0.05 || !variant.pauses) return `${words} — no added pauses needed`
-  return `${words}, ${(added / variant.pauses).toFixed(2)}s added at each of ${variant.pauses} pauses`
-}
 
 interface Props {
   unitId: number
@@ -278,12 +258,6 @@ function Drill({
             speed={player.speed}
             onChange={player.setSpeed}
             disabled={player.loadingSpeed}
-            // Once a variant is loaded its own numbers replace the level's generic description:
-            // what this clip actually got is more use than what the setting means in general. The
-            // mean gap matters more than the total, because the same speed lands very differently
-            // depending on how much silence a clip already had — 0.3s between words on a measured
-            // talk, 2s on dense speech with few natural pauses.
-            detail={reshapeDetail(player.variant, player.loadingSpeed)}
           />
 
           <div className="player-meta">

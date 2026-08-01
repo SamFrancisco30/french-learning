@@ -61,7 +61,6 @@
      them is a ::-webkit-slider-thumb, which cannot take a class. Tokens are the only way those two
      stay identical. Translucency is the whole point: whatever is behind shows through and tints it. */
   --glass-blur: blur(3px) saturate(160%);
-  --glass-rim: rgba(255, 255, 255, .85);
   /* White light across the glass, and the piece that actually sells it. Translucency alone only reads
      as glass when there is something behind to refract — true of the speed thumb, which has blocks
      travelling under it, and not true of the play button on its plain white card, where a see-through
@@ -75,14 +74,14 @@
   --glass-beams:
     linear-gradient(
       148deg,
-      rgba(255, 255, 255, .95) 0%,
-      rgba(255, 255, 255, .28) 30%,
+      rgba(255, 255, 255, .78) 0%,
+      rgba(255, 255, 255, .2) 30%,
       rgba(255, 255, 255, 0) 48%
     ),
     linear-gradient(
       148deg,
       rgba(255, 255, 255, 0) 54%,
-      rgba(255, 255, 255, .5) 66%,
+      rgba(255, 255, 255, .36) 66%,
       rgba(255, 255, 255, 0) 78%
     );
   /* Lift, a hard rim light along the top edge, and a darker inner edge along the bottom — the three
@@ -91,9 +90,12 @@
     0 2px 6px rgba(24, 33, 46, .18),
     inset 0 1px 1.5px rgba(255, 255, 255, .95),
     inset 0 -2px 3px rgba(24, 33, 46, .14);
-  /* The ellipse the two share. Taller than wide, so both read as something to grab. */
-  --glass-w: 15px;
-  --glass-h: 21px;
+  /* The ellipse. Taller than wide, so it reads as something to grab — and deliberately TALLER THAN
+     THE TRACK, so a little of it stands out above and below the pill. At 21px against a 20.5px pill
+     the overhang was a quarter of a pixel, which is to say none: the handle looked inlaid rather than
+     held. 28px puts 3.75px clear at each end. */
+  --glass-w: 18px;
+  --glass-h: 28px;
 
   --radius: 10px;
   --radius-sm: 7px;
@@ -830,7 +832,7 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
      Text always paints above its own element's background, so as long as the beams were part of this
      background the mark sat in front of them, which is the opposite of being behind glass. */
   position: relative;
-  background: rgba(255, 255, 255, .16);
+  background: rgba(255, 255, 255, .1);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
   /* No border. A drawn outline reads as a ring around the glass rather than as the glass's own edge;
@@ -889,8 +891,8 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
    press reads as a second border appearing, which is the one thing the borderless body is avoiding.
    Keyboard focus still gets the app's focus ring from the global :focus-visible rule — that fires on
    keyboard only, so it never appears on a click. */
-.play-btn:hover { background: rgba(255, 255, 255, .34); }
-.play-btn:active { background: rgba(255, 255, 255, .5); }
+.play-btn:hover { background: rgba(255, 255, 255, .22); }
+.play-btn:active { background: rgba(255, 255, 255, .34); }
 
 /* Shrinks from a comfortable 340px but does not stretch, so width freed on a 1208px frame goes to
    the speed control and the meta rather than into a progress bar a metre long — a 1:09 clip does not
@@ -1556,14 +1558,16 @@ kbd {
    the left stop stretches every word and inserts seconds of pause, the right stop is the
    untouched recording. */
 
-.speed { --pos: 100%; margin: 4px 0 2px; min-width: 210px; position: relative; }
+.speed { --pos: 100%; --t: 1; margin: 4px 0 2px; min-width: 210px; position: relative; }
 
 .speed-x {
   font-family: var(--mono); font-size: 11px; color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
 
-.speed-rail { position: relative; height: 28px; margin-top: 5px; }
+/* Four pixels taller than the thumb, so the handle has somewhere to stand out into. The visible
+   pill inside stays 20.5px and centred, which is what the thumb now overhangs. */
+.speed-rail { position: relative; height: 32px; margin-top: 5px; }
 
 /* The level, its multiplier and what it does to the audio — raised on hover, focus, change or while
    a variant is being prepared, and otherwise absent. See SpeedSlider for why it is always in the DOM
@@ -1576,17 +1580,17 @@ kbd {
      the transport but near the left on the dictation page, so a popup that only ever grows one way
      runs off the edge on one of them. Growing equally in both directions fits either. */
   position: absolute; bottom: calc(100% + 6px); left: 50%; z-index: 25;
-  display: flex; align-items: baseline; gap: 7px;
-  /* max-content, or the shrink-to-fit width of an absolutely positioned box is capped by its
-     containing block — the 190px slider — so max-width: 340px never applied and the detail line
-     wrapped to three cramped rows instead of using the space it was allowed. */
-  width: max-content; max-width: 340px;
-  padding: 6px 10px;
+  /* max-content, because the shrink-to-fit width of an absolutely positioned box is otherwise capped
+     by its containing block — the 190px slider — which would wrap even a single word at some
+     breakpoints. */
+  width: max-content;
+  padding: 4px 9px;
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
-  font-size: 12px; line-height: 1.45;
+  font-size: 12px; line-height: 1.35; font-weight: 600;
+  color: var(--accent-ink);
   white-space: nowrap;
   /* Out of the way when closed in every sense: invisible, unhittable, and not a tab stop or a
      search-in-page hit. visibility rather than display, so the fade has something to animate. */
@@ -1598,10 +1602,6 @@ kbd {
   pointer-events: none;
 }
 .speed.is-open .speed-pop { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
-.speed-pop b { font-size: 13px; font-weight: 650; color: var(--accent-ink); }
-/* The detail line is the only part that can be long — "words at 78%, 0.32s added at each of 182
-   pauses" — so it is the only part allowed to wrap. */
-.speed-pop-note { color: var(--text-dim); white-space: normal; }
 
 @media (prefers-reduced-motion: reduce) {
   .speed-pop { transition: none; }
@@ -1673,8 +1673,15 @@ kbd {
 }
 .speed-input:active { cursor: grabbing; }
 .speed-input:disabled { cursor: not-allowed; }
-.speed-input::-webkit-slider-runnable-track { height: 100%; background: none; }
-.speed-input::-moz-range-track { height: 100%; background: none; }
+/* The track is given the THUMB's height, not the input's.
+ *
+ * At 100% it was the full 28px of the rail while the thumb was 21px, and the browser's own centring
+ * of a shorter thumb in a taller track left the body about 2px above the visible pill's centre —
+ * measured at 7x zoom against a hairline on the pill's midline. Matching the two heights removes the
+ * arithmetic entirely: there is no leftover space for the thumb to be centred in, so it lands exactly
+ * on the track, and the track is centred in the rail like the pill is. */
+.speed-input::-webkit-slider-runnable-track { height: var(--glass-h); background: none; }
+.speed-input::-moz-range-track { height: var(--glass-h); background: none; }
 
 /*
  * THE THUMB: an ellipse, and made of glass rather than painted white.
@@ -1696,39 +1703,61 @@ kbd {
  * Taller than wide, so it reads as something to grab rather than as a dot, and the ellipse keeps it
  * from looking like the round scrubber head on the same row.
  */
+/*
+ * The native thumb is kept at full size but made invisible. It is still the drag target, still what a
+ * screen reader and the keyboard operate, and still what sets the value — it simply stops being what
+ * you see, because its position cannot be animated. The glass moved to .speed-knob below.
+ */
 .speed-input::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
-  width: var(--glass-w); height: var(--glass-h); border-radius: 50%;
-  /* Base kept low to pay for the beams' brightness — the blocks travelling underneath have to stay
-     visible through it, which is this control's entire glass effect. */
-  background: var(--glass-beams), rgba(255, 255, 255, .2);
-  -webkit-backdrop-filter: var(--glass-blur);
-  backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-rim);
-  box-shadow: var(--glass-shadow);
-  transition: box-shadow .16s ease, transform .12s ease, background .16s ease;
+  width: var(--glass-w); height: var(--glass-h);
+  opacity: 0;
 }
 .speed-input::-moz-range-thumb {
-  width: var(--glass-w); height: var(--glass-h); border-radius: 50%;
-  background: var(--glass-beams), rgba(255, 255, 255, .2);
-  backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-rim);
-  box-shadow: var(--glass-shadow);
-  transition: box-shadow .16s ease, transform .12s ease, background .16s ease;
+  width: var(--glass-w); height: var(--glass-h);
+  border: 0;
+  opacity: 0;
 }
-.speed-input:hover::-webkit-slider-thumb {
-  background: var(--glass-beams), rgba(255, 255, 255, .32);
-  box-shadow: var(--glass-shadow), 0 0 0 4px rgba(58,110,165,.14);
-}
-.speed-input:hover::-moz-range-thumb {
-  background: var(--glass-beams), rgba(255, 255, 255, .32);
-  box-shadow: var(--glass-shadow), 0 0 0 4px rgba(58,110,165,.14);
-}
-.speed-input:active::-webkit-slider-thumb { background: var(--glass-beams), rgba(255, 255, 255, .4); transform: scaleY(1.06); }
-.speed-input:active::-moz-range-thumb { background: var(--glass-beams), rgba(255, 255, 255, .4); transform: scaleY(1.06); }
-.speed-input:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent); }
-.speed-input:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--accent); }
 .speed-input:focus-visible { outline: none; }
+
+/*
+ * THE HANDLE: an ellipse of glass, taller than the pill so a little of it stands clear at each end.
+ *
+ * Placed rather than derived, which is the whole point — `left` interpolates, so changing speed
+ * glides the handle across instead of teleporting it. The offset walks the centre from half a width
+ * in to half a width from the end, which is the same travel the native thumb has, so the invisible
+ * drag target stays exactly under the visible handle.
+ *
+ * Glass: white beams over a thin body, no rim, no tint. What shapes it is the inset highlight along
+ * the top, the lift underneath, and whatever the moving grid puts behind it.
+ */
+.speed-knob {
+  position: absolute; top: 50%; z-index: 2;
+  width: var(--glass-w); height: var(--glass-h);
+  left: calc(var(--glass-w) / 2 + var(--t) * (100% - var(--glass-w)));
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--glass-beams), rgba(255, 255, 255, .12);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+  /* Never the target: every pointer and key event belongs to the input underneath. */
+  pointer-events: none;
+  transition:
+    left .3s cubic-bezier(.32, 1.14, .5, 1),
+    background .16s ease;
+}
+/* Hover and press change only how much light the glass holds — no ring. */
+.speed-input:hover ~ .speed-knob { background: var(--glass-beams), rgba(255, 255, 255, .22); }
+.speed-input:active ~ .speed-knob {
+  background: var(--glass-beams), rgba(255, 255, 255, .3);
+  transform: translate(-50%, -50%) scaleY(1.06);
+}
+/* Keyboard focus lands on the input; the ring has to appear on the handle you can actually see. */
+.speed-input:focus-visible ~ .speed-knob {
+  box-shadow: var(--glass-shadow), 0 0 0 3px var(--accent);
+}
+.speed.is-busy .speed-knob { opacity: .6; }
 
 
 .speed.is-busy .speed-track { opacity: .6; }
@@ -1739,8 +1768,14 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   /* SpeedSparkle checks prefers-reduced-motion itself and paints one static field instead of
      animating, so the track keeps its blue-to-grey ramp without anything moving. */
-  .speed-track::after, .speed-input::-webkit-slider-thumb { transition: none; }
+  .speed-track::after { transition: none; }
+  .speed-knob { transition: none; }
 }
+
+/* While dragging, the glide becomes a lag: the handle should stay under the finger, not catch up to
+   it. The transition is only wanted for a discrete change — a click on the track, an arrow key, or
+   letting go on a new step. */
+.speed-input:active ~ .speed-knob { transition: background .16s ease, transform .12s ease; }
 
 /* In the transport the slider is one compact item among several, so it drops the 210px floor it
    needed when it owned a whole row and carried four labels. */
@@ -1761,11 +1796,7 @@ kbd {
      slider's left edge instead, and capped to the viewport, it stays on screen — and on a narrow
      frame the slider sits in the left half of the wrapped row, so growing rightward is the safe
      direction. */
-  .speed-pop {
-    left: 0;
-    max-width: calc(100vw - 24px);
-    transform: translateY(3px);
-  }
+  .speed-pop { left: 0; transform: translateY(3px); }
   .speed.is-open .speed-pop { transform: none; }
 }
 

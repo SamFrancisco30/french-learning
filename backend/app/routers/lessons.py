@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..db import get_db
 from ..languages import supported_languages
-from ..models import Exercise, Lesson, ListeningUnit, Segment, Source, Transcript
+from ..models import SKILL_LISTENING, Exercise, Lesson, ListeningUnit, Segment, Source, Transcript
 from ..media.timestretch import TimeStretchError, natural_slow
 from ..storage import get_store, variant_clip_key, variant_map_key
 from ..schemas import (
@@ -151,7 +151,14 @@ def get_unit(unit_id: int, db: Session = Depends(get_db)) -> UnitDetail:
     if not unit:
         raise HTTPException(404, f"unit {unit_id} not found")
 
-    summary = _unit_summary(unit, len(unit.exercises)).model_dump()
+    # Listening exercises only. Dictation items live in the same table against the same units, and
+    # this endpoint feeds the listening drill, which has no renderer for their kinds — every unit
+    # that carried them showed "Unsupported exercise kind: dictation_sentence" in a card of its own.
+    # They are not orphaned by this: the dictation module fetches them through its own endpoints,
+    # which is the only place they are meant to be answered.
+    exercises = [e for e in unit.exercises if e.skill == SKILL_LISTENING]
+
+    summary = _unit_summary(unit, len(exercises)).model_dump()
     summary["clip_url"] = clip_url(unit)  # signed here, where it is actually played
     return UnitDetail(
         **summary,
@@ -169,7 +176,7 @@ def get_unit(unit_id: int, db: Session = Depends(get_db)) -> UnitDetail:
                 audio_end_s=e.audio_end_s,
                 generator=e.generator,
             )
-            for e in unit.exercises
+            for e in exercises
         ],
     )
 
@@ -328,11 +335,18 @@ def list_sources(db: Session = Depends(get_db), language: str | None = None) -> 
 
 
 def _exercise_counts(db: Session, unit_ids: list[int]) -> dict[int, int]:
+    """How many LISTENING exercises each unit has.
+
+    The skill filter is load-bearing. Dictation items are rows in this same table, attached to the
+    same listening units — that is how a dictation sentence knows which audio it came from — so an
+    unfiltered count reported the two skills added together. 68 of the units carry both, and the
+    lesson list was claiming up to three times the exercises a learner would actually be given.
+    """
     if not unit_ids:
         return {}
     rows = db.execute(
         select(Exercise.unit_id, func.count(Exercise.id))
-        .where(Exercise.unit_id.in_(unit_ids))
+        .where(Exercise.unit_id.in_(unit_ids), Exercise.skill == SKILL_LISTENING)
         .group_by(Exercise.unit_id)
     ).all()
     return {uid: n for uid, n in rows}

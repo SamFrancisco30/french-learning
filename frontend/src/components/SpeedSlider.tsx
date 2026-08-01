@@ -21,13 +21,10 @@ export function SpeedSlider({
   speed,
   onChange,
   disabled = false,
-  detail,
 }: {
   speed: number
   onChange: (speed: number) => void
   disabled?: boolean
-  /** Optional line under the label — what the reshaping actually did to this clip. */
-  detail?: string
 }) {
   const id = useId()
   const idx = speedIndex(speed)
@@ -65,7 +62,14 @@ export function SpeedSlider({
       onPointerEnter={() => setPeek(true)}
       onPointerLeave={() => setPeek(false)}
     >
-      <div className="speed-rail" style={{ ['--pos' as string]: `${pct}%` }}>
+      {/* Two positional variables, deliberately. `--pos` is a percentage and drives the glow behind
+          the thumb, which is a background-position and needs one. `--t` is the same thing unitless,
+          because the knob's offset has to be arithmetic on a length — `calc(number * length)` is
+          valid where `calc(percentage * length)` is not. */}
+      <div
+        className="speed-rail"
+        style={{ ['--pos' as string]: `${pct}%`, ['--t' as string]: idx / max }}
+      >
         <span className="speed-track" aria-hidden="true">
           {/* One canvas draws the block grid AND the sparkles. Two grids — a CSS gradient under a
               canvas — drifted apart on phase, on rounding, and on bitmap rescaling in turn, which
@@ -93,21 +97,31 @@ export function SpeedSlider({
           aria-valuetext={`${level.label}, ${level.speed}× speed`}
           title={level.hint}
         />
+        {/*
+          The visible handle, and the reason it is not the native thumb: a range thumb's position is
+          derived from the input's value, so there is nothing to transition — it teleports between
+          steps. This one is placed from `--t` and therefore glides.
+
+          It comes AFTER the input so `:hover ~` can reach it, and it takes no pointer events, so the
+          input underneath still receives every click, drag and key. The native thumb is still there
+          at full size, just invisible: it remains the drag target and the accessibility object.
+        */}
+        <span className="speed-knob" aria-hidden="true" />
       </div>
 
       {/*
         Not conditionally rendered. It is always in the DOM and animated in and out on a class, so
-        that it can fade rather than blink, and so a screen reader is not told the region appeared
-        and vanished on every hover. `aria-live` is deliberately absent for the same reason: the
-        input's own aria-valuetext already announces the level on change, and a live region would
-        say it a second time.
+        that it can fade rather than blink, and so a screen reader is not told a region appeared and
+        vanished on every hover. `aria-live` is deliberately absent for the same reason: the input's
+        own aria-valuetext already announces the level on change, and a live region would repeat it.
+
+        The name alone. It used to carry the multiplier and a line describing what the setting does to
+        the audio — "words at 84%, 0.23s added at each of 48 pauses" — which is a paragraph of
+        explanation raised over the passage every time a hand passes the control. The name is what you
+        need to know while reaching for it; the arithmetic behind it is not.
       */}
       <div className="speed-pop" role="note">
-        <b>{level.label}</b>
-        <span className="speed-x">{level.speed}×</span>
-        <span className="speed-pop-note">
-          {disabled ? 'preparing the audio…' : (detail ?? level.hint)}
-        </span>
+        {level.label}
       </div>
     </div>
   )
