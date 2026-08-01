@@ -83,7 +83,7 @@ export default function App() {
             {SKILLS.map((s) => (
               <button
                 key={s.key}
-                className={`skilltab ${!isVocabulary && s.key === skill.key ? 'on' : ''}`}
+                className={`skilltab has-tip ${!isVocabulary && s.key === skill.key ? 'on' : ''}`}
                 onClick={() => navigate(s.route)}
                 aria-current={!isVocabulary && s.key === skill.key ? 'page' : undefined}
               >
@@ -101,7 +101,7 @@ export default function App() {
                   comfortably. The status still reaches a mouse user, appended for the skills that
                   are not finished, and the dot carries it at a glance.
                 */}
-                <span className="skilltab-tip" aria-hidden="true">
+                <span className="tip" aria-hidden="true">
                   {s.tip ?? s.blurb}
                   {s.status !== 'live' && (
                     <em>{s.status === 'partial' ? 'Partly built.' : 'Not built yet.'}</em>
@@ -147,7 +147,7 @@ export default function App() {
           identity context — the local useState(learnerKey) this used to read was replaced by
           IdentityContext, which is the one source of the key for every skill. */}
       {!isVocabulary && skill.key === 'dictation' && (
-        <DictationPage language={language} learnerKey={learnerKey} />
+        <DictationPage language={language} learnerKey={learnerKey} navigate={navigate} />
       )}
 
       {!isVocabulary && (skill.key === 'writing' || skill.key === 'speaking') && (

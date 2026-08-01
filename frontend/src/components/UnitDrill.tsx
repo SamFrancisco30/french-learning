@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, lexicon } from '../api'
 import type {
   AttemptResult,
@@ -23,12 +23,17 @@ import { SpeedSlider } from './SpeedSlider'
 interface Props {
   unitId: number
   lessonTitle: string
+  /**
+   * Original-video seconds to open at, when arriving from somewhere that already knows the moment —
+   * the dictation source link. Absent for a normal visit, which starts at the top of the unit.
+   */
+  startAt?: number | null
   language: string
   learnerKey: string
   onExit: () => void
 }
 
-export function UnitDrill({ unitId, lessonTitle, language, learnerKey, onExit }: Props) {
+export function UnitDrill({ unitId, lessonTitle, language, learnerKey, onExit, startAt }: Props) {
   const [unit, setUnit] = useState<UnitDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [responses, setResponses] = useState<Record<number, unknown>>({})
@@ -60,6 +65,7 @@ export function UnitDrill({ unitId, lessonTitle, language, learnerKey, onExit }:
     <Drill
       unit={unit}
       lessonTitle={lessonTitle}
+      startAt={startAt}
       language={language}
       learnerKey={learnerKey}
       onExit={onExit}
@@ -88,6 +94,7 @@ export function UnitDrill({ unitId, lessonTitle, language, learnerKey, onExit }:
 function Drill({
   unit,
   lessonTitle,
+  startAt,
   language,
   learnerKey,
   onExit,
@@ -106,6 +113,7 @@ function Drill({
 }: {
   unit: UnitDetail
   lessonTitle: string
+  startAt?: number | null
   language: string
   learnerKey: string
   onExit: () => void
@@ -125,6 +133,27 @@ function Drill({
   // The player owns its own source now: slow speeds load a reshaped variant rather
   // than changing playbackRate.
   const player = useClipPlayer(unit.id, unit.start_s, unit.end_s, unit.clip_url)
+
+  // Arriving from a dictation source link, open at the moment that sentence was taken from rather
+  // than at the top of the unit. Waits for `loadedmetadata`, because seeking before the browser knows
+  // the duration is silently dropped — and only fires once per arrival, so it does not fight the
+  // learner if they scrub away afterwards.
+  const jumped = useRef(false)
+  useEffect(() => {
+    jumped.current = false
+  }, [unit.id, startAt])
+  useEffect(() => {
+    const el = player.ref.current
+    if (el == null || startAt == null || jumped.current) return
+    const go = () => {
+      if (jumped.current) return
+      jumped.current = true
+      player.seekTo(startAt)
+    }
+    if (el.readyState >= 1) go()
+    else el.addEventListener('loadedmetadata', go, { once: true })
+    return () => el.removeEventListener('loadedmetadata', go)
+  }, [startAt, player.src, player.ref, player.seekTo])
 
   // Known expression spans, so the transcript can mark them before anything is clicked.
   const [exprSpans, setExprSpans] = useState<UnitExpressionSpan[]>([])

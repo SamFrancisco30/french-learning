@@ -413,6 +413,8 @@ export interface DictationItem {
   unit_start_s: number
   unit_end_s: number
   clip_url: string | null
+  /** So the source link can reach this passage in the listening drill. */
+  lesson_id: number | null
   lesson_title: string | null
   topic: string | null
 }

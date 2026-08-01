@@ -138,6 +138,7 @@ def _item_out(ex: Exercise, *, with_audio: bool) -> DictationItemOut:
         unit_start_s=ex.unit.start_s,
         unit_end_s=ex.unit.end_s,
         clip_url=url,
+        lesson_id=ex.unit.lesson.id,
         lesson_title=ex.unit.lesson.title,
         topic=ex.unit.lesson.topic,
     )

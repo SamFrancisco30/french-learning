@@ -33,6 +33,9 @@ export function ListeningPage({
   const lessonId = paramAfter(segments, 'lesson')
   const unitId = paramAfter(segments, 'unit')
   const topic = slugAfter(segments, 'topic')
+  // Optional, and only present when something linked to a specific moment — see the dictation
+  // source link. `paramAfter` already tolerates decimals.
+  const at = paramAfter(segments, 'at')
 
   const [lessons, setLessons] = useState<LessonSummary[] | null>(null)
   const [progress, setProgress] = useState<Progress | null>(null)
@@ -78,6 +81,7 @@ export function ListeningPage({
       <div className="route" key={`unit-${unitId}`}>
       <UnitDrill
         unitId={unitId}
+        startAt={at}
         lessonTitle={lesson?.title ?? 'Lesson'}
         language={lesson?.language ?? language}
         learnerKey={learnerKey}

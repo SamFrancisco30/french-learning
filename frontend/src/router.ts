@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react'
  *   #/listening/topic/geography      (or /topic/all)
  *   #/listening/lesson/2
  *   #/listening/lesson/2/unit/5
+ *   #/listening/lesson/2/unit/5/at/222.22   (opened from a dictation source link)
  *   #/reading  #/writing  #/speaking  #/dictation
  */
 
@@ -35,7 +36,7 @@ export function useHashRoute() {
   return { path, segments, navigate }
 }
 
-/** Numeric route param, or null when absent/malformed. */
+/** Numeric route param, or null when absent/malformed. Accepts decimals, for timestamps. */
 export function paramAfter(segments: string[], key: string): number | null {
   const i = segments.indexOf(key)
   if (i === -1 || i + 1 >= segments.length) return null

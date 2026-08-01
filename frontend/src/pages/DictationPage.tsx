@@ -58,9 +58,11 @@ const VERDICT_LABEL: Record<string, string> = {
 export function DictationPage({
   language,
   learnerKey,
+  navigate,
 }: {
   language: string
   learnerKey: string
+  navigate: (to: string) => void
 }) {
   const [mode, setMode] = useState<DictationMode>('sentence')
   const [override, setOverride] = useState<string | null>(null)
@@ -121,37 +123,40 @@ export function DictationPage({
 
   return (
     <>
-      <div className="dict-modes">
-        {MODES.map((m) => (
-          <button
-            key={m.key}
-            className={`dict-mode ${mode === m.key ? 'on' : ''}`}
-            onClick={() => setMode(m.key)}
-          >
-            {/* The count sits with the name rather than on a line of its own — it is a property of
-                the mode, not a separate fact about it, and it was costing a third of the card. */}
-            <span className="dict-mode-head">
+      {/* Everything that frames the exercise, on one line: which length, what level, and the
+          override. Each of the three used to bring its own explanatory text — two mode hints and a
+          sentence of reasoning — which is what made it two full rows. The text is all still here,
+          on hover, where it costs nothing until it is wanted. */}
+      <div className="dict-bar">
+        <div className="dict-modes" role="group" aria-label="Dictation length">
+          {MODES.map((m) => (
+            <button
+              key={m.key}
+              className={`dict-mode has-tip ${mode === m.key ? 'on' : ''}`}
+              onClick={() => setMode(m.key)}
+              aria-pressed={mode === m.key}
+            >
               <span className="dict-mode-label">{m.label}</span>
               {inventory && (
-                <span className="dict-mode-count">{inventory.totals[m.key] ?? 0} items</span>
+                <span className="dict-mode-count">{inventory.totals[m.key] ?? 0}</span>
               )}
-            </span>
-            <span className="dict-mode-hint">{m.hint}</span>
-          </button>
-        ))}
-      </div>
+              <span className="tip" aria-hidden="true">{m.hint}</span>
+            </button>
+          ))}
+        </div>
 
-      <LevelBar
-        level={modeLevel}
-        served={next?.served_level ?? null}
-        offLevel={!!next?.off_level}
-        remaining={next?.remaining_at_level ?? 0}
-        repeat={!!next?.repeat}
-        override={override}
-        levels={inventory?.levels ?? []}
-        counts={inventory?.by_mode?.[mode] ?? {}}
-        onOverride={setOverride}
-      />
+        <LevelBar
+          level={modeLevel}
+          served={next?.served_level ?? null}
+          offLevel={!!next?.off_level}
+          remaining={next?.remaining_at_level ?? 0}
+          repeat={!!next?.repeat}
+          override={override}
+          levels={inventory?.levels ?? []}
+          counts={inventory?.by_mode?.[mode] ?? {}}
+          onOverride={setOverride}
+        />
+      </div>
 
       {error && <div className="error">{error}</div>}
 
@@ -161,6 +166,7 @@ export function DictationPage({
         <DictationDrill
           key={item.exercise_id}
           item={item}
+          navigate={navigate}
           typed={typed}
           setTyped={setTyped}
           onSubmit={submit}
@@ -195,19 +201,27 @@ function LevelBar({
   counts: Record<string, number>
   onOverride: (l: string | null) => void
 }) {
+  const reason = (
+    <>
+      {override
+        ? `Pinned to ${override} — the ladder is paused.`
+        : (level?.reason ?? 'Working out your level…')}
+      {offLevel && !override && ` Nothing left at ${level?.level}, so this is the closest.`}
+      {repeat && ' You have done this one before.'}
+      {!repeat && remaining > 0 && ` ${remaining} unseen at this level.`}
+    </>
+  )
+
   return (
-    <div className="dict-level">
-      <div className="dict-level-main">
+    <>
+      {/* The level, with the reasoning behind it on hover. The reasoning is the part that changes —
+          "no attempts yet", "nothing left at A2", "you have done this one before" — and it is worth
+          reading when you wonder why, not on every item. */}
+      <span className="dict-level-chip has-tip">
         <span className="chip level">{served ?? level?.level ?? '—'}</span>
-        <span className="dict-level-reason">
-          {override
-            ? `pinned to ${override} — the ladder is paused`
-            : (level?.reason ?? 'working out your level…')}
-          {offLevel && !override && ` · nothing left at ${level?.level}, so this is the closest`}
-          {repeat && ' · you have done this one before'}
-          {!repeat && remaining > 0 && ` · ${remaining} unseen at this level`}
-        </span>
-      </div>
+        <span className="tip" aria-hidden="true">{reason}</span>
+      </span>
+
       <div className="dict-level-pick">
         <span className="bar-label">level</span>
         <button
@@ -229,12 +243,13 @@ function LevelBar({
           </button>
         ))}
       </div>
-    </div>
+    </>
   )
 }
 
 function DictationDrill({
   item,
+  navigate,
   typed,
   setTyped,
   onSubmit,
@@ -244,6 +259,7 @@ function DictationDrill({
   boxRef,
 }: {
   item: DictationItem
+  navigate: (to: string) => void
   typed: string
   setTyped: (s: string) => void
   onSubmit: () => void
@@ -318,10 +334,35 @@ function DictationDrill({
               : ''}
           </div>
           <div className="ex-prompt">{item.prompt}</div>
+          {/* One word instead of a line. The full provenance — which lesson, at what moment — was a
+              sentence longer than the sentence being dictated, and it is reference material: worth
+              having, not worth reading every time. Hovering says where this came from; clicking opens
+              that passage in the listening drill at the moment it was taken from. */}
           {item.lesson_title && (
-            <div className="sub">
-              from “{item.lesson_title}”
-              {heard ? ` · ${fmt(heard)} of audio` : ''}
+            <div className="dict-source">
+              {item.lesson_id != null ? (
+                <button
+                  className="has-tip dict-source-link"
+                  onClick={() =>
+                    navigate(
+                      `/listening/lesson/${item.lesson_id}/unit/${item.unit_id}` +
+                        (item.audio_start_s != null ? `/at/${item.audio_start_s}` : ''),
+                    )
+                  }
+                >
+                  source
+                  <span className="tip" aria-hidden="true">
+                    “{item.lesson_title}”
+                    {item.audio_start_s != null && ` · at ${fmt(item.audio_start_s)}`}
+                    <em>Open this passage in the listening drill.</em>
+                  </span>
+                </button>
+              ) : (
+                <span className="has-tip dict-source-link is-plain">
+                  source
+                  <span className="tip" aria-hidden="true">“{item.lesson_title}”</span>
+                </span>
+              )}
             </div>
           )}
         </div>

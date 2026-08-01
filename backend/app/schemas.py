@@ -435,6 +435,10 @@ class DictationItemOut(BaseModel):
     unit_start_s: float
     unit_end_s: float
     clip_url: str | None = None
+    # The lesson, so the client can link back to this passage in the listening drill. The unit alone
+    # is not enough: the listening route is /lesson/{id}/unit/{id}, and resolving one from the other
+    # would be a second request for something already loaded here.
+    lesson_id: int | None = None
     lesson_title: str | None = None
     topic: str | None = None
 
