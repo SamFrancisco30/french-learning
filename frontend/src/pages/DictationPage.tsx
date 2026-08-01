@@ -30,12 +30,12 @@ const MODES: { key: DictationMode; label: string; hint: string }[] = [
   {
     key: 'sentence',
     label: 'Sentence',
-    hint: 'One sentence at a time. Short, repeatable, orthography-focused.',
+    hint: 'One sentence at a time — spelling is the point.',
   },
   {
     key: 'paragraph',
     label: 'Paragraph',
-    hint: 'Several sentences in one go — the harder task, and the one that builds stamina.',
+    hint: 'Several in one go — harder, and builds stamina.',
   },
 ]
 
@@ -137,11 +137,15 @@ export function DictationPage({
             className={`dict-mode ${mode === m.key ? 'on' : ''}`}
             onClick={() => setMode(m.key)}
           >
-            <span className="dict-mode-label">{m.label}</span>
+            {/* The count sits with the name rather than on a line of its own — it is a property of
+                the mode, not a separate fact about it, and it was costing a third of the card. */}
+            <span className="dict-mode-head">
+              <span className="dict-mode-label">{m.label}</span>
+              {inventory && (
+                <span className="dict-mode-count">{inventory.totals[m.key] ?? 0} items</span>
+              )}
+            </span>
             <span className="dict-mode-hint">{m.hint}</span>
-            {inventory && (
-              <span className="chip">{inventory.totals[m.key] ?? 0} items</span>
-            )}
           </button>
         ))}
       </div>

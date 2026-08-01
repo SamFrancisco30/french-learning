@@ -546,11 +546,46 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 
 /* ---------------- page headers ---------------- */
 
-.pagehead { margin-bottom: 22px; }
+/*
+ * The page's blurb is an explanation, and an explanation is read once. It is hidden until the
+ * heading is hovered, so the page opens on its content rather than on four lines describing it.
+ *
+ * Absolutely positioned, so revealing it moves nothing: the heading keeps its place and the panel
+ * appears over what is beneath. And faded with OPACITY ONLY — not `visibility`, not `display` —
+ * because both of those take the text out of the accessibility tree, which would mean hiding the
+ * page's own description from a screen reader in order to tidy it away from a mouse. Opacity leaves
+ * it readable to assistive tech at all times.
+ *
+ * `:focus-within` is here for completeness rather than as a real answer: a heading is not focusable,
+ * so a sighted keyboard-only user has no way to raise this. The text being permanently in the
+ * accessibility tree is what stops that from losing information.
+ */
+.pagehead { margin-bottom: 18px; position: relative; }
 .pagehead h2 {
-  font-size: 24px; margin: 0 0 6px; letter-spacing: -0.02em; font-weight: 650;
+  font-size: 24px; margin: 0; letter-spacing: -0.02em; font-weight: 650;
+  /* Only as wide as the words, so the hover target is the title and not the line it sits on. */
+  display: inline-block;
 }
-.pagehead p { margin: 0; color: var(--text-dim); max-width: 62ch; font-size: 14.5px; }
+.pagehead p {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 20;
+  margin: 0; max-width: 62ch;
+  padding: 9px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  color: var(--text-dim); font-size: 13.5px; line-height: 1.5;
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity .16s ease, transform .16s ease;
+  pointer-events: none;
+}
+.pagehead:hover p,
+.pagehead:focus-within p { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pagehead p { transition: none; }
+}
 
 .crumbs {
   display: flex; align-items: center; gap: 8px;
@@ -1530,11 +1565,17 @@ kbd {
 /* ---------------- dictation ---------------- */
 
 .dict-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
-@media (max-width: 620px) { .dict-modes { grid-template-columns: 1fr; } }
+/* Stacked below 700, not 620. Two cards side by side give each about 300px of text at that width,
+   and the descriptions need roughly 320 to stay on one line — between the two figures the card grew
+   to three lines, which is what the compacting was undoing. Full width buys the line back. */
+@media (max-width: 700px) { .dict-modes { grid-template-columns: 1fr; } }
 
+/* Two lines: the name with its count, then the one-line description. It was three — name, then
+   description, then the count in a chip of its own underneath — which made a mode picker as tall as
+   the exercise it introduces. */
 .dict-mode {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
-  text-align: left; padding: 13px 15px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  text-align: left; padding: 9px 13px;
   background: var(--bg-raised); border: 1px solid var(--border);
   border-radius: var(--radius); box-shadow: var(--shadow-sm);
   transition: border-color .14s, box-shadow .14s;
@@ -1544,9 +1585,13 @@ kbd {
   border-color: var(--accent-border); background: var(--accent-soft);
   box-shadow: var(--shadow-md);
 }
-.dict-mode-label { font-size: 15.5px; font-weight: 650; letter-spacing: -0.01em; }
+.dict-mode-head { display: flex; align-items: baseline; gap: 8px; }
+.dict-mode-label { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
 .dict-mode.on .dict-mode-label { color: var(--accent-ink); }
-.dict-mode-hint { font-size: 12.5px; color: var(--text-dim); }
+/* Plain text rather than a chip: a pill around two words needs its own padding and line box, which
+   is the height this was trying to lose. */
+.dict-mode-count { font-size: 11.5px; color: var(--text-faint); white-space: nowrap; }
+.dict-mode-hint { font-size: 12.5px; color: var(--text-dim); line-height: 1.4; }
 
 .dict-level {
   display: flex; align-items: center; justify-content: space-between;
