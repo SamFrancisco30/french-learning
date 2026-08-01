@@ -1580,10 +1580,20 @@ kbd {
    Positioned above the rail, not below: below is where the transcript and the exercises are, and a
    panel that opens downward over the passage covers the thing the control is for. */
 .speed-pop {
-  /* Centred on the slider rather than anchored to its left edge. The slider sits near the right of
-     the transport but near the left on the dictation page, so a popup that only ever grows one way
-     runs off the edge on one of them. Growing equally in both directions fits either. */
-  position: absolute; bottom: calc(100% + 6px); left: 50%; z-index: 25;
+  /* Over the HANDLE, not over the middle of the slider. The label names the setting the handle is
+     sitting on, so it belongs above it — centred on the track it read as belonging to the whole
+     control, and at "Slow" it floated two thirds of a bar away from the thing it was describing.
+     Same offset expression as .speed-knob, so the two travel together.
+
+     Clamped to 36px in from each end, which is about half the width of the widest label. Without it
+     the chip hangs off the bar at the extremes; with it, it follows the handle everywhere it can and
+     tucks in at the last step. */
+  position: absolute; bottom: calc(100% + 6px); z-index: 25;
+  left: clamp(
+    36px,
+    calc(var(--glass-w) / 2 + var(--t) * (100% - var(--glass-w))),
+    calc(100% - 36px)
+  );
   /* max-content, because the shrink-to-fit width of an absolutely positioned box is otherwise capped
      by its containing block — the 190px slider — which would wrap even a single word at some
      breakpoints. */
@@ -1602,7 +1612,12 @@ kbd {
   /* The X half is the centring, the Y half is the animation — both live in one transform, so the
      rise cannot cancel the centring. */
   transform: translate(-50%, 3px);
-  transition: opacity .14s ease, transform .14s ease, visibility .14s;
+  transition:
+    opacity .14s ease,
+    transform .14s ease,
+    visibility .14s,
+    /* Matches .speed-knob exactly, so the label rides the handle rather than chasing it. */
+    left .3s cubic-bezier(.32, 1.14, .5, 1);
   pointer-events: none;
 }
 .speed.is-open .speed-pop { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
@@ -1794,13 +1809,6 @@ kbd {
   .scrub { flex: 1 1 140px; }
   .player-meta { flex: 1 1 100%; margin-left: 0; text-align: left; }
 
-  /* Centring the popup on the slider is right on a wide frame, where there is room either side. On a
-     phone there is not: measured at 420px it hung 32px off the left edge, because half of a 318px
-     panel is wider than the distance from the slider's centre to the screen. Anchored to the
-     slider's left edge instead, and capped to the viewport, it stays on screen — and on a narrow
-     frame the slider sits in the left half of the wrapped row, so growing rightward is the safe
-     direction. */
-  .speed-pop { left: 0; transform: translateY(3px); }
   .speed.is-open .speed-pop { transform: none; }
 }
 

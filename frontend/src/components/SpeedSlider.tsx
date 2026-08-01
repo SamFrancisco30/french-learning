@@ -61,15 +61,19 @@ export function SpeedSlider({
       className={`speed ${disabled ? 'is-busy' : ''} ${open ? 'is-open' : ''}`}
       onPointerEnter={() => setPeek(true)}
       onPointerLeave={() => setPeek(false)}
+      /*
+        The position lives HERE, on the wrapper, not on the rail. Both the handle inside the rail and
+        the label above it are placed from it, and the label is the rail's SIBLING — set on the rail
+        it never reached the label, which silently fell back to the stylesheet default and parked
+        itself at one end of the bar whatever the setting was.
+
+        Two variables, not one: `--pos` is a percentage for the glow behind the handle, which is a
+        background-position and needs one, while `--t` is unitless because calc cannot multiply a
+        percentage by a length.
+      */
+      style={{ ['--pos' as string]: `${pct}%`, ['--t' as string]: idx / max }}
     >
-      {/* Two positional variables, deliberately. `--pos` is a percentage and drives the glow behind
-          the thumb, which is a background-position and needs one. `--t` is the same thing unitless,
-          because the knob's offset has to be arithmetic on a length — `calc(number * length)` is
-          valid where `calc(percentage * length)` is not. */}
-      <div
-        className="speed-rail"
-        style={{ ['--pos' as string]: `${pct}%`, ['--t' as string]: idx / max }}
-      >
+      <div className="speed-rail">
         <span className="speed-track" aria-hidden="true">
           {/* One canvas draws the block grid AND the sparkles. Two grids — a CSS gradient under a
               canvas — drifted apart on phase, on rounding, and on bitmap rescaling in turn, which
