@@ -17,6 +17,7 @@ processing unverified.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -274,3 +275,43 @@ def apply_event(db: Session, event: Any) -> str:
         return "ignored: invoice with no subscription"
 
     return f"ignored: {kind}"
+
+
+# Cached price summary. `/api/auth/config` is fetched on every page load, so this must not become
+# a Stripe round trip per visit — and the app must still boot if Stripe is unreachable.
+_price_cache: dict[str, Any] = {"at": 0.0, "value": None}
+_PRICE_TTL_S = 600
+
+
+def get_price_summary() -> dict[str, Any] | None:
+    """What premium costs, for the paywall to state before anyone clicks through.
+
+    A paywall that names no price is a paywall that sends people to Stripe to find out, and the
+    number belongs in one place — Stripe — rather than being duplicated into the UI where it can
+    silently disagree with what is actually charged.
+
+    Returns None on any failure. The upgrade button still works; it just does not carry a price,
+    which is a far better outcome than the whole config endpoint failing because Stripe is down.
+    """
+    settings = get_settings()
+    if not settings.billing_enabled:
+        return None
+    now = time.monotonic()
+    if _price_cache["value"] is not None and now - _price_cache["at"] < _PRICE_TTL_S:
+        return _price_cache["value"]
+
+    try:
+        price = _api().Price.retrieve(settings.stripe_price_id)
+        recurring = _field(price, "recurring") or {}
+        summary = {
+            "amount_cents": _field(price, "unit_amount"),
+            "currency": (_field(price, "currency") or "").upper(),
+            "interval": _field(recurring, "interval"),
+        }
+    except Exception:
+        log.warning("could not retrieve the Stripe price", exc_info=True)
+        return None
+
+    _price_cache["at"] = now
+    _price_cache["value"] = summary
+    return summary

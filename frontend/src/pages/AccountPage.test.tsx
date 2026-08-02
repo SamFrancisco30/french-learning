@@ -14,7 +14,12 @@ import type { Entitlement, Tier } from '../types'
  */
 
 const authMock = vi.hoisted(() => ({ useAuth: vi.fn() }))
-vi.mock('../auth/AuthContext', () => ({ useAuth: authMock.useAuth }))
+// Only `useAuth` is stubbed. `formatPrice` comes through for real, so these tests exercise
+// the actual Intl formatting rather than asserting against a stub of it.
+vi.mock('../auth/AuthContext', async (importActual) => ({
+  ...(await importActual<typeof import('../auth/AuthContext')>()),
+  useAuth: authMock.useAuth,
+}))
 
 function poseAuth({
   ready = true,
@@ -32,6 +37,11 @@ function poseAuth({
   startCheckout = vi.fn().mockResolvedValue({}),
   openBillingPortal = vi.fn().mockResolvedValue({}),
   refreshMe = vi.fn().mockResolvedValue(undefined),
+  price = { amount_cents: 999, currency: 'CAD', interval: 'month' } as {
+    amount_cents: number | null
+    currency: string
+    interval: string | null
+  } | null,
 } = {}) {
   const entitlement: Entitlement = {
     tier,
@@ -48,7 +58,7 @@ function poseAuth({
     tier,
     email,
     entitlement,
-    config: { anon_unit_limit: 2, member_unit_limit: 5 },
+    config: { anon_unit_limit: 2, member_unit_limit: 5, price },
     signIn,
     googleEnabled,
     signInWithGoogle,
@@ -239,6 +249,27 @@ describe('AccountPage — Google', () => {
 })
 
 describe('AccountPage — signed in', () => {
+  it('states the price before sending anyone to Stripe', () => {
+    poseAuth({ signedIn: true, tier: 'free', email: 'a@b.c' })
+
+    render(<AccountPage navigate={vi.fn()} />)
+
+    // A paywall that names no price makes people click through to Stripe to find out. The figure
+    // comes from Stripe itself, so it cannot drift from what is actually charged.
+    expect(screen.getByText(/\$9\.99/)).toBeInTheDocument()
+    expect(screen.getByText(/month/)).toBeInTheDocument()
+  })
+
+  it('still offers the upgrade when the price could not be fetched', () => {
+    poseAuth({ signedIn: true, tier: 'free', email: 'a@b.c', price: null })
+
+    render(<AccountPage navigate={vi.fn()} />)
+
+    // Stripe being briefly unreachable must not remove the ability to subscribe.
+    expect(screen.getByRole('button', { name: 'Go premium' })).toBeInTheDocument()
+    expect(screen.queryByText(/\$/)).not.toBeInTheDocument()
+  })
+
   it('shows the free tier and what is left', () => {
     poseAuth({ signedIn: true, tier: 'free', email: 'learner@example.com' })
 

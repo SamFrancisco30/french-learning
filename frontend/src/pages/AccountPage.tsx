@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useAuth } from '../auth/AuthContext'
+import { formatPrice, useAuth } from '../auth/AuthContext'
 import { GoogleMark } from '../components/icons'
 
 /**
@@ -170,7 +170,15 @@ export function AccountPage({ navigate }: { navigate: (to: string) => void }) {
 
         {!premium && auth.billingEnabled && (
           <div className="upgradebox">
-            <h3>Unlock everything</h3>
+            <h3>
+              Unlock everything
+              {/* The price comes from Stripe rather than being written here, so what the paywall
+                  says and what the card is charged cannot drift apart. Omitted rather than guessed
+                  when Stripe could not be reached. */}
+              {formatPrice(auth.config?.price) && (
+                <span className="pricetag">{formatPrice(auth.config?.price)}</span>
+              )}
+            </h3>
             <p className="muted">
               Every recording, every dictation, no allowance. Word lookup and your saved words stay
               free either way.

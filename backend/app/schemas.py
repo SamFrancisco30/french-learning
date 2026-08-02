@@ -467,6 +467,15 @@ class DictationAudioOut(BaseModel):
 # --- accounts and entitlements ---
 
 
+class PriceOut(BaseModel):
+    """What premium costs. Read from Stripe rather than restated here, so the figure the paywall
+    shows cannot drift from the amount actually charged."""
+
+    amount_cents: int | None = None
+    currency: str = ""
+    interval: str | None = None
+
+
 class AuthConfigOut(BaseModel):
     """What the browser needs to talk to Supabase Auth, served rather than baked into the bundle.
 
@@ -483,6 +492,10 @@ class AuthConfigOut(BaseModel):
     # disagrees with the server's.
     anon_unit_limit: int
     member_unit_limit: int
+    # What premium costs, read from Stripe so the figure cannot drift from what is charged. None
+    # when billing is off or Stripe could not be reached — the UI then omits the price rather than
+    # guessing.
+    price: PriceOut | None = None
 
 
 class EntitlementOut(BaseModel):

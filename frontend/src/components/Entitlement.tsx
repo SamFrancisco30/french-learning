@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useAuth } from '../auth/AuthContext'
+import { formatPrice, useAuth } from '../auth/AuthContext'
 
 /**
  * What the allowance looks like to a learner.
@@ -147,7 +147,8 @@ export function UnlockGate({ unitId, unitLabel, onUnlocked, onClose, onSignIn }:
         ) : (
           <p className="gatebody">
             You have opened all {limit} recordings included with a free account. Premium removes the
-            limit entirely.
+            limit entirely
+            {formatPrice(auth.config?.price) ? `, for ${formatPrice(auth.config?.price)}.` : '.'}
           </p>
         )}
 

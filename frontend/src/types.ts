@@ -475,6 +475,14 @@ export type AuthConfig = {
   billing_enabled: boolean
   anon_unit_limit: number
   member_unit_limit: number
+  /** What premium costs, read from Stripe. Null when billing is off or Stripe was unreachable. */
+  price: Price | null
+}
+
+export type Price = {
+  amount_cents: number | null
+  currency: string
+  interval: string | null
 }
 
 export type Tier = 'anon' | 'free' | 'premium'

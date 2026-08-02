@@ -14,6 +14,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ..billing import get_price_summary
 from ..config import get_settings
 from ..db import get_db
 from ..entitlements import (
@@ -95,6 +96,7 @@ def auth_config() -> AuthConfigOut:
         billing_enabled=settings.billing_enabled,
         anon_unit_limit=settings.free_unit_limit,
         member_unit_limit=settings.member_unit_limit,
+        price=get_price_summary(),
     )
 
 

@@ -14,7 +14,12 @@ import type { Entitlement, Tier } from '../types'
  */
 
 const authMock = vi.hoisted(() => ({ useAuth: vi.fn() }))
-vi.mock('../auth/AuthContext', () => ({ useAuth: authMock.useAuth }))
+// Only `useAuth` is stubbed. `formatPrice` comes through for real, so these tests exercise
+// the actual Intl formatting rather than asserting against a stub of it.
+vi.mock('../auth/AuthContext', async (importActual) => ({
+  ...(await importActual<typeof import('../auth/AuthContext')>()),
+  useAuth: authMock.useAuth,
+}))
 
 function entitlement(tier: Tier, limit: number | null, unlocked: number[] = []): Entitlement {
   return {
@@ -45,7 +50,11 @@ function poseAuth({
     signedIn,
     tier,
     entitlement: ent,
-    config: { anon_unit_limit: 2, member_unit_limit: 5 },
+    config: {
+      anon_unit_limit: 2,
+      member_unit_limit: 5,
+      price: { amount_cents: 999, currency: 'CAD', interval: 'month' },
+    },
     isUnlocked: (id: number) => limit === null || unlocked.includes(id),
     unlock,
     startCheckout,
@@ -165,6 +174,15 @@ describe('UnlockGate', () => {
 
     expect(screen.queryByRole('button', { name: 'Unlock this recording' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Go premium' })).toBeInTheDocument()
+  })
+
+  it('names the price in the paywall itself', () => {
+    poseAuth({ tier: 'free', limit: 5, unlocked: [1, 2, 3, 4, 5], signedIn: true })
+
+    render(<UnlockGate {...props} />)
+
+    // Said at the moment the limit actually bites, not only on the account page.
+    expect(screen.getByText(/\$9\.99/)).toBeInTheDocument()
   })
 
   it('offers nothing to buy when billing is not configured', () => {

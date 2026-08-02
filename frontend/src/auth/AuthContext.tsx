@@ -11,7 +11,7 @@ import {
 import { createClient, type Session, type SupabaseClient } from '@supabase/supabase-js'
 import { LockedError, api, setIdentityHeaderSource } from '../api'
 import { useIdentity } from '../identity/IdentityContext'
-import type { AuthConfig, Entitlement, Me, Tier } from '../types'
+import type { AuthConfig, Entitlement, Me, Price, Tier } from '../types'
 
 /**
  * Accounts and access tiers.
@@ -49,6 +49,21 @@ function fallbackEntitlement(config: AuthConfig | null): Entitlement {
     unlocked_unit_ids: [],
     premium_until: null,
   }
+}
+
+/**
+ * "C$9.99 / month", in the viewer's own locale.
+ *
+ * Intl rather than string concatenation: it places the symbol correctly per locale and knows that
+ * a zero-decimal currency like JPY has no cents, where dividing by 100 would be wrong.
+ */
+export function formatPrice(price: Price | null | undefined): string | null {
+  if (!price || price.amount_cents == null || !price.currency) return null
+  const amount = new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency: price.currency,
+  }).format(price.amount_cents / 100)
+  return price.interval ? `${amount} / ${price.interval}` : amount
 }
 
 export type UnlockOutcome = { ok: true } | { ok: false; reason: 'quota' | 'error' }

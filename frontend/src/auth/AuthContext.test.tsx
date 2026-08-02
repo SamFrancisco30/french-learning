@@ -77,6 +77,7 @@ function config(overrides: Partial<AuthConfig> = {}): AuthConfig {
     billing_enabled: true,
     anon_unit_limit: 2,
     member_unit_limit: 5,
+    price: { amount_cents: 999, currency: 'CAD', interval: 'month' },
     ...overrides,
   }
 }

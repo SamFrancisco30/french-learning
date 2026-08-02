@@ -2168,3 +2168,16 @@ kbd {
 .authdivider::before, .authdivider::after {
   content: ''; flex: 1; height: 1px; background: var(--border);
 }
+
+/* The price beside "Unlock everything". Set in the accent ink rather than shouted, because the
+   figure is information the learner needs, not the thing being sold to them. */
+.pricetag {
+  margin-left: 8px;
+  font-size: 13px; font-weight: 600;
+  color: var(--accent-ink);
+  background: var(--bg-raised);
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
