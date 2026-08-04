@@ -84,3 +84,76 @@ def test_longest_symbol_wins_so_an_ellipsis_is_not_three_full_stops() -> None:
     marks = find_marks("Attends...", words, FR)
 
     assert [m.spoken for m in marks] == ["points de suspension"]
+
+
+# --- one item must not inherit the sentence before it ----------------------------------------
+
+# Two sentences in one unit. The first ends exactly where the second begins, which is the whole
+# difficulty: a mark is timed from the END of the word it follows, so the first sentence's full stop
+# is timed at the instant the second sentence starts.
+TWO_SENTENCES = "Il pleut ici. Il fait chaud."
+TWO_SENTENCE_WORDS = [
+    {"word": "Il", "start": 0.0, "end": 0.3},
+    {"word": "pleut", "start": 0.4, "end": 0.9},
+    {"word": "ici", "start": 1.0, "end": 1.5},
+    {"word": "Il", "start": 2.0, "end": 2.3},
+    {"word": "fait", "start": 2.4, "end": 2.9},
+    {"word": "chaud", "start": 3.0, "end": 3.6},
+]
+
+
+def test_an_item_does_not_announce_the_previous_sentences_full_stop() -> None:
+    """The reported bug: a dictation of "Il fait chaud." opened by saying "point".
+
+    The full stop of "Il pleut ici." is timed at 1.5s, and the second sentence's window starts at
+    1.5s, so a time window that included its own start swept the mark in — and it was announced
+    before the first word because it clamped to 0.
+    """
+    second = TWO_SENTENCES.index("Il fait")
+    marks = find_marks(
+        TWO_SENTENCES,
+        TWO_SENTENCE_WORDS,
+        FR,
+        offset_s=1.5,
+        until_s=3.6,
+        char_range=(second, len(TWO_SENTENCES)),
+    )
+
+    assert [m.spoken for m in marks] == ["point"]
+    # Its own full stop, at the end of its own audio — not one at 0.0 before it starts.
+    assert marks[0].at_s == 3.6 - 1.5
+
+
+def test_a_mark_timed_outside_the_item_is_dropped_rather_than_placed() -> None:
+    """The same artefact by another route.
+
+    When the word a mark follows fails to align, the fallback reaches back to an earlier word. That
+    time lands before the item begins and clamps to 0.00 — "point" before the first word again, from
+    a mark that genuinely belongs to this item. Dropping it loses one announcement; placing it puts
+    the announcement in the one position that is definitely wrong.
+    """
+    # A window that starts after every word has already ended, so nothing can resolve inside it.
+    marks = find_marks(
+        TWO_SENTENCES,
+        TWO_SENTENCE_WORDS,
+        FR,
+        offset_s=10.0,
+        until_s=12.0,
+        char_range=(0, len(TWO_SENTENCES)),
+    )
+
+    assert marks == []
+
+
+def test_the_character_span_alone_is_not_enough() -> None:
+    """Guards the combination: the span says which marks are the item's, the window says we know
+    where they go. Either test alone lets the reported bug back in by one of its two routes."""
+    first_stop = TWO_SENTENCES.index(".")
+
+    # Textually the first sentence's, and timed at the second sentence's start.
+    spans_first = find_marks(
+        TWO_SENTENCES, TWO_SENTENCE_WORDS, FR,
+        offset_s=1.5, until_s=3.6, char_range=(0, first_stop + 1),
+    )
+
+    assert spans_first == []

@@ -129,7 +129,10 @@ def variant_map_key(provider_id: str, unit_idx: int, speed: float) -> str:
 #       for "a calm, clear female narrator", so the model read French words with English phonetics.
 #       And the announcements are now placed correctly: they were all spliced at one instant before
 #       the first word, so a four-comma sentence opened with "virgule virgule virgule point".
-DICTATION_VERSION = "v3"
+#   v4  an item no longer inherits the previous sentence's final mark. A mark is timed from the end of
+#       the word it follows, and that word ends exactly where the next sentence starts, so a dictation
+#       of "Il fait chaud." opened by announcing the previous sentence's "point".
+DICTATION_VERSION = "v4"
 
 
 def dictation_clip_key(

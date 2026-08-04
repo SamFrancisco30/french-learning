@@ -433,13 +433,23 @@ def item_audio(
             try:
                 # The UNIT's text, not the item's sentence: the word timings belong to the unit,
                 # and aligning them onto a one-sentence excerpt matched almost nothing — which
-                # collapsed every mark onto the same instant. The window narrows it to this item.
+                # collapsed every mark onto the same instant.
+                #
+                # Narrowed by CHARACTER span rather than by time. A mark is timed from the end of the
+                # word it follows, and the word ending the previous sentence ends exactly where this
+                # item begins, so a time window swept up the previous sentence's full stop and
+                # announced "point" before this item's first word. `until_s` stays as the fallback for
+                # an item whose text cannot be located verbatim in the unit's.
+                unit_text = unit.text or ""
+                item_text = (ex.answer or {}).get("text") or ""
+                at = unit_text.find(item_text) if item_text else -1
                 marks = find_marks(
-                    unit.text or "",
+                    unit_text,
                     unit.words_json or [],
                     lang,
                     offset_s=start,
                     until_s=end,
+                    char_range=(at, at + len(item_text)) if at >= 0 else None,
                 )
                 shifted = [(m.spoken, _interp(m.at_s, time_map)) for m in marks]
                 result = splice_announcements(current, shifted, lang, dst=spoken)

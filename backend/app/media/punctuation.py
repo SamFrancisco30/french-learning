@@ -75,6 +75,7 @@ def find_marks(
     *,
     offset_s: float = 0.0,
     until_s: float | None = None,
+    char_range: tuple[int, int] | None = None,
 ) -> list[Mark]:
     """Locate each punctuation mark and the moment it should be announced.
 
@@ -89,6 +90,12 @@ def find_marks(
 
     Use `offset_s` and `until_s` to narrow to one item's window instead. Times come back relative to
     `offset_s`, so they index the item's own audio.
+
+    Prefer `char_range` for that narrowing where the caller knows it. Time alone cannot separate
+    adjacent sentences: a mark is timed from the END of the word it follows, and the word ending the
+    previous sentence ends exactly where the next one begins — so the previous sentence's full stop
+    fell inside the next item's window and was announced as a "point" before its first word. The
+    character span is exact and has no boundary to straddle.
     """
     if not text:
         return []
@@ -139,7 +146,20 @@ def find_marks(
             # A mark before any word can only be an opening bracket or quote, and belongs just
             # before the word it opens.
             absolute = ends[cursor][1].end if cursor >= 0 else ends[0][1].start
-            if until_s is None or offset_s <= absolute <= until_s:
+            # Both tests, when both are available, and for different failures.
+            #
+            # The character span says the mark is this item's. The time span says we actually found
+            # where it goes: a mark whose preceding word failed to align falls back to an earlier
+            # word, which lands before the item starts and clamps to 0.00 — heard as "point" before
+            # the first word, the same artefact the span was added to fix, arriving by another route.
+            #
+            # A mark that fails the time test is dropped rather than placed. One missing announcement
+            # is a small loss; one announced in the wrong place is the complaint.
+            in_text = char_range is None or char_range[0] <= i < char_range[1]
+            # Strictly after the start: a mark timed at exactly `offset_s` belongs to whatever ended
+            # there, which is the sentence before this one.
+            in_time = until_s is None or offset_s < absolute <= until_s
+            if in_text and in_time:
                 marks.append(
                     Mark(
                         symbol=symbol,
