@@ -157,6 +157,17 @@ function palette(): string[] {
   })
 }
 
+/**
+ * How long the bar keeps moving after a speed change.
+ *
+ * It used to run for as long as the drill was open, which is a permanent animation beside text a
+ * learner is trying to read. The texture has one job — showing that the left end does more work to
+ * the audio than the right — and it does that job in the moment the setting changes. After that it
+ * is motion for its own sake, so the bar empties and stays empty until the next change.
+ */
+const ACTIVE_MS = 4000
+
+
 interface Particle {
   /** Continuous position in CSS px. The physics stays in css space; only drawing is device space. */
   x: number
@@ -175,6 +186,13 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
   const busyRef = useRef(busy)
   pctRef.current = pct
   busyRef.current = busy
+  // When the current burst of motion expires. Read inside the frame loop, written by the effect
+  // below on every speed change, so a change part-way through a burst extends it rather than
+  // starting a second one.
+  const activeUntil = useRef(0)
+  // Set by the setup effect. Restarting is a function it owns, because only it holds the canvas,
+  // the particles and the frame handle.
+  const startRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -343,7 +361,27 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
       return () => ro.disconnect()
     }
 
+    let running = false
+
+    /** Empty the bar and stand down. The rail keeps its own pill background underneath. */
+    const stop = () => {
+      running = false
+      cancelAnimationFrame(raf)
+      // Particles are dropped rather than frozen, so the next burst starts from an empty bar and
+      // fills in — a burst that resumed mid-flight would look like it had never stopped.
+      particles = []
+      spawnDebt = 0
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+    }
+
     const frame = (t: number) => {
+      // Preparing a slow variant keeps it running regardless of the window: the motion is saying
+      // that work is happening, and it should last as long as the work does.
+      if (!busyRef.current && t >= activeUntil.current) {
+        stop()
+        return
+      }
+
       const dt = last ? Math.min(0.05, (t - last) / 1000) : 0
       last = t
       const rush = busyRef.current ? 2 : 1
@@ -359,13 +397,39 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
       draw()
       raf = requestAnimationFrame(frame)
     }
-    raf = requestAnimationFrame(frame)
+
+    const start = () => {
+      if (running) return
+      running = true
+      // Cleared, so the first frame's dt is 0 and nothing jumps forward by however long the bar
+      // spent idle.
+      last = 0
+      raf = requestAnimationFrame(frame)
+    }
+    startRef.current = start
+
+    // Deliberately NOT started here. The bar begins empty and the effect below is what wakes it,
+    // which also covers the first paint: mounting counts as arriving at a speed.
 
     return () => {
+      startRef.current = null
       cancelAnimationFrame(raf)
       ro.disconnect()
     }
   }, [])
+
+  /**
+   * Wake the bar for ACTIVE_MS whenever the speed changes — and while a variant is being prepared,
+   * so the motion covers the wait.
+   *
+   * Separate from the setup effect on purpose. That one owns the canvas and must never re-run, since
+   * re-running it would rebuild the grid and drop every particle mid-flight; this one only nudges a
+   * deadline and asks it to start.
+   */
+  useEffect(() => {
+    activeUntil.current = performance.now() + ACTIVE_MS
+    startRef.current?.()
+  }, [pct, busy])
 
   return <canvas ref={canvasRef} className="speed-canvas" aria-hidden="true" />
 }
