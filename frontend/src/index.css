@@ -2347,3 +2347,20 @@ kbd {
 .wordbook-headlink { text-decoration: none; color: inherit; }
 .wordbook-headlink h3 { margin: 0; }
 .wordbook-headlink:hover h3 { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Each word travels with the punctuation that touches it, so the row's gap falls between words and
+   never between a word and its own comma. That grouping is why no negative margins are needed to
+   pull a mark back against its word. */
+.dict-hint-group { display: inline-flex; align-items: flex-end; }
+
+.dict-hint-mark {
+  font-family: var(--mono);
+  font-size: 17px;
+  line-height: 1.4;
+  padding-bottom: 4px;
+  /* Dimmer than the words being written, because it is already done — printed for you, not asked
+     for. Bright punctuation on a line of blanks reads as something still to fill in. */
+  color: var(--text-faint);
+  white-space: pre;
+  user-select: none;
+}

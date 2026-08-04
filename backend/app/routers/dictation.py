@@ -18,7 +18,7 @@ import random
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
@@ -125,22 +125,44 @@ def learner_level(db: Session, learner_key: str, mode: str) -> DictationLevelOut
 _EDGE_PUNCT = "\u201c\u201d\u2018\u2019\"'()[]{}«»…,.;:!?—–-"
 
 
-def word_hint_lengths(text: str) -> list[int]:
-    """Character counts of each word in the answer, in order — the dictée's underscore hints.
+def word_hint_slots(text: str) -> list[dict[str, Any]]:
+    """The dictée's hint line, in order: a run of underscores per word, punctuation shown as itself.
 
-    Only the *lengths* leave the server. The words themselves are the answer and are never sent
-    before an attempt is graded, so this gives the learner the shape of the sentence without giving
-    away a single letter of it.
+    Only *lengths* leave the server for the words. Their letters are the answer and are never sent
+    before an attempt is graded, so the learner gets the shape of the sentence without a letter of
+    it. The punctuation IS sent literally, and that is a deliberate reversal of the first version: a
+    comma cannot affect the score — the grader states that words are scored and "PUNCTUATION AND
+    CAPITALISATION ARE REPORTED, NOT SCORED" — so hiding it withheld something that was never being
+    marked, while leaving the hint line disagreeing with the sentence being read aloud.
 
-    Punctuation is deliberately not represented. Where the commas go is a real part of a dictée, and
-    a hint that laid them out would hand over the sentence's structure along with its word lengths.
+    Marks are split off the edges of a whitespace token rather than matched by a pattern of their
+    own, so this cannot disagree with how the words are measured: whatever the strip removes becomes
+    a mark slot and whatever survives is the word. A token that is punctuation only — a lone dash —
+    yields a mark and no word.
     """
-    lengths: list[int] = []
+    slots: list[dict[str, Any]] = []
     for token in text.split():
         word = token.strip(_EDGE_PUNCT)
-        if word:
-            lengths.append(len(word))
-    return lengths
+        if not word:
+            slots.append({"kind": "mark", "text": token})
+            continue
+        cut = token.index(word)
+        leading, trailing = token[:cut], token[cut + len(word) :]
+        if leading:
+            slots.append({"kind": "mark", "text": leading})
+        slots.append({"kind": "word", "length": len(word)})
+        if trailing:
+            slots.append({"kind": "mark", "text": trailing})
+    return slots
+
+
+def word_hint_lengths(text: str) -> list[int]:
+    """Just the word lengths, in order.
+
+    Derived from the same slots rather than computed separately, so the number of underscore runs and
+    the word count printed beside them cannot drift apart.
+    """
+    return [s["length"] for s in word_hint_slots(text) if s["kind"] == "word"]
 
 
 def _item_out(ex: Exercise, *, with_audio: bool) -> DictationItemOut:
@@ -158,8 +180,10 @@ def _item_out(ex: Exercise, *, with_audio: bool) -> DictationItemOut:
         cefr=ex.cefr,
         difficulty_score=payload.get("difficulty_score"),
         word_count=payload.get("word_count"),
-        # Lengths only — see word_hint_lengths. `answer` itself never reaches the client here.
+        # Lengths for the words, the marks verbatim — see word_hint_slots. The words' own letters
+        # never reach the client here; `answer` is not serialised.
         word_lengths=word_hint_lengths((ex.answer or {}).get("text") or ""),
+        hint_slots=word_hint_slots((ex.answer or {}).get("text") or ""),
         sentence_count=payload.get("sentence_count"),
         # Audio window on the ORIGINAL-VIDEO timeline, matching the listening player.
         audio_start_s=ex.audio_start_s,
@@ -382,7 +406,6 @@ def item_audio(
             punctuation=punctuation, duration_s=None, cached=True,
         )
 
-    text = (ex.answer or {}).get("text") or ""
     with tempfile.TemporaryDirectory() as tmp:
         tmpd = Path(tmp)
         unit_clip = tmpd / "unit.m4a"

@@ -11,6 +11,7 @@ import type {
   DictationMode,
   DictationNext,
   DictationWord,
+  HintSlot,
 } from '../types'
 
 /**
@@ -465,6 +466,7 @@ function DictationDrill({
       */}
       {(item.word_lengths?.length ?? 0) > 0 ? (
         <WordFields
+          slots={item.hint_slots}
           lengths={item.word_lengths}
           typed={typed}
           setTyped={setTyped}
@@ -628,6 +630,7 @@ function DictationFeedback({
  * typed into that word's field, and the field grows to hold it.
  */
 function WordFields({
+  slots,
   lengths,
   typed,
   setTyped,
@@ -635,6 +638,9 @@ function WordFields({
   firstRef,
   onShortcut,
 }: {
+  /** The hint line in order: words to write, punctuation already written. */
+  slots: HintSlot[]
+  /** Just the word lengths, in the same order — what the fields are sized and indexed by. */
   lengths: number[]
   typed: string
   setTyped: (s: string) => void
@@ -642,79 +648,120 @@ function WordFields({
   firstRef: React.RefObject<HTMLElement | null>
   onShortcut: (e: React.KeyboardEvent) => void
 }) {
+  const wrap = useRef<HTMLDivElement | null>(null)
   const parts = useMemo(() => {
     const split = typed.length > 0 ? typed.split(' ') : []
     return lengths.map((_, i) => split[i] ?? '')
   }, [typed, lengths])
 
   /**
-   * Move focus `offset` fields along, walking the DOM rather than an array of refs.
+   * Each word with the punctuation that touches it, so a comma sits against its word rather than
+   * floating between two of them.
    *
-   * The refs version did not work. The `ref` callback is an inline arrow, so React gets a new
-   * function every render and detaches the whole array (calling each ref with null) before
-   * re-attaching — which left the slot empty at exactly the moment the auto-advance wanted to read
-   * it, and focus silently stayed put. The fields are siblings in `.dict-write`, so the DOM already
-   * holds the ordering reliably and needs nothing kept in sync.
+   * Built here rather than served this way: the API sends a flat ordered list, which is the honest
+   * shape of the data, and the grouping is a rendering concern. A trailing mark attaches to the word
+   * before it, a leading mark to the word after, and a mark with no word either side stands alone.
    */
-  const focusBy = (from: HTMLInputElement, offset: number) => {
-    let el: Element | null = from
-    for (let n = 0; n < Math.abs(offset) && el; n += 1) {
-      el = offset > 0 ? el.nextElementSibling : el.previousElementSibling
+  const groups = useMemo(() => {
+    type Group = { before: string; wordIndex: number | null; after: string }
+    const out: Group[] = []
+    let wordIndex = 0
+    let pendingBefore = ''
+    // A payload with lengths but no slots is one cached before punctuation was shown. Fall back to
+    // words only rather than rendering an empty line with nowhere to type.
+    const ordered: HintSlot[] =
+      slots.length > 0
+        ? slots
+        : lengths.map((length) => ({ kind: 'word' as const, length, text: null }))
+    for (const slot of ordered) {
+      if (slot.kind === 'word') {
+        out.push({ before: pendingBefore, wordIndex: wordIndex++, after: '' })
+        pendingBefore = ''
+        continue
+      }
+      const text = slot.text ?? ''
+      const last = out[out.length - 1]
+      // A mark right after a word belongs to it. Otherwise it is opening something, so it waits for
+      // the word it opens — and if none follows, it becomes a group of its own below.
+      if (last && last.wordIndex !== null && !pendingBefore) last.after += text
+      else pendingBefore += text
     }
-    if (!(el instanceof HTMLInputElement) || el.disabled) return
+    if (pendingBefore) out.push({ before: pendingBefore, wordIndex: null, after: '' })
+    return out
+  }, [slots])
+
+  /**
+   * Focus the nth word field, found by querying the container.
+   *
+   * Not by walking siblings, which is what this did before: the fields are now nested inside their
+   * groups alongside the punctuation, so they are no longer each other's siblings and a walk stopped
+   * at the first comma. Querying the container needs nothing kept in sync and does not care how the
+   * hint line is nested.
+   */
+  const focusWord = (index: number, caret?: number) => {
+    const inputs = wrap.current?.querySelectorAll<HTMLInputElement>('input.dict-word')
+    const el = inputs?.[index]
+    if (!el || el.disabled) return
     el.focus()
-    el.setSelectionRange(el.value.length, el.value.length)
+    const at = caret ?? el.value.length
+    el.setSelectionRange(at, at)
   }
 
   /**
-   * Write into field `i`, spilling any whitespace in the incoming value across the fields after it.
+   * Write into word `i`, spilling any whitespace in the incoming value across the words after it.
    *
    * The spill matters and is not theoretical. A keystroke space is caught by onKeyDown and moves the
-   * cursor, but a space can reach a field without any keydown at all — pasting a phrase, an IME
-   * committing a segment, or speech-to-text inserting a run of words. Stripping those spaces (the
-   * first thing this did) silently concatenated the whole sentence into one field, so it read as the
-   * field ignoring the space bar. Distributing them means every route to the same text lands the
-   * same way, and pasting a sentence fills the exercise instead of destroying it.
+   * cursor, but a space can reach a field with no keydown at all — pasting a phrase, an IME
+   * committing a segment, speech-to-text inserting a run of words. Stripping those spaces (the first
+   * thing this did) silently concatenated the whole sentence into one field.
    */
-  const write = (el: HTMLInputElement, i: number, value: string) => {
+  const write = (i: number, value: string, composing = false) => {
     const next = [...parts]
     const chunks = value.split(/\s+/)
-    if (chunks.length === 1) {
-      next[i] = chunks[0]
-    } else {
+
+    // Several words at once: a paste, an IME commit, speech-to-text. Spread them and follow.
+    if (chunks.length > 1) {
       chunks.forEach((chunk, offset) => {
         const at = i + offset
         if (at < next.length) next[at] = chunk
-        // More words than fields: keep the overflow on the last field rather than dropping input
-        // the learner can see they typed.
+        // More words than fields: keep the overflow on the last one rather than dropping input the
+        // learner can see they typed.
         else next[next.length - 1] += chunk
       })
-      const landed = Math.min(i + chunks.length - 1, next.length - 1)
-      // Follow the text, so typing continues where it left off rather than back at the start.
-      focusBy(el, landed - i)
+      setTyped(next.join(' ').replace(/\s+$/, ''))
+      focusWord(Math.min(i + chunks.length - 1, next.length - 1))
+      return
     }
-    // Trailing empties are trimmed so an untouched exercise stays "" and the Check button stays off.
-    setTyped(next.join(' ').replace(/\s+$/, ''))
+
+    const incoming = chunks[0]
+    const room = lengths[i]
 
     /*
-      A finished word hands over to the next one on its own, so a whole sentence is typed without
-      ever reaching for the space bar.
+      A finished word hands over to the next one on the NEXT character, not on its own last one.
 
-      Safe to key off the letter count because of what the grader does: words are scored,
-      "PUNCTUATION AND CAPITALISATION ARE REPORTED, NOT SCORED" (see backend/app/skills/dictation/
-      grading.py). So a field never needs to hold a comma, and being full really does mean done.
+      Advancing the moment the count was reached broke every accented word. On macOS an accent comes
+      from holding the key — "a" is inserted, then replaced by "à" when you pick from the popup — so
+      a one-letter word like "à" was full and gone before the popup could be used, and any word whose
+      last letter takes an accent had the same problem. A dead-key or IME sequence fails the same way.
 
-      Done here rather than in onKeyDown so it also fires for an IME commit and for speech-to-text,
-      neither of which produces a keydown per character.
-
-      Synchronous, NOT deferred to requestAnimationFrame. Deferring raced the keyboard: a fast typist
-      got several more characters into the old field before focus moved, so "Les cinq mots" arrived as
-      "Lescinqm" in a three-letter field. The next field already exists in the DOM, so there is
-      nothing to wait for — React's following render only rewrites values, never focus.
+      Waiting for the overflow character fixes all of them at once: the field stays focused while it
+      is full, so the last letter can still be changed, and the next character you type is the signal
+      that you are done with this word. Nothing is lost — that character is carried across rather than
+      dropped — so continuous typing still fills the line without touching the space bar.
     */
-    if (chunks.length === 1 && next[i].length >= lengths[i] && i < lengths.length - 1) {
-      focusBy(el, 1)
+    if (!composing && incoming.length > room && i < lengths.length - 1) {
+      const carry = incoming.slice(room)
+      next[i] = incoming.slice(0, room)
+      next[i + 1] = carry + (next[i + 1] ?? '')
+      setTyped(next.join(' ').replace(/\s+$/, ''))
+      // Caret after the carried characters, so typing continues where it reads.
+      focusWord(i + 1, carry.length)
+      return
     }
+
+    next[i] = incoming
+    // Trailing empties are trimmed so an untouched exercise stays "" and the Check button stays off.
+    setTyped(next.join(' ').replace(/\s+$/, ''))
   }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, i: number) => {
@@ -727,60 +774,80 @@ function WordFields({
     // halfway through a sentence.
     if (e.key === ' ' || (e.key === 'Enter' && !e.metaKey && !e.ctrlKey)) {
       e.preventDefault()
-      focusBy(el, 1)
+      focusWord(Math.min(i + 1, lengths.length - 1))
       return
     }
     if (e.key === 'Backspace' && el.value === '' && i > 0) {
       e.preventDefault()
-      focusBy(el, -1)
+      focusWord(i - 1)
       return
     }
     if (e.key === 'ArrowLeft' && atStart && i > 0) {
       e.preventDefault()
-      focusBy(el, -1)
+      focusWord(i - 1)
       return
     }
     if (e.key === 'ArrowRight' && atEnd && i < lengths.length - 1) {
       e.preventDefault()
-      focusBy(el, 1)
+      focusWord(i + 1)
       return
     }
     onShortcut(e)
   }
 
   return (
-    <div className="dict-write" lang="fr">
-      {lengths.map((n, i) => (
-        <input
-          key={i}
-          ref={(el) => {
-            if (i === 0) firstRef.current = el
-          }}
-          className="dict-word"
-          /*
-            Two custom properties, and they do different jobs. `--len` sizes the field and draws one
-            dash per character. `--typed` widens it only once what has been typed outruns the hint,
-            so a word plus its comma still fits without every field being padded "just in case".
-          */
-          style={{
-            ['--len' as string]: n,
-            ['--typed' as string]: parts[i]?.length ?? 0,
-          }}
-          value={parts[i] ?? ''}
-          onChange={(e) => write(e.currentTarget, i, e.currentTarget.value)}
-          onKeyDown={(e) => onKeyDown(e, i)}
-          disabled={disabled}
-          aria-label={`Word ${i + 1} of ${lengths.length}, ${n} letters`}
-          spellCheck={false}
-          autoComplete="off"
-          autoCapitalize="off"
-          inputMode="text"
-        />
+    <div className="dict-write" lang="fr" ref={wrap}>
+      {groups.map((group, gi) => (
+        <span className="dict-hint-group" key={gi}>
+          {group.before && (
+            <span className="dict-hint-mark" aria-hidden="true">
+              {group.before}
+            </span>
+          )}
+          {group.wordIndex !== null && (
+            <input
+              ref={(el) => {
+                if (group.wordIndex === 0) firstRef.current = el
+              }}
+              className="dict-word"
+              /*
+                Two custom properties. `--len` sizes the field and draws one dash per character.
+                `--typed` widens it only once what has been typed outruns the hint, so a word plus an
+                accidental extra character still fits without padding every field.
+              */
+              style={{
+                ['--len' as string]: lengths[group.wordIndex],
+                ['--typed' as string]: parts[group.wordIndex]?.length ?? 0,
+              }}
+              value={parts[group.wordIndex] ?? ''}
+              onChange={(e) =>
+                write(
+                  group.wordIndex as number,
+                  e.currentTarget.value,
+                  (e.nativeEvent as InputEvent).isComposing === true,
+                )
+              }
+              onKeyDown={(e) => onKeyDown(e, group.wordIndex as number)}
+              disabled={disabled}
+              aria-label={`Word ${group.wordIndex + 1} of ${lengths.length}, ${
+                lengths[group.wordIndex]
+              } letters${group.after ? `, followed by ${group.after}` : ''}`}
+              spellCheck={false}
+              autoComplete="off"
+              autoCapitalize="off"
+              inputMode="text"
+            />
+          )}
+          {group.after && (
+            <span className="dict-hint-mark" aria-hidden="true">
+              {group.after}
+            </span>
+          )}
+        </span>
       ))}
     </div>
   )
 }
-
 
 function WordMark({ w }: { w: DictationWord }) {
   if (w.verdict === 'added') {

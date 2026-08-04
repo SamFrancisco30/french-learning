@@ -387,6 +387,14 @@ export interface ClipVariant {
 
 // ---------------------------------------------------------------- dictation
 
+export type HintSlot = {
+  kind: 'word' | 'mark'
+  /** Words only: how many characters to write. */
+  length: number | null
+  /** Marks only: the punctuation itself, shown as-is. */
+  text: string | null
+}
+
 export type DictationMode = 'sentence' | 'paragraph'
 
 export interface DictationLevel {
@@ -412,6 +420,14 @@ export interface DictationItem {
    * graded, so this reveals the shape of the sentence without a single letter of it.
    */
   word_lengths: number[]
+  /**
+   * The same hint line with punctuation back in place, in order.
+   *
+   * Words are still lengths only. The marks are literal, because a mark cannot affect the score —
+   * the grader scores words and only reports punctuation — so withholding it hid something that was
+   * never being marked while leaving the hint line disagreeing with the sentence read aloud.
+   */
+  hint_slots: HintSlot[]
   sentence_count: number | null
   /** Original-video timeline, as everywhere else. */
   audio_start_s: number | null

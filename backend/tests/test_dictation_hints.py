@@ -69,3 +69,84 @@ def test_word_count_agrees_with_the_payloads_own_count() -> None:
     runs than the stated word count would look like a bug to the learner."""
     text = "David Delos, on va plus loin avec vous."
     assert len(word_hint_lengths(text)) == 8
+
+
+# --- punctuation on the hint line -----------------------------------------------------------
+
+
+def test_slots_put_punctuation_where_it_belongs() -> None:
+    """The hint line is the sentence: words as lengths, marks in place.
+
+    This reverses the first version, which hid punctuation on the grounds that it was part of the
+    challenge. It is not part of the *score* — the grader reports punctuation and does not mark it —
+    so hiding it withheld nothing that was being assessed while leaving the hint line disagreeing
+    with the sentence a learner could hear being read aloud.
+    """
+    from app.routers.dictation import word_hint_slots
+
+    slots = word_hint_slots("Alors, ce sont des équations.")
+
+    assert slots == [
+        {"kind": "word", "length": 5},
+        {"kind": "mark", "text": ","},
+        {"kind": "word", "length": 2},
+        {"kind": "word", "length": 4},
+        {"kind": "word", "length": 3},
+        {"kind": "word", "length": 9},
+        {"kind": "mark", "text": "."},
+    ]
+
+
+def test_slots_keep_a_word_and_its_marks_distinguishable() -> None:
+    """An opening mark comes before its word, a closing one after — so the UI can keep each mark
+    against the word it touches rather than floating between two of them."""
+    from app.routers.dictation import word_hint_slots
+
+    assert word_hint_slots("«vraiment»?") == [
+        {"kind": "mark", "text": "«"},
+        {"kind": "word", "length": 8},
+        {"kind": "mark", "text": "»?"},
+    ]
+
+
+def test_a_lone_mark_is_its_own_slot() -> None:
+    from app.routers.dictation import word_hint_slots
+
+    assert word_hint_slots("oui — non") == [
+        {"kind": "word", "length": 3},
+        {"kind": "mark", "text": "—"},
+        {"kind": "word", "length": 3},
+    ]
+
+
+def test_lengths_are_derived_from_slots_so_they_cannot_disagree() -> None:
+    """The word count printed beside the runs comes from the same tokenization as the runs."""
+    from app.routers.dictation import word_hint_lengths, word_hint_slots
+
+    for text in (
+        "Alors, ce sont des équations.",
+        "«vraiment»? oui — non, peut-être…",
+        "C'est aujourd'hui.",
+    ):
+        slots = word_hint_slots(text)
+        assert word_hint_lengths(text) == [s["length"] for s in slots if s["kind"] == "word"]
+
+
+def test_slots_still_carry_no_letters_of_the_answer() -> None:
+    """The safety property survives showing punctuation: words are lengths, never text."""
+    from app.routers.dictation import word_hint_slots
+
+    text = "Le secret absolu ne doit jamais fuiter."
+    slots = word_hint_slots(text)
+
+    # Word slots carry a length and nothing else — no key that could hold a letter of the answer.
+    words = [s for s in slots if s["kind"] == "word"]
+    assert all(set(s) == {"kind", "length"} for s in words)
+    assert all(isinstance(s["length"], int) for s in words)
+
+    # And the only text that ships is punctuation. Checked against the mark VALUES rather than the
+    # serialised structure: `str(slots)` contains the key name "length", which contains "le", so a
+    # naive substring search over it reports the word "Le" as leaked when nothing has.
+    shipped = "".join(s["text"] for s in slots if s["kind"] == "mark")
+    for word in text.replace(".", "").split():
+        assert word.lower() not in shipped.lower()

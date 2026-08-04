@@ -8,7 +8,7 @@ learner has committed to an attempt.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
@@ -420,6 +420,15 @@ class DictationLevelOut(BaseModel):
     reason: str
 
 
+class HintSlotOut(BaseModel):
+    """One position on the dictée's hint line: a word to write, or a mark already written."""
+
+    kind: Literal["word", "mark"]
+    # Words carry a length and no text; marks carry text and no length.
+    length: int | None = None
+    text: str | None = None
+
+
 class DictationItemOut(BaseModel):
     exercise_id: int
     mode: str
@@ -430,6 +439,10 @@ class DictationItemOut(BaseModel):
     # One entry per word, giving that word's character count and nothing else. Drives the
     # underscore hints; carries no letters, so it cannot leak the answer.
     word_lengths: list[int] = Field(default_factory=list)
+    # The same hint line with the punctuation back in its place, in order. Words are still lengths
+    # only; the marks are literal, because a mark cannot affect the score and hiding it left the
+    # hint disagreeing with the sentence being read aloud.
+    hint_slots: list[HintSlotOut] = Field(default_factory=list)
     sentence_count: int | None = None
     # ORIGINAL-VIDEO seconds, same timeline as the listening player.
     audio_start_s: float | None

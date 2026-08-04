@@ -30,8 +30,19 @@ vi.mock('../api', () => ({
 }))
 vi.mock('../components/SpeedSlider', () => ({ SpeedSlider: () => <div /> }))
 
-/** Word lengths for "Les cinq mots ici bon" — 3, 4, 4, 3, 3. */
+/** Word lengths for "Les cinq mots, ici bon." — 3, 4, 4, 3, 3. */
 const LENGTHS = [3, 4, 4, 3, 3]
+
+/** The same sentence as the hint line: words as lengths, punctuation verbatim and in place. */
+const SLOTS = [
+  { kind: 'word' as const, length: 3, text: null },
+  { kind: 'word' as const, length: 4, text: null },
+  { kind: 'word' as const, length: 4, text: null },
+  { kind: 'mark' as const, length: null, text: ',' },
+  { kind: 'word' as const, length: 3, text: null },
+  { kind: 'word' as const, length: 3, text: null },
+  { kind: 'mark' as const, length: null, text: '.' },
+]
 
 function item(overrides: Record<string, unknown> = {}) {
   return {
@@ -42,6 +53,7 @@ function item(overrides: Record<string, unknown> = {}) {
     difficulty_score: 50,
     word_count: 5,
     word_lengths: LENGTHS,
+    hint_slots: SLOTS,
     sentence_count: 1,
     audio_start_s: 0,
     audio_end_s: 5,
@@ -127,10 +139,12 @@ describe('DictationPage word fields', () => {
 
     expect(fields()).toHaveLength(LENGTHS.length)
     LENGTHS.forEach((n, i) => {
-      // The label is how the length reaches a screen reader, which cannot see the dashes at all.
+      // The label is how the length reaches a screen reader, which cannot see the dashes at all —
+      // and it names any punctuation that follows, which is aria-hidden as a glyph.
+      const trailing = i === 2 ? ', followed by ,' : i === 4 ? ', followed by .' : ''
       expect(fields()[i]).toHaveAttribute(
         'aria-label',
-        `Word ${i + 1} of ${LENGTHS.length}, ${n} letters`,
+        `Word ${i + 1} of ${LENGTHS.length}, ${n} letters${trailing}`,
       )
       // --len drives both the width and the number of dashes drawn under it.
       expect(fields()[i].style.getPropertyValue('--len')).toBe(String(n))
@@ -143,15 +157,64 @@ describe('DictationPage word fields', () => {
     expect(document.querySelector('textarea')).toBeNull()
   })
 
-  it('jumps to the next word once a word is full', async () => {
+  it('stays on a full word so its last letter can still be accented', async () => {
     await mount()
     fields()[0].focus()
 
     typeAcross('Les')
 
-    // Three letters into a three-letter word: done, so hand over without needing the space bar.
-    await waitFor(() => expect(focusedIndex()).toBe(1))
+    /*
+      The regression this pins. Advancing the moment the count was reached broke every accented word:
+      on macOS an accent comes from holding the key — "a" is inserted, then replaced by "à" when you
+      pick from the popup — so the field was full and gone before the popup could be used. A
+      one-letter word like "à" was unreachable, and so was any word whose last letter takes an accent.
+    */
     expect(fields()[0].value).toBe('Les')
+    expect(focusedIndex()).toBe(0)
+  })
+
+  it('lets a full word be corrected in place, accent and all', async () => {
+    await mount()
+    fields()[0].focus()
+    typeAcross('Les')
+
+    // What a long-press does: same length, different last character.
+    fireEvent.input(fields()[0], { target: { value: 'Leè' } })
+
+    expect(fields()[0].value).toBe('Leè')
+    // Still here — the correction was not pushed into the next word.
+    expect(focusedIndex()).toBe(0)
+    expect(fields()[1].value).toBe('')
+  })
+
+  it('accepts a one-letter word without skipping past it', async () => {
+    // "à" is the case from the report: one letter, so the field was full on the first keystroke and
+    // handed over before the accent popup could be used at all.
+    await mount({ word_lengths: [1, 4], hint_slots: [
+      { kind: 'word', length: 1, text: null },
+      { kind: 'word', length: 4, text: null },
+    ] })
+    fields()[0].focus()
+
+    typeAcross('a')
+    expect(focusedIndex()).toBe(0)
+
+    fireEvent.input(fields()[0], { target: { value: 'à' } })
+    expect(fields()[0].value).toBe('à')
+    expect(focusedIndex()).toBe(0)
+  })
+
+  it('hands over on the next character, carrying it across', async () => {
+    await mount()
+    fields()[0].focus()
+    typeAcross('Les')
+
+    // The character after a full word is the signal that the word is finished.
+    typeAcross('c')
+
+    expect(fields()[0].value).toBe('Les')
+    expect(fields()[1].value).toBe('c')
+    expect(focusedIndex()).toBe(1)
   })
 
   it('keeps typing straight through several words', async () => {
@@ -226,6 +289,54 @@ describe('DictationPage word fields', () => {
     fields()[0].focus()
     typeAcross('L')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Check' })).toBeEnabled())
+  })
+
+  it('prints the punctuation on the line, in place, without a field for it', async () => {
+    await mount()
+
+    const marks = Array.from(document.querySelectorAll('.dict-hint-mark')).map((m) => m.textContent)
+    // A comma cannot affect the score, so showing it costs nothing and stops the hint line
+    // disagreeing with the sentence being read aloud.
+    expect(marks).toEqual([',', '.'])
+    // Shown, never typed: still one field per word, and no field for a mark.
+    expect(fields()).toHaveLength(LENGTHS.length)
+  })
+
+  it('keeps each mark with its own word rather than between two of them', async () => {
+    await mount()
+
+    // The comma belongs to the third word, so it sits inside that word's group — which is what makes
+    // the row's gap fall between words and never between a word and its own comma.
+    const groups = Array.from(document.querySelectorAll('.dict-hint-group'))
+    const third = groups.find((g) => g.querySelector('input')?.style.getPropertyValue('--len') === '4' && g.textContent === ',')
+    expect(third).toBeTruthy()
+  })
+
+  it('never lets punctuation reach the submitted text', async () => {
+    apiMocks.submit.mockResolvedValue({
+      is_correct: true,
+      score: 1,
+      feedback: { words: [], counts: {} },
+    })
+    await mount()
+    fields()[0].focus()
+    typeAcross('Lescinqmotsicibon')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Check' }))
+
+    // The marks are printed, not typed, so the graded string is words and spaces only — exactly what
+    // it was before the punctuation was shown.
+    await waitFor(() => expect(apiMocks.submit).toHaveBeenCalled())
+    expect(apiMocks.submit.mock.calls[0][1]).toEqual({ text: 'Les cinq mots ici bon' })
+  })
+
+  it('renders a lengths-only payload that predates the punctuation line', async () => {
+    // An item cached before hint_slots existed. Without a fallback this rendered an empty line with
+    // nowhere to type at all.
+    await mount({ hint_slots: [] })
+
+    expect(fields()).toHaveLength(LENGTHS.length)
+    expect(document.querySelectorAll('.dict-hint-mark')).toHaveLength(0)
   })
 
   it('falls back to a textarea when an item carries no word lengths', async () => {
