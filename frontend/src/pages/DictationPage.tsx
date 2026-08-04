@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, dictation } from '../api'
+import { LockedError, api, dictation } from '../api'
 import { SpeedSlider } from '../components/SpeedSlider'
 import { fmt } from '../useClipPlayer'
 import type {
@@ -73,6 +73,10 @@ export function DictationPage({
   const [result, setResult] = useState<AttemptResult | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Dictation items are cut from listening units, so a learner with nothing unlocked has nothing to
+  // dictate. That is an entitlement state, not a failure, and it needs its own message rather than
+  // the raw "LockedError: 402" that a generic catch produced.
+  const [locked, setLocked] = useState(false)
   const box = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
@@ -84,6 +88,7 @@ export function DictationPage({
       setResult(null)
       setTyped('')
       setError(null)
+      setLocked(false)
       setNext(null)
       try {
         const n = await dictation.next(m, learnerKey, language, lvl)
@@ -93,7 +98,8 @@ export function DictationPage({
         // landing in the field means the keyboard is already where the work happens.
         requestAnimationFrame(() => box.current?.focus())
       } catch (e) {
-        setError(String(e))
+        if (e instanceof LockedError) setLocked(true)
+        else setError(String(e))
       }
     },
     [learnerKey, language],
@@ -158,9 +164,26 @@ export function DictationPage({
         />
       </div>
 
+      {locked && (
+        <div className="dict-locked">
+          <h3>Unlock a recording first</h3>
+          <p className="muted">
+            Dictation practises the recordings you have opened, so there is nothing to dictate yet.
+            Open one from the listening library and its sentences appear here.
+          </p>
+          <div className="actions">
+            <button className="btn" onClick={() => navigate('/listening')}>
+              Browse recordings →
+            </button>
+          </div>
+        </div>
+      )}
+
       {error && <div className="error">{error}</div>}
 
-      {!item && !error && <div className="empty">Finding something at your level…</div>}
+      {!item && !error && !locked && (
+        <div className="empty">Finding something at your level…</div>
+      )}
 
       {item && (
         <DictationDrill
@@ -328,7 +351,20 @@ function DictationDrill({
         <div>
           <div className="ex-kind">
             {item.mode === 'sentence' ? 'Sentence dictation' : 'Paragraph dictation'}
-            {item.word_count ? ` · ${item.word_count} words` : ''}
+            {/*
+              Counted from the hints, not from `word_count`.
+
+              The two genuinely disagree: `word_count` is computed at curation time by a different
+              tokenizer and feeds the difficulty score, so it counts things the learner does not type
+              as separate words — a stray « counts, and an elision may split in two. Printing it
+              beside the underscore runs put "22 words" above 21 runs, which reads as a bug in the
+              hints. The runs are exactly what has to be typed, so they are the honest number.
+            */}
+            {item.word_lengths?.length
+              ? ` · ${item.word_lengths.length} words`
+              : item.word_count
+                ? ` · ${item.word_count} words`
+                : ''}
             {item.sentence_count && item.sentence_count > 1
               ? ` · ${item.sentence_count} sentences`
               : ''}
@@ -419,6 +455,10 @@ function DictationDrill({
           />
         )}
       </div>
+
+      {/* Above the box rather than inside it: a placeholder vanishes the moment you type, which
+          is exactly when the hint becomes useful. */}
+      <WordHints lengths={item.word_lengths ?? []} />
 
       <textarea
         ref={boxRef}
@@ -544,6 +584,38 @@ function DictationFeedback({
     </div>
   )
 }
+
+/**
+ * The dictée's underscore hints: one run of underscores per word, as long as that word.
+ *
+ * Real underscore characters in a monospace font rather than sized boxes. A box whose width is set
+ * in `ch` conveys length only approximately and only to someone comparing boxes; `_____` says
+ * "five letters" at a glance, which is the whole point of the hint, and it is what a paper dictée
+ * worksheet looks like.
+ *
+ * Only lengths reach the client (see word_hint_lengths on the server), so this cannot leak the
+ * answer. Punctuation is deliberately absent — where the commas go is part of the exercise.
+ *
+ * Hidden from screen readers as individual runs, because "underscore underscore underscore" is
+ * noise; the container carries the useful summary instead.
+ */
+function WordHints({ lengths }: { lengths: number[] }) {
+  if (lengths.length === 0) return null
+  return (
+    <div
+      className="dict-hints"
+      role="img"
+      aria-label={`${lengths.length} words to type, of ${lengths.join(', ')} letters`}
+    >
+      {lengths.map((n, i) => (
+        <span className="dict-hint-word" key={i} aria-hidden="true">
+          {'_'.repeat(n)}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 
 function WordMark({ w }: { w: DictationWord }) {
   if (w.verdict === 'added') {

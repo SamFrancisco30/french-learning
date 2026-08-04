@@ -148,27 +148,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const claimedFor = useRef<string | null>(null)
 
   /**
-   * Identity on every request. Registered in a layout-ordered effect before any child fetches, and
-   * reading `getSession()` each time so a token refreshed in the background is picked up.
+   * Identity on every request: the device key always, and a bearer token once signed in.
    *
-   * The device key is sent alongside the bearer token rather than being dropped on sign-in: the
-   * backend uses it to find the anonymous rows that /api/me/claim migrates.
+   * Read per call rather than captured, so a token refreshed in the background is picked up — the
+   * access token expires roughly hourly.
+   *
+   * The device key travels alongside the token rather than being dropped on sign-in, because
+   * /api/me/claim uses it to find the anonymous rows to migrate.
    */
-  useEffect(() => {
-    setIdentityHeaderSource(async () => {
-      const headers: Record<string, string> = { 'X-Learner-Key': learnerKey }
-      const active = clientRef.current
-      if (active) {
-        // getSession refreshes an expired token rather than handing back a dead one.
-        const { data } = await active.auth.getSession()
-        const token = data.session?.access_token
-        if (token) headers.Authorization = `Bearer ${token}`
-      } else if (sessionRef.current?.access_token) {
-        headers.Authorization = `Bearer ${sessionRef.current.access_token}`
-      }
-      return headers
-    })
+  const headerSource = useCallback(async (): Promise<Record<string, string>> => {
+    const headers: Record<string, string> = { 'X-Learner-Key': learnerKey }
+    const active = clientRef.current
+    if (active) {
+      // getSession refreshes an expired token rather than handing back a dead one.
+      const { data } = await active.auth.getSession()
+      const token = data.session?.access_token
+      if (token) headers.Authorization = `Bearer ${token}`
+    } else if (sessionRef.current?.access_token) {
+      headers.Authorization = `Bearer ${sessionRef.current.access_token}`
+    }
+    return headers
   }, [learnerKey])
+
+  /*
+    Registered during render, NOT in an effect, and that is the whole point.
+
+    React runs child effects BEFORE parent effects. In an effect this ran after DictationPage and
+    UnitDrill had already issued their first fetch, so that request went out with no identity — and
+    a gated endpoint answers 402 to an anonymous caller, which the UI renders as "locked". A learner
+    reloading a recording they had already unlocked was shown the paywall for it.
+
+    A render-phase assignment to a module slot is idempotent and safe to repeat, which is what makes
+    it acceptable here: the parent renders before any child, so the source is in place before a child
+    can possibly fetch.
+  */
+  setIdentityHeaderSource(headerSource)
 
   // Boot: find out whether accounts exist, and build the client if they do.
   useEffect(() => {

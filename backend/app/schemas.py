@@ -427,6 +427,9 @@ class DictationItemOut(BaseModel):
     cefr: str | None
     difficulty_score: float | None = None
     word_count: int | None = None
+    # One entry per word, giving that word's character count and nothing else. Drives the
+    # underscore hints; carries no letters, so it cannot leak the answer.
+    word_lengths: list[int] = Field(default_factory=list)
     sentence_count: int | None = None
     # ORIGINAL-VIDEO seconds, same timeline as the listening player.
     audio_start_s: float | None

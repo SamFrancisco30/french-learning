@@ -405,6 +405,13 @@ export interface DictationItem {
   cefr: string | null
   difficulty_score: number | null
   word_count: number | null
+  /**
+   * One character count per word of the answer, in order — the underscore hints.
+   *
+   * Lengths only: the words themselves are the answer and are never sent before an attempt is
+   * graded, so this reveals the shape of the sentence without a single letter of it.
+   */
+  word_lengths: number[]
   sentence_count: number | null
   /** Original-video timeline, as everywhere else. */
   audio_start_s: number | null

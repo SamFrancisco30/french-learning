@@ -119,6 +119,30 @@ def learner_level(db: Session, learner_key: str, mode: str) -> DictationLevelOut
     )
 
 
+# Characters stripped from a token's edges before it is measured. Internal apostrophes and hyphens
+# are NOT here: "l'a" and "peut-être" are one thing a learner types, so they count as one word of 3
+# and 10 characters respectively rather than being split.
+_EDGE_PUNCT = "\u201c\u201d\u2018\u2019\"'()[]{}«»…,.;:!?—–-"
+
+
+def word_hint_lengths(text: str) -> list[int]:
+    """Character counts of each word in the answer, in order — the dictée's underscore hints.
+
+    Only the *lengths* leave the server. The words themselves are the answer and are never sent
+    before an attempt is graded, so this gives the learner the shape of the sentence without giving
+    away a single letter of it.
+
+    Punctuation is deliberately not represented. Where the commas go is a real part of a dictée, and
+    a hint that laid them out would hand over the sentence's structure along with its word lengths.
+    """
+    lengths: list[int] = []
+    for token in text.split():
+        word = token.strip(_EDGE_PUNCT)
+        if word:
+            lengths.append(len(word))
+    return lengths
+
+
 def _item_out(ex: Exercise, *, with_audio: bool) -> DictationItemOut:
     payload = ex.payload or {}
     url = None
@@ -134,6 +158,8 @@ def _item_out(ex: Exercise, *, with_audio: bool) -> DictationItemOut:
         cefr=ex.cefr,
         difficulty_score=payload.get("difficulty_score"),
         word_count=payload.get("word_count"),
+        # Lengths only — see word_hint_lengths. `answer` itself never reaches the client here.
+        word_lengths=word_hint_lengths((ex.answer or {}).get("text") or ""),
         sentence_count=payload.get("sentence_count"),
         # Audio window on the ORIGINAL-VIDEO timeline, matching the listening player.
         audio_start_s=ex.audio_start_s,

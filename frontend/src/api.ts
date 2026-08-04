@@ -40,7 +40,33 @@ function requestPathname(path: string): string {
  * mid-session.
  */
 export type IdentityHeaders = Record<string, string>
-let identityHeaderSource: () => IdentityHeaders | Promise<IdentityHeaders> = () => ({})
+
+/**
+ * The anonymous device key, read straight from storage.
+ *
+ * This is the *default* source, and it exists because the registered one cannot be relied on for
+ * the very first request of a page load: React runs child effects before parent effects, so a
+ * component that fetches on mount goes out before a provider above it has registered anything. A
+ * gated endpoint answers 402 to a request carrying no identity, which the UI renders as "locked" —
+ * so a missing header did not look like a bug, it looked like the learner had lost access to a
+ * recording they had unlocked.
+ *
+ * Reading storage directly needs no React at all, so the device key is on every request from the
+ * first one. IdentityContext owns writing this value; this only ever reads it.
+ */
+const LEARNER_KEY_STORAGE = 'learner_key'
+
+function deviceKeyHeaders(): IdentityHeaders {
+  try {
+    const key = globalThis.localStorage?.getItem(LEARNER_KEY_STORAGE)
+    return key ? { 'X-Learner-Key': key } : {}
+  } catch {
+    // Storage can be unavailable in privacy modes. An anonymous request still gets the free tier.
+    return {}
+  }
+}
+
+let identityHeaderSource: () => IdentityHeaders | Promise<IdentityHeaders> = deviceKeyHeaders
 
 export function setIdentityHeaderSource(
   source: () => IdentityHeaders | Promise<IdentityHeaders>,
