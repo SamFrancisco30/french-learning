@@ -48,11 +48,44 @@ SAY_VOICE = {"fr": "Audrey"}
 OPENAI_VOICE = "coral"
 # gpt-4o-mini-tts takes direction as well as text. These words are instructions being read over a
 # learner's shoulder, so they want to be articulated and flat — not performed.
-OPENAI_INSTRUCTIONS = (
-    "Speak as a calm, clear female narrator dictating punctuation to a language learner. "
-    "Articulate crisply and evenly, at a measured pace, with a neutral, matter-of-fact tone. "
-    "No warmth, no rising intonation, no performance — this is an instruction, not speech."
+#
+# THE DIRECTION MUST NAME THE LANGUAGE, and this is the whole reason these were re-rendered. The
+# first version asked only for "a calm, clear female narrator" and never mentioned French, so the
+# model applied English phonetics to French words: "virgule" came out as an English speaker reading
+# it — a hard English r, the final -e sounded, stress on the wrong syllable. Every one of these is a
+# French word, and a dictée read in an English accent teaches the learner the wrong sound for the
+# one word they hear most.
+#
+# Written IN FRENCH deliberately. Asking in English for a French accent is a weaker signal than
+# simply speaking French to the model: the language of the instruction is itself evidence about how
+# the text should be read, and the two together leave no room to infer English.
+OPENAI_INSTRUCTIONS_BY_LANGUAGE = {
+    "fr": (
+        "Tu es une narratrice française. Lis ce mot en français, avec une prononciation "
+        "parisienne standard et un accent français natif — jamais un accent anglais ou américain. "
+        "Articule nettement, à un rythme mesuré, d'un ton neutre et factuel. "
+        "Aucune emphase, aucune intonation montante, aucune interprétation : "
+        "c'est une consigne dictée à un apprenant, pas une réplique. "
+        "Respecte les liaisons et les voyelles nasales du français."
+    ),
+}
+
+# For a language with no direction of its own yet. Names the language explicitly rather than leaving
+# it to be guessed, so adding Russian or Chinese later cannot silently repeat the English-accent bug.
+OPENAI_INSTRUCTIONS_FALLBACK = (
+    "Read this word as a native speaker of {language_name}, with that language's own accent and "
+    "phonetics — never an English accent. Speak as a calm, clear female narrator dictating "
+    "punctuation to a language learner: crisp, even, measured, neutral and matter-of-fact. "
+    "This is an instruction, not speech."
 )
+
+
+def instructions_for(language_code: str, language_name: str) -> str:
+    """The TTS direction for a language. Always names the language, one way or the other."""
+    specific = OPENAI_INSTRUCTIONS_BY_LANGUAGE.get(language_code)
+    if specific is not None:
+        return specific
+    return OPENAI_INSTRUCTIONS_FALLBACK.format(language_name=language_name)
 
 
 def render_say(text: str, dest: Path, voice: str) -> None:
@@ -65,7 +98,7 @@ def render_say(text: str, dest: Path, voice: str) -> None:
         _encode(aiff, dest)
 
 
-def render_openai(text: str, dest: Path) -> None:
+def render_openai(text: str, dest: Path, instructions: str) -> None:
     from app.config import settings
 
     if not settings.openai_api_key:
@@ -79,7 +112,7 @@ def render_openai(text: str, dest: Path) -> None:
             model="gpt-4o-mini-tts",
             voice=OPENAI_VOICE,
             input=text,
-            instructions=OPENAI_INSTRUCTIONS,
+            instructions=instructions,
             response_format="mp3",
         ) as resp:
             resp.stream_to_file(raw)
@@ -133,13 +166,17 @@ def main() -> None:
     if args.engine == "say" and not voice:
         raise SystemExit(f"no `say` voice configured for {lang.code}; use --engine openai")
 
+    instructions = instructions_for(lang.code, lang.name_en)
+    if args.engine == "openai":
+        print(f"direction ({lang.code}): {instructions[:78]}…\n")
+
     total = 0
     for name in names:
         dest = out_dir / f"{asset_name(name)}.wav"
         if args.engine == "say":
             render_say(name, dest, voice)
         else:
-            render_openai(name, dest)
+            render_openai(name, dest, instructions)
         size = dest.stat().st_size
         total += size
         dur = subprocess.run(

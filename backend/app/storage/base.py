@@ -125,7 +125,10 @@ def variant_map_key(provider_id: str, unit_idx: int, speed: float) -> str:
 #   v2  punctuation re-recorded in a clear female voice, so it is audibly the reader and not the
 #       speaker. The announcements are spliced INTO these clips, so every cached one still carries
 #       the old voice — bumping the version is what actually retires them.
-DICTATION_VERSION = "v2"
+#   v3  punctuation re-recorded with the TTS direction naming the language. v1 and v2 asked only for
+#       "a calm, clear female narrator", so the model read French words with English phonetics —
+#       "virgule" with an English r and a sounded final -e.
+DICTATION_VERSION = "v3"
 
 
 def dictation_clip_key(

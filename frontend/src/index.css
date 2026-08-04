@@ -2223,3 +2223,60 @@ kbd {
 }
 .dict-locked h3 { margin: 0 0 6px; font-size: 16px; }
 .dict-locked .muted { margin: 0; color: var(--text-dim); font-size: 14px; line-height: 1.5; }
+
+/* ---------------- dictation: writing on the lines ---------------- */
+
+.dict-write {
+  display: flex; flex-wrap: wrap;
+  align-items: flex-end;
+  /* Column gap is the space between words, row gap the space between lines of writing. They differ
+     on purpose: word spacing stays tight while wrapped lines need air to stay readable. */
+  column-gap: 14px; row-gap: 18px;
+  padding: 18px 16px;
+  margin: 0 auto 14px;
+  max-width: var(--prose);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.dict-word {
+  /* Monospace is load-bearing, not stylistic: the dashes below are drawn one per `ch`, so the
+     character cells and the dashes only line up in a font whose glyphs are all one `ch` wide. */
+  font-family: var(--mono);
+  font-size: 17px;
+  line-height: 1.4;
+  color: var(--text);
+  background: none;
+  border: 0;
+  padding: 0 0 4px;
+  /* As wide as the word is long, and no wider — that width IS the hint. It grows only once what has
+     been typed passes the hint, so a word plus its comma fits without padding every field. */
+  width: calc(max(var(--len), var(--typed)) * 1ch);
+  /* One dash per character cell, sitting under the text rather than behind a box. `--len` dashes
+     are drawn, so the run stops where the word ends even after the field has grown. */
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--border-strong) 0 calc(1ch - 2.5px),
+    transparent calc(1ch - 2.5px) 1ch
+  );
+  background-repeat: no-repeat;
+  background-position: left bottom;
+  background-size: calc(var(--len) * 1ch) 1.5px;
+}
+.dict-word:focus {
+  outline: none;
+  /* The active word is marked by its own line going accent-coloured. An outline or a filled box
+     would put a rectangle back around the thing we just took the rectangle away from. */
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--accent) 0 calc(1ch - 2.5px),
+    transparent calc(1ch - 2.5px) 1ch
+  );
+  background-size: calc(var(--len) * 1ch) 2px;
+}
+.dict-word:disabled { color: var(--text-dim); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .dict-word { transition: background-size 90ms ease-out; }
+}

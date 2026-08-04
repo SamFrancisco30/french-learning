@@ -77,7 +77,9 @@ export function DictationPage({
   // dictate. That is an entitlement state, not a failure, and it needs its own message rather than
   // the raw "LockedError: 402" that a generic catch produced.
   const [locked, setLocked] = useState(false)
-  const box = useRef<HTMLTextAreaElement | null>(null)
+  // Whichever control takes the first keystroke: the first word field, or the textarea when an
+  // item arrives without word lengths. The parent only ever focuses it.
+  const box = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     dictation.inventory(language).then(setInventory).catch(() => undefined)
@@ -289,7 +291,7 @@ function DictationDrill({
   busy: boolean
   result: AttemptResult | null
   onNext: () => void
-  boxRef: React.RefObject<HTMLTextAreaElement | null>
+  boxRef: React.RefObject<HTMLElement | null>
 }) {
   // The keyboard shortcut announces itself when an item opens and then gets out of the way. The
   // component is keyed on the exercise id in the parent, so this remounts per item and the hint
@@ -456,23 +458,35 @@ function DictationDrill({
         )}
       </div>
 
-      {/* Above the box rather than inside it: a placeholder vanishes the moment you type, which
-          is exactly when the hint becomes useful. */}
-      <WordHints lengths={item.word_lengths ?? []} />
-
-      <textarea
-        ref={boxRef}
-        className="dict-input"
-        value={typed}
-        onChange={(e) => setTyped(e.target.value)}
-        onKeyDown={onKeyDown}
-        disabled={!!result}
-        rows={item.mode === 'paragraph' ? 7 : 3}
-        placeholder="Type what you hear, with accents and punctuation…"
-        spellCheck={false}
-        autoComplete="off"
-        lang="fr"
-      />
+      {/*
+        Write on the lines. The textarea remains only as a fallback for an item that arrives with no
+        word lengths — an older cached payload, say — because without lengths there are no fields to
+        lay out, and a dictation with nowhere to type would be worse than a plain box.
+      */}
+      {(item.word_lengths?.length ?? 0) > 0 ? (
+        <WordFields
+          lengths={item.word_lengths}
+          typed={typed}
+          setTyped={setTyped}
+          disabled={!!result}
+          firstRef={boxRef}
+          onShortcut={onKeyDown}
+        />
+      ) : (
+        <textarea
+          ref={boxRef as React.RefObject<HTMLTextAreaElement | null>}
+          className="dict-input"
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          onKeyDown={onKeyDown}
+          disabled={!!result}
+          rows={item.mode === 'paragraph' ? 7 : 3}
+          placeholder="Type what you hear, with accents and punctuation…"
+          spellCheck={false}
+          autoComplete="off"
+          lang="fr"
+        />
+      )}
 
       {!result ? (
         <div className="actions">
@@ -494,7 +508,12 @@ function DictationDrill({
           </span>
         </div>
       ) : (
-        <DictationFeedback result={result} onNext={onNext} onReplay={playItem} />
+        <DictationFeedback
+          result={result}
+          onNext={onNext}
+          onReplay={playItem}
+          punctuationTypable={(item.word_lengths?.length ?? 0) === 0}
+        />
       )}
     </div>
   )
@@ -504,10 +523,13 @@ function DictationFeedback({
   result,
   onNext,
   onReplay,
+  punctuationTypable,
 }: {
   result: AttemptResult
   onNext: () => void
   onReplay: () => void
+  /** False when the word fields were used, since those accept letters only. */
+  punctuationTypable: boolean
 }) {
   const words = result.feedback.words ?? []
   const counts = result.feedback.counts ?? {}
@@ -556,7 +578,10 @@ function DictationFeedback({
         </ul>
       )}
 
-      {Object.keys(punct).length > 0 && (
+      {/* Only when there was somewhere to put it. With the word fields the learner types letters
+          only, so listing the commas they "did not write" would be blaming them for a
+          restriction the interface imposed. It is not scored either way. */}
+      {punctuationTypable && Object.keys(punct).length > 0 && (
         <div className="why">
           Punctuation you did not write: {Object.entries(punct).map(([c, n]) => `${n}× ${c}`).join(', ')}
           {' — '}not counted in the score, since a comma and a clause break sound the same.
@@ -586,31 +611,171 @@ function DictationFeedback({
 }
 
 /**
- * The dictée's underscore hints: one run of underscores per word, as long as that word.
+ * The dictée itself: you write on the ruled lines, one field per word.
  *
- * Real underscore characters in a monospace font rather than sized boxes. A box whose width is set
- * in `ch` conveys length only approximately and only to someone comparing boxes; `_____` says
- * "five letters" at a glance, which is the whole point of the hint, and it is what a paper dictée
- * worksheet looks like.
+ * There is no separate box any more. Each word is its own input, as wide as that word is long, with
+ * a dash drawn under every character cell — so the underscores stay visible as you write over them
+ * rather than being a legend above a box you type into somewhere else.
  *
- * Only lengths reach the client (see word_hint_lengths on the server), so this cannot leak the
- * answer. Punctuation is deliberately absent — where the commas go is part of the exercise.
+ * The whole answer is still ONE string. Fields are a view of `typed` split on spaces, and every
+ * edit rebuilds it with `join(' ')`; because a space can never be typed *into* a field, that
+ * round-trip is exact. Grading, the reset on a new item, and the "nothing typed yet" check all keep
+ * working on the same plain sentence they always did.
  *
- * Hidden from screen readers as individual runs, because "underscore underscore underscore" is
- * noise; the container carries the useful summary instead.
+ * Only lengths reach the client (see word_hint_lengths on the server), so the layout cannot leak
+ * the answer. Punctuation is deliberately unrepresented — where the commas go is part of a dictée —
+ * which is why a field accepts more characters than its width suggests: the comma after a word is
+ * typed into that word's field, and the field grows to hold it.
  */
-function WordHints({ lengths }: { lengths: number[] }) {
-  if (lengths.length === 0) return null
+function WordFields({
+  lengths,
+  typed,
+  setTyped,
+  disabled,
+  firstRef,
+  onShortcut,
+}: {
+  lengths: number[]
+  typed: string
+  setTyped: (s: string) => void
+  disabled: boolean
+  firstRef: React.RefObject<HTMLElement | null>
+  onShortcut: (e: React.KeyboardEvent) => void
+}) {
+  const parts = useMemo(() => {
+    const split = typed.length > 0 ? typed.split(' ') : []
+    return lengths.map((_, i) => split[i] ?? '')
+  }, [typed, lengths])
+
+  /**
+   * Move focus `offset` fields along, walking the DOM rather than an array of refs.
+   *
+   * The refs version did not work. The `ref` callback is an inline arrow, so React gets a new
+   * function every render and detaches the whole array (calling each ref with null) before
+   * re-attaching — which left the slot empty at exactly the moment the auto-advance wanted to read
+   * it, and focus silently stayed put. The fields are siblings in `.dict-write`, so the DOM already
+   * holds the ordering reliably and needs nothing kept in sync.
+   */
+  const focusBy = (from: HTMLInputElement, offset: number) => {
+    let el: Element | null = from
+    for (let n = 0; n < Math.abs(offset) && el; n += 1) {
+      el = offset > 0 ? el.nextElementSibling : el.previousElementSibling
+    }
+    if (!(el instanceof HTMLInputElement) || el.disabled) return
+    el.focus()
+    el.setSelectionRange(el.value.length, el.value.length)
+  }
+
+  /**
+   * Write into field `i`, spilling any whitespace in the incoming value across the fields after it.
+   *
+   * The spill matters and is not theoretical. A keystroke space is caught by onKeyDown and moves the
+   * cursor, but a space can reach a field without any keydown at all — pasting a phrase, an IME
+   * committing a segment, or speech-to-text inserting a run of words. Stripping those spaces (the
+   * first thing this did) silently concatenated the whole sentence into one field, so it read as the
+   * field ignoring the space bar. Distributing them means every route to the same text lands the
+   * same way, and pasting a sentence fills the exercise instead of destroying it.
+   */
+  const write = (el: HTMLInputElement, i: number, value: string) => {
+    const next = [...parts]
+    const chunks = value.split(/\s+/)
+    if (chunks.length === 1) {
+      next[i] = chunks[0]
+    } else {
+      chunks.forEach((chunk, offset) => {
+        const at = i + offset
+        if (at < next.length) next[at] = chunk
+        // More words than fields: keep the overflow on the last field rather than dropping input
+        // the learner can see they typed.
+        else next[next.length - 1] += chunk
+      })
+      const landed = Math.min(i + chunks.length - 1, next.length - 1)
+      // Follow the text, so typing continues where it left off rather than back at the start.
+      focusBy(el, landed - i)
+    }
+    // Trailing empties are trimmed so an untouched exercise stays "" and the Check button stays off.
+    setTyped(next.join(' ').replace(/\s+$/, ''))
+
+    /*
+      A finished word hands over to the next one on its own, so a whole sentence is typed without
+      ever reaching for the space bar.
+
+      Safe to key off the letter count because of what the grader does: words are scored,
+      "PUNCTUATION AND CAPITALISATION ARE REPORTED, NOT SCORED" (see backend/app/skills/dictation/
+      grading.py). So a field never needs to hold a comma, and being full really does mean done.
+
+      Done here rather than in onKeyDown so it also fires for an IME commit and for speech-to-text,
+      neither of which produces a keydown per character.
+
+      Synchronous, NOT deferred to requestAnimationFrame. Deferring raced the keyboard: a fast typist
+      got several more characters into the old field before focus moved, so "Les cinq mots" arrived as
+      "Lescinqm" in a three-letter field. The next field already exists in the DOM, so there is
+      nothing to wait for — React's following render only rewrites values, never focus.
+    */
+    if (chunks.length === 1 && next[i].length >= lengths[i] && i < lengths.length - 1) {
+      focusBy(el, 1)
+    }
+  }
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, i: number) => {
+    const el = e.currentTarget
+    const atStart = el.selectionStart === 0 && el.selectionEnd === 0
+    const atEnd = el.selectionStart === el.value.length && el.selectionEnd === el.value.length
+
+    // Space and Enter both advance. Enter deliberately does NOT submit: ⌘+Enter is the documented
+    // way to check, and a plain Enter that submitted would end the exercise on a stray keystroke
+    // halfway through a sentence.
+    if (e.key === ' ' || (e.key === 'Enter' && !e.metaKey && !e.ctrlKey)) {
+      e.preventDefault()
+      focusBy(el, 1)
+      return
+    }
+    if (e.key === 'Backspace' && el.value === '' && i > 0) {
+      e.preventDefault()
+      focusBy(el, -1)
+      return
+    }
+    if (e.key === 'ArrowLeft' && atStart && i > 0) {
+      e.preventDefault()
+      focusBy(el, -1)
+      return
+    }
+    if (e.key === 'ArrowRight' && atEnd && i < lengths.length - 1) {
+      e.preventDefault()
+      focusBy(el, 1)
+      return
+    }
+    onShortcut(e)
+  }
+
   return (
-    <div
-      className="dict-hints"
-      role="img"
-      aria-label={`${lengths.length} words to type, of ${lengths.join(', ')} letters`}
-    >
+    <div className="dict-write" lang="fr">
       {lengths.map((n, i) => (
-        <span className="dict-hint-word" key={i} aria-hidden="true">
-          {'_'.repeat(n)}
-        </span>
+        <input
+          key={i}
+          ref={(el) => {
+            if (i === 0) firstRef.current = el
+          }}
+          className="dict-word"
+          /*
+            Two custom properties, and they do different jobs. `--len` sizes the field and draws one
+            dash per character. `--typed` widens it only once what has been typed outruns the hint,
+            so a word plus its comma still fits without every field being padded "just in case".
+          */
+          style={{
+            ['--len' as string]: n,
+            ['--typed' as string]: parts[i]?.length ?? 0,
+          }}
+          value={parts[i] ?? ''}
+          onChange={(e) => write(e.currentTarget, i, e.currentTarget.value)}
+          onKeyDown={(e) => onKeyDown(e, i)}
+          disabled={disabled}
+          aria-label={`Word ${i + 1} of ${lengths.length}, ${n} letters`}
+          spellCheck={false}
+          autoComplete="off"
+          autoCapitalize="off"
+          inputMode="text"
+        />
       ))}
     </div>
   )
