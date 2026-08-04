@@ -1,29 +1,35 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import type { VocabEditInput, VocabItem } from '../../types'
+import type { VocabularyMode } from './VocabularyToolbar'
 
 function message(reason: unknown): string {
   return reason instanceof Error ? reason.message : 'Something went wrong'
 }
 
-function savedDate(value: string): string {
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  return new Intl.DateTimeFormat(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  }).format(parsed)
-}
-
+/**
+ * One saved word: the word, and what it means.
+ *
+ * Deliberately just those two. The row used to carry the save date, the example sentence, the lesson
+ * it came from and two buttons — five things around one word, which made a list of ten words a page
+ * of scrolling. The date in particular answered a question nobody asks: "recently saved" is already
+ * a sort option, so the ordering says what the date said, without a line per row to say it.
+ *
+ * Neither the example nor the source is lost. The source moves onto the headword, which is now the
+ * link back to its lesson, so the way back costs no extra line. The example appears when the row is
+ * opened for editing, which is where a learner is looking at one word rather than scanning many.
+ */
 export function VocabularyRow({
   item,
   navigate,
+  mode,
   onEdit,
   onDelete,
   mutationsDisabled,
 }: {
   item: VocabItem
   navigate: (to: string) => void
+  /** What a click on this row does. Null leaves the row as plain text. */
+  mode: VocabularyMode
   onEdit: (id: number, input: VocabEditInput) => Promise<void>
   onDelete: (item: VocabItem) => Promise<void>
   mutationsDisabled?: boolean
@@ -35,8 +41,11 @@ export function VocabularyRow({
   const [deleting, setDeleting] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const deleteButtonRef = useRef<HTMLButtonElement | null>(null)
   const confirmButtonRef = useRef<HTMLButtonElement | null>(null)
+  const pickRef = useRef<HTMLButtonElement | null>(null)
+  // Set when a confirmation was dismissed rather than acted on, so focus can go back where the
+  // learner left it. Without this, cancelling drops focus to the document and a keyboard user has
+  // to tab in from the top of the list again.
   const returnFocus = useRef(false)
   const confirmTitleId = useId()
   const confirmDescriptionId = useId()
@@ -52,13 +61,26 @@ export function VocabularyRow({
       confirmButtonRef.current?.focus()
     } else if (returnFocus.current) {
       returnFocus.current = false
-      deleteButtonRef.current?.focus()
+      // The pick button is re-created when the row re-arms, so this runs after that render.
+      pickRef.current?.focus()
     }
   }, [confirming])
 
+  // Leaving a mode closes whatever it opened, so switching from Delete to Edit cannot leave a
+  // confirmation hanging over a row the learner is no longer pointing at.
+  useEffect(() => {
+    if (mode !== 'delete' && confirming) {
+      setConfirming(false)
+      setError(null)
+    }
+    if (mode !== 'edit' && editing) {
+      setEditing(false)
+      setError(null)
+    }
+  }, [mode, confirming, editing])
+
   useEffect(() => {
     if (!mutationsDisabled || !confirming) return
-    returnFocus.current = false
     setConfirming(false)
     setError(null)
   }, [confirming, mutationsDisabled])
@@ -100,11 +122,73 @@ export function VocabularyRow({
     setError(null)
   }
 
+  const pick = () => {
+    if (mutationsDisabled) return
+    setError(null)
+    if (mode === 'edit') setEditing(true)
+    else if (mode === 'delete') setConfirming(true)
+  }
+
+  const armed = mode !== null && !editing && !confirming && !mutationsDisabled
+
   return (
-    <article className="wordbook-row" aria-label={item.headword}>
+    <article
+      className={`wordbook-row ${armed ? `armed ${mode}` : ''}`}
+      aria-label={item.headword}
+    >
+      {/*
+        The click target is a real button covering the row, not an onClick on the article.
+
+        It has to be a button: a div that responds to a click is invisible to a keyboard and to a
+        screen reader, and this is the only way to reach either action now that the per-row buttons
+        are gone. Its label carries the verb, so "Edit en effet" is what gets announced rather than
+        the bare headword — the same row means two different things depending on the armed mode, and
+        the label is the only place that difference can be stated.
+      */}
+      {armed && (
+        <button
+          ref={pickRef}
+          type="button"
+          className="wordbook-pick"
+          aria-label={`${mode === 'edit' ? 'Edit' : 'Delete'} ${item.headword}`}
+          onClick={pick}
+        />
+      )}
+
       <div className="wordbook-word">
-        <h3 lang={item.language}>{item.headword}</h3>
-        <span>Saved {savedDate(item.created_at)}</span>
+        {/*
+          The headword is the link to where it came from, so the row can be two columns — word and
+          meaning — without losing the way back to the lesson. A separate source line under the gloss
+          is what made the right column three things deep; putting it on the word costs no space.
+
+          Only when nothing is armed: with a mode active the pick button covers the row, and a link
+          underneath it would be both unreachable and a second meaning for the same click.
+        */}
+        {item.source && !armed ? (
+          <a
+            className="wordbook-headlink"
+            lang={item.language}
+            href={`#/listening/lesson/${item.source.lesson_id}/unit/${item.source.unit_id}`}
+            /*
+              Both, explicitly. Left to the default computation the name came out as the `title` —
+              the whole lesson title — so a screen reader announced a sentence of provenance where
+              the word should have been. Naming it here puts the word first and the destination
+              second, which is the order they matter in, and `title` still serves the hover.
+            */
+            aria-label={`${item.headword} — open ${item.source.lesson_title}, Unit ${item.source.unit_index}`}
+            title={`${item.source.lesson_title} · Unit ${item.source.unit_index}`}
+            onClick={(event) => {
+              event.preventDefault()
+              navigate(
+                `/listening/lesson/${item.source!.lesson_id}/unit/${item.source!.unit_id}`,
+              )
+            }}
+          >
+            <h3 lang={item.language}>{item.headword}</h3>
+          </a>
+        ) : (
+          <h3 lang={item.language}>{item.headword}</h3>
+        )}
       </div>
 
       {editing ? (
@@ -128,6 +212,24 @@ export function VocabularyRow({
               disabled={saving || mutationsDisabled}
             />
           </label>
+
+          {/* Where the word came from. Kept here rather than on every row: it is reference material,
+              wanted when you are looking at one word, not when scanning a list. */}
+          {item.source && (
+            <a
+              className="wordbook-source"
+              href={`#/listening/lesson/${item.source.lesson_id}/unit/${item.source.unit_id}`}
+              onClick={(event) => {
+                event.preventDefault()
+                navigate(
+                  `/listening/lesson/${item.source!.lesson_id}/unit/${item.source!.unit_id}`,
+                )
+              }}
+            >
+              {item.source.lesson_title} · Unit {item.source.unit_index}
+            </a>
+          )}
+
           {error && (
             <p className="wordbook-row-error" role="alert" aria-live="assertive">
               {error}
@@ -158,56 +260,13 @@ export function VocabularyRow({
       ) : (
         <div className="wordbook-details">
           <p className="wordbook-gloss">{item.gloss_en || 'No gloss added'}</p>
-          {item.example && (
-            <p className="wordbook-example" lang={item.language}>
-              {item.example}
-            </p>
-          )}
-          {item.source && (
-            <a
-              className="wordbook-source"
-              href={`#/listening/lesson/${item.source.lesson_id}/unit/${item.source.unit_id}`}
-              onClick={(event) => {
-                event.preventDefault()
-                navigate(
-                  `/listening/lesson/${item.source!.lesson_id}/unit/${item.source!.unit_id}`,
-                )
-              }}
-            >
-              {item.source.lesson_title} · Unit {item.source.unit_index}
-            </a>
-          )}
+
           {error && !confirming && (
             <p className="wordbook-row-error" role="alert" aria-live="assertive">
               {error}
             </p>
           )}
-          <div className="wordbook-row-actions">
-            <button
-              type="button"
-              aria-label={`Edit ${item.headword}`}
-              onClick={() => {
-                setError(null)
-                setEditing(true)
-              }}
-              disabled={mutationsDisabled}
-            >
-              Edit
-            </button>
-            <button
-              ref={deleteButtonRef}
-              className="wordbook-delete"
-              type="button"
-              aria-label={`Delete ${item.headword}`}
-              onClick={() => {
-                setError(null)
-                setConfirming(true)
-              }}
-              disabled={deleting || confirming || mutationsDisabled}
-            >
-              Delete
-            </button>
-          </div>
+
           {confirming && (
             <div
               className="wordbook-confirm"

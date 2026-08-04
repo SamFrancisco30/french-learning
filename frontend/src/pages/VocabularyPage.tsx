@@ -3,6 +3,7 @@ import { VocabularyEmpty } from '../components/vocab/VocabularyEmpty'
 import { VocabularyRow } from '../components/vocab/VocabularyRow'
 import {
   VocabularyToolbar,
+  type VocabularyMode,
   type VocabularySort,
 } from '../components/vocab/VocabularyToolbar'
 import type { VocabEditInput, VocabItem } from '../types'
@@ -33,6 +34,9 @@ export function VocabularyPage({
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [sort, setSort] = useState<VocabularySort>('recent')
+  // What clicking a word does. Lives here rather than in the toolbar because every row needs it,
+  // and it resets to null on a new search so a delete armed for one list cannot fire on another.
+  const [mode, setMode] = useState<VocabularyMode>(null)
   const [items, setItems] = useState<VocabItem[]>([])
   const [itemsCriteria, setItemsCriteria] = useState<string | null>(null)
   const [cursor, setCursor] = useState<CursorState | null>(null)
@@ -180,8 +184,19 @@ export function VocabularyPage({
       <VocabularyToolbar
         query={query}
         sort={sort}
-        onQueryChange={setQuery}
-        onSortChange={setSort}
+        mode={mode}
+        onQueryChange={(next) => {
+          // Disarm on a new search. The list about to arrive is a different set of words, and a
+          // delete aimed at the old one would land on whatever now occupies that position.
+          setMode(null)
+          setQuery(next)
+        }}
+        onSortChange={(next) => {
+          setMode(null)
+          setSort(next)
+        }}
+        onModeChange={setMode}
+        mutationsDisabled={isStale}
       />
 
       {loading && !hasLoaded && (
@@ -222,6 +237,7 @@ export function VocabularyPage({
               key={item.id}
               item={item}
               navigate={navigate}
+              mode={mode}
               onEdit={updateItem}
               onDelete={deleteItem}
               mutationsDisabled={isStale}

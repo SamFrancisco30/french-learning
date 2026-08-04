@@ -92,6 +92,26 @@ function renderApp() {
   )
 }
 
+/**
+ * Arm a mode from the toolbar. Rows are inert until one is chosen.
+ *
+ * Edit and Delete used to be a pair of buttons on every row; they are now one choice in the toolbar
+ * that says what clicking a word does. So a test that wants to edit or delete has to say so first,
+ * exactly as a learner does.
+ */
+async function armMode(mode: 'Edit' | 'Delete'): Promise<void> {
+  // Exact name: the row's own click target is labelled "Edit écouter", the toolbar control "Edit".
+  const button = screen.getByRole('button', { name: mode })
+  // Idempotent, because the control is a toggle: clicking an already-armed mode leaves it. A mode
+  // also survives the action — finishing an edit returns to the list with Edit still armed — so a
+  // test that arms twice would disarm without this check.
+  if (button.getAttribute('aria-pressed') !== 'true') {
+    // fireEvent, not userEvent: one test here runs on fake timers, and userEvent waits on real ones,
+    // so arming through it hung for the full timeout. A plain button needs no pointer simulation.
+    fireEvent.click(button)
+  }
+}
+
 describe('My Words route and navigation', () => {
   beforeEach(() => {
     apiMocks.languages.mockReset()
@@ -217,16 +237,21 @@ describe('VocabularyPage', () => {
     expect(vocabMocks.list).toHaveBeenCalledTimes(3)
   })
 
-  it('renders word details, saved date, and navigates to its source', async () => {
+  it('renders the word and its meaning, and links to its source from the headword', async () => {
     const navigate = vi.fn()
     vocabMocks.list.mockResolvedValue(page([word()]))
     renderPage('fr', navigate)
 
     expect(await screen.findByRole('heading', { name: 'écouter' })).toBeInTheDocument()
     expect(screen.getByText('to listen')).toBeInTheDocument()
-    expect(screen.getByText('Écoutez bien.')).toBeInTheDocument()
-    expect(screen.getByText(/Saved/)).toBeInTheDocument()
-    const source = screen.getByRole('link', { name: /Morning news.*Unit 2/ })
+    // The row is now the word and its meaning, and nothing else. The save date is gone — "recently
+    // saved" is a sort option, so the ordering already says what the date said — and the example
+    // moved into the edit form, where one word is being looked at rather than many scanned.
+    expect(screen.queryByText(/Saved/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Écoutez bien.')).not.toBeInTheDocument()
+    // The provenance moved onto the headword, so the way back to the lesson costs no extra line.
+    // The word first, then where it came from — see the aria-label in VocabularyRow.
+    const source = screen.getByRole('link', { name: /^écouter — open Morning news, Unit 2$/ })
     expect(source).toHaveAttribute('href', '#/listening/lesson/12/unit/34')
     source.focus()
     expect(source).toHaveFocus()
@@ -310,8 +335,8 @@ describe('VocabularyPage', () => {
     expect(
       screen.queryByText('Showing previous results while this view refreshes'),
     ).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Edit écouter' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Delete écouter' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
 
     await userEvent.click(screen.getByRole('button', { name: 'Retry loading more' }))
     expect(await screen.findByText('parler')).toBeInTheDocument()
@@ -444,6 +469,7 @@ describe('VocabularyPage', () => {
       await act(async () => Promise.resolve())
       expect(screen.getByText('écouter')).toBeInTheDocument()
 
+      await armMode('Delete')
       fireEvent.click(screen.getByRole('button', { name: 'Delete écouter' }))
       expect(screen.getByRole('alertdialog', { name: /Delete écouter/i })).toBeInTheDocument()
 
@@ -454,8 +480,8 @@ describe('VocabularyPage', () => {
           name: 'Showing previous results while this view refreshes',
         }),
       ).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Edit écouter' })).toBeDisabled()
-      expect(screen.getByRole('button', { name: 'Delete écouter' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled()
 
       await act(async () => vi.advanceTimersByTimeAsync(300))
       search.resolve(page([word({ id: 8, headword: 'parler', normalized_headword: 'parler' })]))
@@ -464,7 +490,7 @@ describe('VocabularyPage', () => {
       expect(
         screen.queryByText('Showing previous results while this view refreshes'),
       ).not.toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Edit parler' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled()
     } finally {
       vi.useRealTimers()
     }
@@ -504,12 +530,12 @@ describe('VocabularyPage', () => {
 
       fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'different' } })
       expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Edit écouter' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled()
 
       await act(async () => vi.advanceTimersByTimeAsync(100))
       fireEvent.change(screen.getByRole('searchbox'), { target: { value: '' } })
       expect(screen.getByRole('button', { name: 'Load more' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Edit écouter' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled()
 
       await act(async () => vi.advanceTimersByTimeAsync(300))
       expect(vocabMocks.list).toHaveBeenCalledOnce()
@@ -562,15 +588,15 @@ describe('VocabularyPage', () => {
         name: 'Showing previous results while this view refreshes',
       }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Edit écouter' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Delete écouter' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled()
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByText('hear carefully')).toBeInTheDocument()
     expect(
       screen.queryByText('Showing previous results while this view refreshes'),
     ).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Edit écouter' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Delete écouter' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
   })
 
   it('labels retained rows stale after a language failure and restores actions after retry', async () => {
@@ -598,8 +624,8 @@ describe('VocabularyPage', () => {
         name: 'Showing previous results while this view refreshes',
       }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Edit écouter' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Delete écouter' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled()
 
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByText('слушать')).toBeInTheDocument()
@@ -607,8 +633,8 @@ describe('VocabularyPage', () => {
     expect(
       screen.queryByText('Showing previous results while this view refreshes'),
     ).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Edit слушать' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Delete слушать' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
   })
 
   it('automatically lists an exact criteria only once in Strict Mode', async () => {
@@ -634,6 +660,7 @@ describe('VocabularyPage', () => {
     renderPage()
     await screen.findByText('écouter')
 
+    await armMode('Edit')
     await userEvent.click(screen.getByRole('button', { name: 'Edit écouter' }))
     const gloss = screen.getByRole('textbox', { name: 'Gloss' })
     expect(screen.getByText('Gloss').closest('label')).toContainElement(gloss)
@@ -647,6 +674,7 @@ describe('VocabularyPage', () => {
     expect(await screen.findByText('hear carefully')).toBeInTheDocument()
 
     vocabMocks.edit.mockRejectedValueOnce(new Error('Edit unavailable'))
+    await armMode('Edit')
     await userEvent.click(screen.getByRole('button', { name: 'Edit écouter' }))
     const example = screen.getByRole('textbox', { name: 'Example' })
     expect(screen.getByText('Example').closest('label')).toContainElement(example)
@@ -665,8 +693,13 @@ describe('VocabularyPage', () => {
     renderPage()
     await screen.findByText('écouter')
 
-    const deleteButton = screen.getByRole('button', { name: 'Delete écouter' })
-    await userEvent.click(deleteButton)
+    await armMode('Delete')
+    // Re-queried rather than held, at every step. The row's click target unmounts while the
+    // confirmation is open — the row is no longer armed — so a reference captured beforehand is a
+    // detached node afterwards, and asserting focus on it would fail even though focus was restored.
+    const pick = () => screen.getByRole('button', { name: 'Delete écouter' })
+
+    await userEvent.click(pick())
     expect(vocabMocks.remove).not.toHaveBeenCalled()
     const dialog = screen.getByRole('alertdialog', { name: /Delete écouter/i })
     expect(dialog).toHaveAccessibleDescription(/permanently/i)
@@ -674,12 +707,14 @@ describe('VocabularyPage', () => {
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
-    expect(deleteButton).toHaveFocus()
+    // Cancelling puts focus back on the word, so a keyboard user is not dropped to the top of the
+    // list and made to tab all the way back in.
+    expect(pick()).toHaveFocus()
 
-    await userEvent.click(deleteButton)
+    await userEvent.click(pick())
     fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' })
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
-    expect(deleteButton).toHaveFocus()
+    expect(pick()).toHaveFocus()
     expect(vocabMocks.remove).not.toHaveBeenCalled()
   })
 
@@ -690,6 +725,7 @@ describe('VocabularyPage', () => {
     renderPage()
     await screen.findByText('écouter')
 
+    await armMode('Delete')
     await userEvent.click(screen.getByRole('button', { name: 'Delete écouter' }))
     expect(vocabMocks.remove).not.toHaveBeenCalled()
     await userEvent.click(screen.getByRole('button', { name: 'Confirm delete' }))
@@ -702,6 +738,7 @@ describe('VocabularyPage', () => {
     vocabMocks.remove.mockRejectedValueOnce(new Error('Delete unavailable'))
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'alphabetical' } })
     await screen.findByText('rester')
+    await armMode('Delete')
     await userEvent.click(screen.getByRole('button', { name: 'Delete rester' }))
     await userEvent.click(screen.getByRole('button', { name: 'Confirm delete' }))
     const deleteError = await screen.findByRole('alert')

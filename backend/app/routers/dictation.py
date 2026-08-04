@@ -408,7 +408,16 @@ def item_audio(
         if punctuation:
             spoken = tmpd / "spoken.m4a"
             try:
-                marks = find_marks(text, unit.words_json or [], lang, offset_s=start)
+                # The UNIT's text, not the item's sentence: the word timings belong to the unit,
+                # and aligning them onto a one-sentence excerpt matched almost nothing — which
+                # collapsed every mark onto the same instant. The window narrows it to this item.
+                marks = find_marks(
+                    unit.text or "",
+                    unit.words_json or [],
+                    lang,
+                    offset_s=start,
+                    until_s=end,
+                )
                 shifted = [(m.spoken, _interp(m.at_s, time_map)) for m in marks]
                 result = splice_announcements(current, shifted, lang, dst=spoken)
                 current = spoken

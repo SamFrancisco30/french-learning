@@ -61,18 +61,34 @@ class Mark:
     at_s: float
 
 
+# Below this share of words placed onto the text, the alignment is not trustworthy enough to
+# position anything. Announcing at a guessed time is worse than not announcing: every mark whose
+# preceding word cannot be found collapses onto the same fallback instant, which is heard as
+# "virgule virgule virgule" before the sentence has started.
+MIN_ALIGNED_FRACTION = 0.5
+
+
 def find_marks(
     text: str,
     words_json: list[dict[str, Any]],
     lang: LanguageProfile,
     *,
     offset_s: float = 0.0,
+    until_s: float | None = None,
 ) -> list[Mark]:
     """Locate each punctuation mark and the moment it should be announced.
 
     A mark is announced after the word it follows, so the learner hears "…dans la vie, virgule".
-    Times returned are relative to `offset_s`, which lets a caller pass an item window's start and
-    get positions inside that item's own audio.
+
+    `text` MUST be the text these `words_json` were transcribed from — the whole unit's text, not a
+    sentence cut out of it. The words are aligned onto the text to find where each mark falls in
+    time, and a sentence-sized text with a unit's worth of words aligns almost nowhere: 6 of 303, in
+    the case that produced this note. Every mark then failed to find a preceding word and fell back
+    to the same instant, so a four-comma sentence opened with four announcements stacked before the
+    first word.
+
+    Use `offset_s` and `until_s` to narrow to one item's window instead. Times come back relative to
+    `offset_s`, so they index the item's own audio.
     """
     if not text:
         return []
@@ -93,19 +109,45 @@ def find_marks(
     if not placed:
         return []
 
+    # Refuse rather than guess. See MIN_ALIGNED_FRACTION: a weak alignment does not produce slightly
+    # wrong positions, it produces every mark at one position.
+    if len(placed) / len(words) < MIN_ALIGNED_FRACTION:
+        log.warning(
+            "not announcing punctuation: only %d/%d words aligned onto the text",
+            len(placed),
+            len(words),
+        )
+        return []
+
     # Longest symbols first so "..." is matched before ".".
     pairs = sorted(lang.punctuation_names, key=lambda p: -len(p[0]))
 
+    # One pass over the placed words instead of re-scanning them for every mark. `cursor` is the
+    # index of the last word known to end at or before the mark, and marks are found left to right,
+    # so it only ever moves forward.
+    ends = [(end, word) for (_start, end), word in placed]
+
     marks: list[Mark] = []
+    cursor = -1
     i = 0
     while i < len(text):
         for symbol, spoken in pairs:
             if not text.startswith(symbol, i):
                 continue
-            # The word this mark follows: the last one ending at or before the mark.
-            before = [w for (_, e), w in placed if e <= i]
-            at = (before[-1].end if before else placed[0][1].start) - offset_s
-            marks.append(Mark(symbol=symbol, spoken=spoken, char_pos=i, at_s=max(0.0, at)))
+            while cursor + 1 < len(ends) and ends[cursor + 1][0] <= i:
+                cursor += 1
+            # A mark before any word can only be an opening bracket or quote, and belongs just
+            # before the word it opens.
+            absolute = ends[cursor][1].end if cursor >= 0 else ends[0][1].start
+            if until_s is None or offset_s <= absolute <= until_s:
+                marks.append(
+                    Mark(
+                        symbol=symbol,
+                        spoken=spoken,
+                        char_pos=i,
+                        at_s=max(0.0, absolute - offset_s),
+                    )
+                )
             i += len(symbol)
             break
         else:
