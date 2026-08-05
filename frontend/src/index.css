@@ -486,14 +486,42 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
+  /* Two entries per row: "french english | french english". A saved word is a short pair, so one
+     per row left the right half of a 1240px shell empty and turned twenty words into a page of
+     scrolling. The narrow-screen rule further down collapses this back to one column. */
+  display: grid;
+  grid-template-columns: 1fr 1fr;
 }
 .wordbook-row {
   display: grid;
   grid-template-columns: minmax(130px, .65fr) minmax(0, 1.8fr);
   gap: 18px;
   padding: 14px 16px;
+  /* min-width: 0 so a long headword wraps inside its half instead of widening the grid track and
+     pushing the two columns out of alignment with each other. */
+  min-width: 0;
 }
-.wordbook-row + .wordbook-row { border-top: 1px solid var(--border); }
+
+/* Separators, drawn per cell rather than between siblings.
+
+   `.wordbook-row + .wordbook-row` cannot work in two columns: every row but the very first would
+   take a top border, which puts a stray line above the right column's first entry where there is
+   nothing above it. Bordering the top of everything from the third onward gives one rule per
+   visual row, and the vertical rule is the odd cells' right edge. */
+.wordbook-row:nth-child(n + 3) { border-top: 1px solid var(--border); }
+.wordbook-row:nth-child(odd) { border-right: 1px solid var(--border); }
+
+/* An open row spans both columns. Editing adds two fields and a pair of buttons, and confirming a
+   delete adds a dialog; in one half of the grid that stretches its own cell tall and leaves a hole
+   beside it, with the form squeezed into half the width it needs. */
+.wordbook-row.expanded {
+  grid-column: 1 / -1;
+  border-right: 0;
+}
+/* The row after a full-width one starts a fresh visual row, so it needs the rule the nth-child
+   arithmetic above can no longer predict — and the expanded row itself needs one above it. */
+.wordbook-row.expanded,
+.wordbook-row.expanded + .wordbook-row { border-top: 1px solid var(--border); }
 .wordbook-word h3 {
   font-size: 16px;
   line-height: 1.35;
@@ -1503,6 +1531,11 @@ select:focus, textarea:focus { outline: none; border-color: var(--accent); backg
     border-radius: var(--radius);
   }
   .wordbook-row + .wordbook-row { border-top: 1px solid var(--border); }
+  /* The two-column separators are meaningless once each row is its own card with a border all the
+     way round. Cleared explicitly rather than left to coincide with that border: they are the same
+     colour and width today, so they would be invisible, and silently wrong the day either changes. */
+  .wordbook-row:nth-child(odd) { border-right-width: 1px; }
+  .wordbook-row:nth-child(n + 3) { border-top-width: 1px; }
   .wordbook-confirm { padding: 11px; }
 }
 

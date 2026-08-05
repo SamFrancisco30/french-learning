@@ -130,10 +130,14 @@ export function VocabularyRow({
   }
 
   const armed = mode !== null && !editing && !confirming && !mutationsDisabled
+  // The list is two columns wide, and an open row does not fit in half of it: editing adds two
+  // fields and a pair of buttons, confirming adds a dialog. Both span the full width instead — see
+  // .wordbook-row.expanded.
+  const expanded = editing || confirming
 
   return (
     <article
-      className={`wordbook-row ${armed ? `armed ${mode}` : ''}`}
+      className={`wordbook-row ${armed ? `armed ${mode}` : ''} ${expanded ? 'expanded' : ''}`}
       aria-label={item.headword}
     >
       {/*

@@ -167,6 +167,19 @@ function palette(): string[] {
  */
 const ACTIVE_MS = 4000
 
+/**
+ * How long the bar takes to see itself out once the window closes.
+ *
+ * The window used to end by clearing the canvas in a single frame, which read as the bar being
+ * deleted rather than finishing. Over this stretch the spawner is off and what is already travelling
+ * keeps travelling, under a fade that takes the grey lattice with it.
+ *
+ * 1.6s is set against the particle speeds above: at 52–112 px/s the last blocks cover 80–180px while
+ * they leave, which is far enough to read as movement. Much shorter and the fade beats the motion, so
+ * it looks like a dissolve; much longer and the bar is still busy well after the setting has changed.
+ */
+const DRAIN_MS = 1600
+
 
 interface Particle {
   /** Continuous position in CSS px. The physics stays in css space; only drawing is device space. */
@@ -310,7 +323,14 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
       }
     }
 
-    const draw = () => {
+    /**
+     * @param fade 1 while the bar is live, ramping to 0 as it drains.
+     *
+     * Applied to the whole picture rather than to the sparkles alone. The grey lattice is as much
+     * "the blocks" as the coloured ones are, so fading only the colour would still end with the
+     * lattice snapping off in one frame — which is the pop this is here to remove.
+     */
+    const draw = (fade = 1) => {
       ctx.clearRect(0, 0, canvas.width, canvas.height)
 
       // 1. THE GRID LINES. The gradient goes down first across the whole canvas; the blocks then
@@ -321,6 +341,7 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
       const seam = ctx.createLinearGradient(0, 0, fadeEnd, 0)
       seam.addColorStop(0, SEAM_FROM)
       seam.addColorStop(1, SEAM_TO)
+      ctx.globalAlpha = fade
       ctx.fillStyle = seam
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
@@ -339,7 +360,7 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
         const left = p.dieAt - p.x
         if (left < FADE_OUT) alpha = Math.min(alpha, Math.max(0, left / FADE_OUT))
         if (alpha <= 0) continue
-        ctx.globalAlpha = alpha
+        ctx.globalAlpha = alpha * fade
         ctx.fillStyle = p.colour
         ctx.fillRect(col * pitchDev, p.row * pitchDev, cellDev, cellDev)
       }
@@ -374,10 +395,29 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
       ctx.clearRect(0, 0, canvas.width, canvas.height)
     }
 
+    /** When the drain began, or 0 while the bar is still live. */
+    let drainFrom = 0
+
     const frame = (t: number) => {
-      // Preparing a slow variant keeps it running regardless of the window: the motion is saying
-      // that work is happening, and it should last as long as the work does.
-      if (!busyRef.current && t >= activeUntil.current) {
+      // Preparing a slow variant keeps it live regardless of the window: the motion is saying that
+      // work is happening, and it should last as long as the work does.
+      const live = busyRef.current || t < activeUntil.current
+      if (live) {
+        drainFrom = 0
+      } else if (drainFrom === 0) {
+        drainFrom = t
+      }
+
+      /*
+        Draining, not switching off.
+
+        The window used to end by clearing the canvas in one frame, which read as the whole bar being
+        deleted — every block gone at once, mid-flight. Instead the spawner stops and what is already
+        travelling keeps travelling: the last blocks run left to right and see themselves out, under a
+        fade that carries the lattice with them so nothing is left to snap off at the end.
+      */
+      const fade = drainFrom === 0 ? 1 : Math.max(0, 1 - (t - drainFrom) / DRAIN_MS)
+      if (fade <= 0) {
         stop()
         return
       }
@@ -386,15 +426,19 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
       last = t
       const rush = busyRef.current ? 2 : 1
 
-      spawnDebt += dt * SPAWN_PER_SEC * rush
-      while (spawnDebt >= 1) {
-        particles.push(spawn())
-        spawnDebt -= 1
+      // No new blocks once the window is over. Everything already on the bar still moves, which is
+      // what makes the ending a departure rather than a cut.
+      if (drainFrom === 0) {
+        spawnDebt += dt * SPAWN_PER_SEC * rush
+        while (spawnDebt >= 1) {
+          particles.push(spawn())
+          spawnDebt -= 1
+        }
       }
       for (const p of particles) p.x += p.vx * dt * rush
       particles = particles.filter((p) => p.x < p.dieAt && p.x < w + cell)
 
-      draw()
+      draw(fade)
       raf = requestAnimationFrame(frame)
     }
 
@@ -404,6 +448,10 @@ export function SpeedSparkle({ pct, busy }: { pct: number; busy: boolean }) {
       // Cleared, so the first frame's dt is 0 and nothing jumps forward by however long the bar
       // spent idle.
       last = 0
+      // A change that lands while the bar is draining revives it in place — `live` turns true again
+      // and this is reset by the frame itself. Cleared here too for the case where the loop had
+      // already stopped, so a stale timestamp cannot make a fresh burst start half faded.
+      drainFrom = 0
       raf = requestAnimationFrame(frame)
     }
     startRef.current = start
