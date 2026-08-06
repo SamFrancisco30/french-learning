@@ -45,12 +45,25 @@ from ...models import (
     Source,
     Transcript,
 )
+from . import audio_quality
 from . import difficulty as difficulty_mod
 from .cloze import build_cloze
 from .generator import LLMError, generate_unit_exercises
 from .segmenter import segment_into_units
 
 log = logging.getLogger(__name__)
+
+
+class SourceRejected(RuntimeError):
+    """The audio is not clear enough to build a listening exercise from.
+
+    Distinct from RuntimeError so a caller can tell "this video is unsuitable" — a normal,
+    expected outcome when trawling for material — apart from "the pipeline broke".
+    """
+
+    def __init__(self, report: audio_quality.QualityReport) -> None:
+        super().__init__(report.summary())
+        self.report = report
 
 
 @dataclass
@@ -60,6 +73,7 @@ class PipelineReport:
     transcript_id: int
     title: str
     language: str
+    topic: str | None
     units: int
     exercises: int
     expressions: int
@@ -71,6 +85,8 @@ class PipelineReport:
     llm_failures: int
     audio_key: str
     local_mb_freed: float
+    audio_quality: str
+    audio_quality_notes: list[str]
 
     def to_dict(self) -> dict[str, Any]:
         return self.__dict__.copy()
@@ -145,6 +161,22 @@ def _save_transcript(db: Session, src: Source, result: ASRResult) -> Transcript:
     return tr
 
 
+def transcript_as_result(tr: Transcript) -> ASRResult:
+    """Rebuild an ASRResult from a stored transcript.
+
+    Lets the quality gate re-score anything already in the library without re-downloading audio
+    or paying for a second ASR pass — the per-segment confidences it needs are all persisted.
+    """
+    return ASRResult(
+        text=tr.text,
+        segments=_load_segments(tr),
+        language=tr.language,
+        duration_s=tr.duration_s,
+        backend=tr.asr_backend,
+        model=tr.asr_model,
+    )
+
+
 def _load_segments(tr: Transcript) -> list[ASRSegment]:
     out: list[ASRSegment] = []
     for s in tr.segments:
@@ -190,6 +222,7 @@ def build_listening_lesson(
     make_clips: bool = True,
     extract_mwe: bool = True,
     cleanup_local: bool | None = None,
+    ignore_quality: bool = False,
 ) -> PipelineReport:
     lang = get_language(language)
     settings.ensure_dirs()
@@ -231,6 +264,32 @@ def build_listening_lesson(
             "transcript has no word-level timestamps; cloze generation needs them. "
             "Use ASR_BACKEND=openai with whisper-1, or the local faster-whisper backend."
         )
+
+    # 2b. is this audio clear enough to learn from? -------------------------
+    #
+    # Before the units, and before any LLM call: a source that a learner cannot make out is
+    # rejected while it has only cost a download and one ASR pass. This also runs before the
+    # existing-lesson delete below, so a re-run that trips the gate leaves the current lesson
+    # standing rather than replacing something usable with nothing.
+    quality = audio_quality.assess(
+        info.audio_path if info.audio_path.exists() else None,
+        ASRResult(
+            text=tr.text,
+            segments=segments,  # the in-memory list, which on a fresh run has not been reloaded
+            language=tr.language,
+            duration_s=tr.duration_s,
+            backend=tr.asr_backend,
+            model=tr.asr_model,
+        ),
+        tr.duration_s,
+    )
+    if not quality.ok and not ignore_quality:
+        log.warning("rejecting %s — %s", url, quality.summary())
+        raise SourceRejected(quality)
+    if quality.verdict != audio_quality.ACCEPT:
+        log.warning("%s: %s", "quality override" if not quality.ok else "quality", quality.summary())
+    else:
+        log.info("audio quality OK: %s", quality.metrics)
 
     # 3. units -------------------------------------------------------------
     units = segment_into_units(segments)
@@ -403,6 +462,7 @@ def build_listening_lesson(
         transcript_id=tr.id,
         title=src.title,
         language=lang.code,
+        topic=lesson.topic,
         units=len(units),
         exercises=total_exercises,
         expressions=total_expressions,
@@ -414,4 +474,6 @@ def build_listening_lesson(
         llm_failures=llm_failures,
         audio_key=src.audio_key or "",
         local_mb_freed=round(freed, 2),
+        audio_quality=quality.verdict,
+        audio_quality_notes=list(quality.reasons),
     )

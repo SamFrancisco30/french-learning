@@ -41,7 +41,44 @@ cd backend
 ```
 
 Useful flags: `--lang ru`, `--asr local`, `--no-llm` (cloze only, no API cost),
-`--max-units 2`, `--re-transcribe`, `--require-cc`.
+`--max-units 2`, `--re-transcribe`, `--require-cc`, `--ignore-quality`.
+
+### Growing the library to a target
+
+```bash
+.venv/bin/python scripts/ingest.py coverage --queries       # what is missing, and what to search
+.venv/bin/python scripts/ingest.py fill-coverage --dry-run  # the plan and its candidates
+.venv/bin/python scripts/ingest.py fill-coverage --max-ingests 10
+```
+
+`coverage` reports lessons per topic per CEFR band against a target. `fill-coverage` works through
+the gaps, searching for candidates and ingesting them until the cells are full or `--max-ingests`
+is reached — that flag is the spend control, since each ingest is one ASR pass plus roughly a dozen
+LLM calls.
+
+Two things the grid cannot be argued with:
+
+- **A lesson's CEFR is measured from its audio, not chosen.** A source picked for a B1 cell may land
+  in B2. The loop re-reads the grid after each ingest and aims the next search at whatever is still
+  short, so this is normal rather than a failure. Its topic is classified the same way, for the same
+  reason: forcing the searched-for tag onto whatever came back would label a car review as sport.
+- **C2 is currently unreachable.** The band needs a difficulty score of 80 and the highest score
+  observed across the library is 70.4, so `coverage` excludes it from the reachable target instead
+  of reporting a gap nothing can close. `A1`/`A2` are only targeted for topics where graded beginner
+  French actually exists — there is no A1 broadcast about parliamentary procedure. Both decisions
+  live in `GRADED_TOPICS` / `CORE_BANDS` in `scripts/ingest.py`.
+
+### Checking what got built
+
+```bash
+.venv/bin/python scripts/ingest.py audit-audio    # is every lesson's audio clear enough?
+.venv/bin/python scripts/ingest.py audit-items    # can the answers be guessed without listening?
+```
+
+Both are free — they re-score from stored transcripts and exercise rows, with no ASR or LLM calls.
+`audit-items` prints the chance baseline beside each give-away rate, because that is the only thing
+that makes the number mean anything: "longest option is correct" at 25% is a coin toss behaving
+correctly, and at 41.5% it is a learner scoring 41% with the audio muted.
 
 ---
 
