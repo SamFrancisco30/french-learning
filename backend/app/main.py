@@ -17,7 +17,9 @@ from sqlalchemy.engine import make_url
 from .config import settings
 from .db import init_db
 from .errors import register_database_error_handler
-from .routers import account, attempts, billing, dictation, ingest, lessons, lexicon, vocab
+from .routers import (
+    account, attempts, billing, dictation, drill, ingest, lessons, lexicon, vocab,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,6 +53,7 @@ app.include_router(dictation.router)
 app.include_router(vocab.router)
 app.include_router(account.router)
 app.include_router(billing.router)
+app.include_router(drill.router)
 
 
 def _safe_log_token(value: str | None, fallback: str) -> str:
