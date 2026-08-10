@@ -12,6 +12,7 @@ URL, which for YouTube-derived material is exactly the exposure worth avoiding.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import mimetypes
 from pathlib import Path
@@ -89,6 +90,43 @@ def source_key(provider_id: str, suffix: str) -> str:
 
 def clip_key(provider_id: str, unit_idx: int) -> str:
     return f"clips/{provider_id}/unit_{unit_idx:03d}.m4a"
+
+
+# Drill media is content-addressed, unlike study mode's, which is named after the video it
+# came from. Two reasons, both measured on the imported corpus:
+#
+#   462 of 5550 files arrive under paths containing Chinese characters
+#   ("upload/tcf/speaking/3/互联网/不看电视.mp3"). Hashing sidesteps every question about how
+#   a non-ASCII key round-trips through the Storage API and a signed URL.
+#
+#   317 groups of files are byte-identical — the bank ships one recording under several
+#   banks — which is 320 MB of the 2.8 GB. A key derived from content uploads each of them
+#   once, with no bookkeeping to keep in step.
+#
+# The vendor's own path is kept in the row's provenance, so traceability does not depend on
+# the key.
+DRILL_MEDIA_PREFIX = "drill"
+
+
+def sha256_of(path: Path, chunk: int = 1 << 20) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        while block := fh.read(chunk):
+            h.update(block)
+    return h.hexdigest()
+
+
+def drill_media_key(path: Path, digest: str | None = None) -> str:
+    """Content-addressed key for one drill media file.
+
+    `digest` is accepted so a caller that already hashed the file — the importer, writing
+    keys into rows — does not pay for it twice.
+    """
+    if digest is None:
+        digest = sha256_of(path)
+    # Sharded by the first byte so no single Storage "folder" holds 5000 entries; `list()`
+    # is how `exists()` works, and it paginates.
+    return f"{DRILL_MEDIA_PREFIX}/{digest[:2]}/{digest}{path.suffix.lower()}"
 
 
 # Bump when the slow-audio algorithm changes, so cached variants are regenerated instead
