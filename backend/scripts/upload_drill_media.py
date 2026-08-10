@@ -32,6 +32,7 @@ from sqlalchemy import select  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.db import session_scope  # noqa: E402
 from app.drill.models import DrillQuestion  # noqa: E402
+from app.storage.base import drill_media_key  # noqa: E402
 
 for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
@@ -86,6 +87,11 @@ def planned(data_root: Path) -> tuple[dict[str, Path], Counter]:
     return out, stats
 
 
+def key_matches(key: str, path: Path) -> bool:
+    """Does the file still hash to the key the database recorded for it?"""
+    return drill_media_key(path) == key
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -94,6 +100,12 @@ def main() -> None:
     ap.add_argument("--bucket", default=DEFAULT_BUCKET)
     ap.add_argument("--dry-run", action="store_true", help="report, upload nothing")
     ap.add_argument("--limit", type=int, help="stop after N uploads (for a first look)")
+    ap.add_argument(
+        "--no-verify",
+        action="store_true",
+        help="skip re-hashing each file against its key (faster, but a disk that "
+             "returns different bytes than it did at import time goes unnoticed)",
+    )
     args = ap.parse_args()
 
     plan, stats = planned(args.data)
@@ -125,7 +137,7 @@ def main() -> None:
     # ensure_bucket's default mime list is study mode's, which rejects images.
     _widen_mime_types(store, args.bucket)
 
-    done = skipped = failed = 0
+    done = skipped = failed = mismatched = 0
     sent_bytes = 0
     items = list(plan.items())
     if args.limit:
@@ -135,6 +147,18 @@ def main() -> None:
         try:
             if store.exists(key):
                 skipped += 1
+            elif not args.no_verify and not key_matches(key, path):
+                # The key is a hash of the file's contents, taken when the row was
+                # imported. If a re-read disagrees, the bytes on disk changed
+                # underneath us — the machine this ran on has a failing disk, and
+                # has already produced corrupt git objects and a spliced JSONL.
+                # Uploading anyway would put content under a key that does not
+                # describe it, and nothing downstream would ever notice.
+                mismatched += 1
+                print(
+                    f"  HASH MISMATCH {path} no longer matches {key} — skipped",
+                    file=sys.stderr,
+                )
             else:
                 store.put_file(key, path)
                 done += 1
@@ -145,15 +169,24 @@ def main() -> None:
         if i % 200 == 0:
             print(
                 f"  {i}/{len(items)}  uploaded {done}, already there {skipped}, "
-                f"failed {failed}, {sent_bytes / 1e6:.0f} MB sent"
+                f"failed {failed}, mismatched {mismatched}, "
+                f"{sent_bytes / 1e6:.0f} MB sent",
+                flush=True,
             )
 
     print(
         f"\nuploaded {done}, already present {skipped}, failed {failed}, "
-        f"{sent_bytes / 1e6:.0f} MB sent -> bucket {args.bucket!r}"
+        f"hash mismatches {mismatched}, {sent_bytes / 1e6:.0f} MB sent "
+        f"-> bucket {args.bucket!r}"
     )
     if failed:
         print("re-run to retry the failures; objects already uploaded are skipped")
+    if mismatched:
+        print(
+            f"{mismatched} files no longer hash to the key recorded for them. Re-run the "
+            "importer to pick up their current contents, then check those files are not "
+            "damaged — a changed hash means the bytes changed."
+        )
 
 
 def _widen_mime_types(store, bucket: str) -> None:
