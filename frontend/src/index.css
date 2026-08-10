@@ -2397,3 +2397,137 @@ kbd {
   white-space: pre;
   user-select: none;
 }
+
+/* ---------------- drill mode ---------------- */
+
+/* The mode switch lives in the header, where .modeswitch's own 18px bottom margin and
+   flex:1 children were written for a full-width panel. Scope the corrections rather than
+   changing the shared rule, which the auth form still depends on. */
+header .modeswitch { margin: 0 0 0 18px; padding: 2px; }
+header .modeswitch button { flex: 0 0 auto; padding: 5px 12px; font-size: 12.5px; }
+header .modeswitch button .native { margin-left: 5px; font-size: 11px; color: var(--text-faint); }
+header .modeswitch button.on .native { color: var(--accent); }
+
+.drill { max-width: 760px; margin: 0 auto; padding: 22px 20px 60px; }
+
+.drill-head { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.drill-skills, .drill-levels { display: flex; flex-wrap: wrap; gap: 6px; }
+.drill-skills .chip, .drill-levels .chip {
+  cursor: pointer; padding: 5px 11px; font-size: 12.5px;
+}
+.drill-skills .chip.is-active, .drill-levels .chip.is-active {
+  background: var(--accent-soft); border-color: var(--accent-border);
+  color: var(--accent-ink); font-weight: 600;
+}
+.chip-sm { padding: 3px 9px !important; font-size: 11.5px !important; }
+.chip-native { color: var(--text-faint); }
+.drill-skills .chip.is-active .chip-native { color: var(--accent); }
+
+.drill-progress { margin: 0; font-size: 12.5px; color: var(--text-dim); }
+.drill-pct { color: var(--text-faint); }
+
+.drill-status { padding: 32px 0; color: var(--text-dim); font-size: 14px; }
+.drill-error { color: var(--bad); }
+
+.drill-card {
+  background: var(--bg-raised); border: 1px solid var(--border);
+  border-radius: var(--radius-md, 10px); padding: 22px; box-shadow: var(--shadow-sm);
+}
+.drill-meta {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 0 0 14px; font-size: 11.5px; color: var(--text-faint);
+}
+.drill-badge {
+  padding: 1px 7px; border-radius: 999px; background: var(--accent-soft);
+  color: var(--accent-ink); font-weight: 600;
+}
+.drill-seq { color: var(--text-faint); }
+
+.drill-audio { width: 100%; margin-bottom: 16px; }
+
+/* The passage. Generous measure and leading because these are exam texts read closely,
+   and `pre-wrap` because the source keeps its own line breaks — a notice, an SMS and a
+   timetable all lose their shape if the lines are reflowed. */
+.drill-doc {
+  white-space: pre-wrap; font-size: 15.5px; line-height: 1.75;
+  padding: 16px 18px; background: var(--bg-sunken);
+  border-radius: var(--radius-sm); margin-bottom: 16px;
+}
+
+.drill-hidden {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 14px 18px; margin-bottom: 16px;
+  background: var(--bg-sunken); border-radius: var(--radius-sm);
+  font-size: 13px; color: var(--text-dim);
+}
+
+.drill-original { margin: 0 0 12px; }
+.drill-image {
+  display: block; width: 100%; height: auto; margin-bottom: 16px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+
+.drill-question { margin: 0 0 14px; font-size: 16px; font-weight: 600; line-height: 1.45; }
+
+.drill-options { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.drill-option {
+  display: flex; align-items: flex-start; gap: 11px; width: 100%; text-align: left;
+  padding: 11px 14px; border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm); background: var(--bg-raised);
+  font-size: 14.5px; line-height: 1.5; color: var(--text);
+}
+.drill-option:hover:not(:disabled) { border-color: var(--accent); }
+.drill-option:disabled { cursor: default; }
+.drill-letter {
+  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 12px; font-weight: 700;
+  background: var(--bg-sunken); color: var(--text-dim);
+}
+/* After the attempt the key is always marked, and the learner's own wrong pick as well —
+   showing only one of the two leaves "what did I pick?" unanswered on the next render. */
+.drill-option.is-correct {
+  background: var(--good-bg); border-color: var(--good-border); color: var(--good-ink);
+}
+.drill-option.is-correct .drill-letter { background: var(--good); color: #fff; }
+.drill-option.is-wrong {
+  background: var(--bad-bg); border-color: var(--bad-border); color: var(--bad-ink);
+}
+.drill-option.is-wrong .drill-letter { background: var(--bad); color: #fff; }
+
+.drill-result { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.drill-verdict { margin: 0 0 10px; font-size: 14.5px; font-weight: 650; }
+.drill-verdict.is-correct { color: var(--good-ink); }
+.drill-verdict.is-wrong { color: var(--bad-ink); }
+.drill-verdict.is-neutral { color: var(--text-dim); font-weight: 500; }
+
+.drill-note {
+  margin: 0 0 12px; padding: 9px 12px; font-size: 12.5px; line-height: 1.55;
+  background: var(--warn-bg, var(--bg-sunken)); border: 1px solid var(--warn-border, var(--border));
+  border-radius: var(--radius-sm); color: var(--warn-ink, var(--text-dim));
+}
+
+.drill-model { margin-bottom: 12px; }
+.drill-model h3 { margin: 0 0 6px; font-size: 12.5px; color: var(--text-dim); font-weight: 600; }
+.drill-model > div { white-space: pre-wrap; font-size: 14.5px; line-height: 1.7; }
+
+.drill-explanation, .drill-translation { margin-bottom: 8px; font-size: 13.5px; }
+.drill-explanation summary, .drill-translation summary {
+  cursor: pointer; font-size: 12.5px; color: var(--text-dim); font-weight: 600;
+}
+.drill-explanation > div, .drill-translation > div {
+  margin-top: 8px; line-height: 1.7; color: var(--text);
+}
+
+.drill-actions {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);
+}
+.drill-about { margin-left: auto; }
+
+.drill-production { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.drill-textarea {
+  width: 100%; padding: 12px 14px; font-size: 14.5px; line-height: 1.7;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  background: var(--bg-input); color: var(--text); resize: vertical; font-family: inherit;
+}
+.drill-count { font-size: 11.5px; color: var(--text-faint); }

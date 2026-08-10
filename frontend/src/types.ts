@@ -540,3 +540,69 @@ export type ClaimResult = {
   sessions: number
   entitlement: Entitlement
 }
+
+// --- drill mode: the imported TCF bank ---
+//
+// Deliberately narrower than the row behind it. `DrillQuestion` has no field for the
+// answer, the correct-option flag, or the explanation, because an exam item leaks its
+// key through all three. The server withholds them the same way; this mirrors that so a
+// component cannot reach for one and find it typed.
+
+export type DrillOption = {
+  label: string
+  text: string
+}
+
+export type DrillCollection = {
+  id: number
+  skill: string
+  name: string
+  level: string | null
+  item_count: number
+  /** Items left after de-duplication — what a practice queue actually draws from. */
+  distinct_count: number
+}
+
+export type DrillQuestion = {
+  id: number
+  skill: string
+  kind: string
+  collection: string
+  level: string | null
+  seq: number | null
+  title: string | null
+  time_limit_s: number | null
+  /** Reading passage, listening transcript, or production prompt. */
+  document: string
+  question: string | null
+  options: DrillOption[]
+  image_url: string | null
+  audio_url: string | null
+  /** True for listening: the document is a transcript of what is played, so showing it
+   *  up front hands over the answer. Reveal it only after the attempt. */
+  document_is_spoiler: boolean
+}
+
+export type DrillResult = {
+  attempt_id: number
+  question_id: number
+  /** null for production tasks, which have no key — not false. */
+  correct: boolean | null
+  answer: string | null
+  selected: string | null
+  explanation: string | null
+  document_zh: string | null
+  model_answer: string | null
+  /** Set when the key was recovered by inference rather than shipped with the item. */
+  answer_source: string | null
+}
+
+export type DrillProgress = {
+  skill: string
+  level: string | null
+  attempted: number
+  correct: number
+  /** Attempts that could be marked at all; `accuracy` is over this, not `attempted`. */
+  graded: number
+  accuracy: number | null
+}

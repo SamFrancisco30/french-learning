@@ -292,3 +292,35 @@ export const clips = {
   variant: (unitId: number, speed: number) =>
     get<import('./types').ClipVariant>(`/api/units/${unitId}/clip?speed=${speed}`),
 }
+
+export const drill = {
+  /** Banks the vendor published, with how many items each has after de-duplication. */
+  collections: (skill?: string) =>
+    get<import('./types').DrillCollection[]>(
+      `/api/drill/collections${skill ? `?skill=${encodeURIComponent(skill)}` : ''}`,
+    ),
+  /**
+   * The next item to practise. Prefers ones this learner has not attempted, but repeats
+   * rather than 404s once a level is exhausted — identity travels in the headers, so the
+   * "not attempted" part only works for a caller with a device key or a session.
+   */
+  next: (params: { skill: string; level?: string | null; collectionId?: number | null }) => {
+    const query = new URLSearchParams({ skill: params.skill })
+    if (params.level) query.set('level', params.level)
+    if (params.collectionId) query.set('collection_id', String(params.collectionId))
+    return get<import('./types').DrillQuestion>(`/api/drill/next?${query}`)
+  },
+  question: (id: number) => get<import('./types').DrillQuestion>(`/api/drill/questions/${id}`),
+  /**
+   * Submit an answer. This is also the only call that returns the key, the explanation and
+   * the translation — they are not on the question payload at all, so nothing can render
+   * them before the learner has committed.
+   */
+  submit: (body: {
+    question_id: number
+    selected?: string | null
+    elapsed_ms?: number | null
+    response?: Record<string, unknown>
+  }) => post<import('./types').DrillResult>('/api/drill/attempts', body),
+  progress: () => get<import('./types').DrillProgress[]>('/api/drill/progress'),
+}
