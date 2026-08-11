@@ -5,6 +5,7 @@ import { StarMark } from './components/icons'
 import { LanguagePicker } from './components/LanguagePicker'
 import { AccountPage } from './pages/AccountPage'
 import { DictationPage } from './pages/DictationPage'
+import { DrillPage } from './pages/DrillPage'
 import { ListeningPage } from './pages/ListeningPage'
 import { ReadingPage } from './pages/ReadingPage'
 import { SkillStatusPage } from './pages/SkillStatusPage'
@@ -53,6 +54,14 @@ export default function App() {
   })
 
   const skill = skillFromPath(segments)
+  // #/<skill>/drill — the exam bank, alongside each skill's study view rather than
+  // replacing it. Reading has both: a text to explore, and items to answer.
+  const isDrill = segments[1] === 'drill'
+  // Writing and speaking have no study view — what exists for them is the exam tasks, so
+  // the bank IS the page. The honest account of what is still missing (grading, a
+  // microphone) keeps its own route rather than standing in front of working material.
+  const isAbout = segments[1] === 'about'
+  const productionSkill = skill.key === 'writing' || skill.key === 'speaking'
   const isVocabulary = segments[0] === 'vocabulary'
   const isAccount = segments[0] === 'account'
   // Neither the vocabulary book nor the account page belongs to a skill, so both suppress the
@@ -118,6 +127,39 @@ export default function App() {
             ))}
           </nav>
 
+          {/*
+            Study vs drill, for the skills that have both.
+
+            Two separate things sit under one skill: material to explore, and exam items to
+            answer. They are not stages of each other — a learner picks one — so this is a
+            switch and not a step. Writing and speaking have only the drill view, so they get
+            no switch; showing a disabled half would advertise something that is not there.
+
+            It stays on screen on the vocabulary and account pages, where the skill tabs
+            already are. A control that disappears when you open My Words and returns when
+            you leave reads as a glitch, and it is also the way back to the skill you came
+            from. Neither half is marked current there, because you are in neither mode —
+            highlighting one would say you were.
+          */}
+          {(skill.key === 'reading' || skill.key === 'listening') && (
+            <nav className="modeswitch" aria-label="Mode">
+              <button
+                className={isSkillRoute && !isDrill ? 'on' : undefined}
+                aria-current={isSkillRoute && !isDrill ? 'page' : undefined}
+                onClick={() => navigate(`/${skill.key}`)}
+              >
+                Study<span className="native">学习</span>
+              </button>
+              <button
+                className={isSkillRoute && isDrill ? 'on' : undefined}
+                aria-current={isSkillRoute && isDrill ? 'page' : undefined}
+                onClick={() => navigate(`/${skill.key}/drill`)}
+              >
+                Drill<span className="native">刷题</span>
+              </button>
+            </nav>
+          )}
+
           {/* Last, and last in the DOM on purpose. Moving it here with CSS `order` would leave a
               keyboard user tabbing to the star before the skill tabs while seeing it after them. */}
           <nav className="utilitynav" aria-label="Utilities">
@@ -172,7 +214,7 @@ export default function App() {
         </div>
       </header>
 
-      {isSkillRoute && skill.key === 'listening' && (
+      {isSkillRoute && skill.key === 'listening' && !isDrill && (
         <ListeningPage
           segments={segments}
           navigate={navigate}
@@ -181,8 +223,12 @@ export default function App() {
         />
       )}
 
-      {isSkillRoute && skill.key === 'reading' && (
+      {isSkillRoute && skill.key === 'reading' && !isDrill && (
         <ReadingPage language={language} />
+      )}
+
+      {(isDrill || (isSkillRoute && productionSkill && !isAbout)) && (
+        <DrillPage language={language} onAbout={() => navigate(`/${skill.key}/about`)} />
       )}
 
       {/* Dictation is built now, so it renders its own page rather than the "not built yet"
@@ -193,7 +239,7 @@ export default function App() {
         <DictationPage language={language} learnerKey={learnerKey} navigate={navigate} />
       )}
 
-      {isSkillRoute && (skill.key === 'writing' || skill.key === 'speaking') && (
+      {isSkillRoute && productionSkill && isAbout && (
         <SkillStatusPage skill={skill} onGoListening={() => navigate('/listening')} />
       )}
 

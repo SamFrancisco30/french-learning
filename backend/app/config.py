@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     # service_role key: bypasses RLS, full access. Server-side only, never the frontend.
     supabase_service_key: str | None = None
     supabase_bucket: str = "audio"
+    # Drill media lives in its own bucket. Study mode's is restricted to audio mime
+    # types — a deliberate property — and 2730 of the drill objects are PNG, so
+    # admitting them there would loosen the guarantee for the module that has no
+    # images at all.
+    supabase_drill_bucket: str = "drill"
     # Signed URLs are minted per request. An hour outlives any single listening session
     # while keeping links from being shareable indefinitely.
     signed_url_ttl_s: int = 3600

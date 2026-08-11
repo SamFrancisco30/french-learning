@@ -18,6 +18,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.models import Base
 
+# Imported for the side effect of registering drill mode's tables on the same
+# metadata. Without it autogenerate compares an incomplete picture against the
+# real database and proposes dropping the tables it cannot see.
+from app.drill import models as _drill_models  # noqa: F401
+
 config = context.config
 injected_connection = config.attributes.get("connection")
 
