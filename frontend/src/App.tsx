@@ -62,6 +62,13 @@ export default function App() {
   // microphone) keeps its own route rather than standing in front of working material.
   const isAbout = segments[1] === 'about'
   const productionSkill = skill.key === 'writing' || skill.key === 'speaking'
+  // Which skills have something to study, as opposed to only items to answer. Writing and
+  // speaking have no study view built, so their half of the mode switch is offered but inert.
+  const hasStudyView =
+    skill.key === 'listening' || skill.key === 'dictation' || skill.key === 'reading'
+  // Writing and speaking show the bank on their bare route, with no /drill segment, so the URL
+  // alone does not say which mode is on screen.
+  const showingDrill = isDrill || (productionSkill && !isAbout)
   const isVocabulary = segments[0] === 'vocabulary'
   const isAccount = segments[0] === 'account'
   // Neither the vocabulary book nor the account page belongs to a skill, so both suppress the
@@ -128,12 +135,21 @@ export default function App() {
           </nav>
 
           {/*
-            Study vs drill, for the skills that have both.
+            Study vs drill.
 
             Two separate things sit under one skill: material to explore, and exam items to
             answer. They are not stages of each other — a learner picks one — so this is a
-            switch and not a step. Writing and speaking have only the drill view, so they get
-            no switch; showing a disabled half would advertise something that is not there.
+            switch and not a step.
+
+            It shows on every skill, which it did not used to: it was limited to reading and
+            listening, on the reasoning that writing and speaking have no study view and a
+            disabled half advertises something absent. That left the switch missing from
+            dictation, which has both halves and lost the drill affordance for no reason, and
+            from writing, where the bank is already on screen with nothing naming the mode.
+            Withholding the whole control is the worse trade: a learner on those pages had no
+            visible route into the bank at all. So both halves always render, and the Study half
+            is disabled with a reason where no study view exists — which states the absence
+            rather than hiding it.
 
             It stays on screen on the vocabulary and account pages, where the skill tabs
             already are. A control that disappears when you open My Words and returns when
@@ -141,24 +157,28 @@ export default function App() {
             from. Neither half is marked current there, because you are in neither mode —
             highlighting one would say you were.
           */}
-          {(skill.key === 'reading' || skill.key === 'listening') && (
-            <nav className="modeswitch" aria-label="Mode">
-              <button
-                className={isSkillRoute && !isDrill ? 'on' : undefined}
-                aria-current={isSkillRoute && !isDrill ? 'page' : undefined}
-                onClick={() => navigate(`/${skill.key}`)}
-              >
-                Study<span className="native">学习</span>
-              </button>
-              <button
-                className={isSkillRoute && isDrill ? 'on' : undefined}
-                aria-current={isSkillRoute && isDrill ? 'page' : undefined}
-                onClick={() => navigate(`/${skill.key}/drill`)}
-              >
-                Drill<span className="native">刷题</span>
-              </button>
-            </nav>
-          )}
+          <nav className="modeswitch" aria-label="Mode">
+            <button
+              className={isSkillRoute && !showingDrill ? 'on' : undefined}
+              aria-current={isSkillRoute && !showingDrill ? 'page' : undefined}
+              disabled={!hasStudyView}
+              title={
+                hasStudyView
+                  ? undefined
+                  : `No study view for ${skill.label.toLowerCase()} yet — the exam bank is what exists.`
+              }
+              onClick={() => navigate(`/${skill.key}`)}
+            >
+              Study<span className="native">学习</span>
+            </button>
+            <button
+              className={isSkillRoute && showingDrill ? 'on' : undefined}
+              aria-current={isSkillRoute && showingDrill ? 'page' : undefined}
+              onClick={() => navigate(`/${skill.key}/drill`)}
+            >
+              Drill<span className="native">刷题</span>
+            </button>
+          </nav>
 
           {/* Last, and last in the DOM on purpose. Moving it here with CSS `order` would leave a
               keyboard user tabbing to the star before the skill tabs while seeing it after them. */}
@@ -234,8 +254,13 @@ export default function App() {
       {/* Dictation is built now, so it renders its own page rather than the "not built yet"
           placeholder this branch had it pointing at. The learner key comes from the shared
           identity context — the local useState(learnerKey) this used to read was replaced by
-          IdentityContext, which is the one source of the key for every skill. */}
-      {isSkillRoute && skill.key === 'dictation' && (
+          IdentityContext, which is the one source of the key for every skill.
+
+          `!isDrill` matters as much here as it does for listening and reading above. Without it
+          /dictation/drill mounted both pages at once — the drill question and, under it,
+          dictation's "Unlock a recording first" gate — which went unnoticed while nothing in the
+          interface offered a way to reach that route. */}
+      {isSkillRoute && skill.key === 'dictation' && !isDrill && (
         <DictationPage language={language} learnerKey={learnerKey} navigate={navigate} />
       )}
 

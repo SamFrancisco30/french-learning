@@ -2063,6 +2063,15 @@ kbd {
   background: var(--bg-raised); color: var(--text);
   box-shadow: var(--shadow-sm);
 }
+/* The Study half where no study view is built — writing and speaking. Without this it read as
+   an ordinary enabled control that silently did nothing when clicked, which is a worse failure
+   than the missing switch it replaced. The cursor and the faded label say "not this one" before
+   a click, and the `title` gives the reason on hover. */
+.modeswitch button:disabled {
+  color: var(--text-faint, var(--text-dim));
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
 .authform { display: flex; flex-direction: column; gap: 14px; }
 .authform label {
@@ -2402,8 +2411,16 @@ kbd {
 
 /* The mode switch lives in the header, where .modeswitch's own 18px bottom margin and
    flex:1 children were written for a full-width panel. Scope the corrections rather than
-   changing the shared rule, which the auth form still depends on. */
-header .modeswitch { margin: 0 0 0 18px; padding: 2px; }
+   changing the shared rule, which the auth form still depends on.
+
+   The 6px bottom margin is optical alignment, not spacing. Everything else in this bar carries
+   6px of extra space below its text — the skill tabs through padding (7px top against 13px
+   bottom) and the star and avatar through margin (1px against 7px) — which lifts their labels
+   3px above the centre of their own boxes. The switch had symmetric padding and a zeroed margin,
+   so its box centred correctly while its text sat 3px lower than every label beside it, which is
+   what read as the control hanging low in the bar. Mirroring the 6px puts its text on the same
+   line as the rest; `align-items: center` on the row then does the arithmetic. */
+header .modeswitch { margin: 0 0 6px 18px; padding: 2px; }
 header .modeswitch button { flex: 0 0 auto; padding: 5px 12px; font-size: 12.5px; }
 header .modeswitch button .native { margin-left: 5px; font-size: 11px; color: var(--text-faint); }
 header .modeswitch button.on .native { color: var(--accent); }
