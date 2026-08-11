@@ -53,6 +53,12 @@ class DrillQuestionOut(BaseModel):
     # sent — a learner who has answered wants it — so the client is told whether
     # to keep it hidden until then.
     document_is_spoiler: bool = False
+    # True for the 513 items whose four choices are spoken and never written. The
+    # bank stores them as four blanks for that reason; the wording was recovered
+    # from the explanation, and showing it would turn a listening item into a
+    # matching exercise. `options` carry empty text on these — the letters are all
+    # there is to answer with, and the wording arrives with the result.
+    options_are_spoken: bool = False
 
 
 class DrillResultOut(BaseModel):
@@ -60,6 +66,10 @@ class DrillResultOut(BaseModel):
 
     attempt_id: int
     question_id: int
+    # The choices in full. Only meaningful for a spoken-options item, where the
+    # question payload deliberately sent them blank — this is where the learner
+    # finally gets to read what they just heard.
+    options: list[DrillOptionOut] = Field(default_factory=list)
     correct: bool | None = None
     answer: str | None = None
     selected: str | None = None

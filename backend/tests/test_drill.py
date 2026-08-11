@@ -102,7 +102,10 @@ def _add_question(
         explanation=explanation,
         document_zh=document_zh,
         model_answer=model_answer,
-        image_key="drill/aa/aaaa.png" if skill == "reading" else None,
+        # Both skills carry images in the real bank — 2576 reading, 154 listening — and
+        # they mean different things, which is what the serving policy turns on. The
+        # fixture has to have both or the policy tests pass for the wrong reason.
+        image_key="drill/aa/aaaa.png" if skill in ("reading", "listening") else None,
         audio_key="drill/bb/bbbb.mp3" if skill == "listening" else None,
         provenance=provenance or {"answer": "json"},
         warnings=[],
@@ -147,6 +150,13 @@ def bank(db: Session) -> dict[str, DrillQuestion]:
         "inferred": _add_question(
             db, reading, external_id=6, level="C1",
             provenance={"answer": "inferred:gemini-3.5-flash-lite"},
+        ),
+        # The bank ships this kind with four blank options because the choices are
+        # spoken; the wording here was recovered from the explanation.
+        "spoken": _add_question(
+            db, listening, external_id=7, skill="listening", level="A2",
+            document="", question=None,
+            provenance={"answer": "json", "options": "explanation:list"},
         ),
     }
     for c in (reading, listening, writing):
@@ -367,3 +377,52 @@ def test_listening_transcript_is_flagged_as_a_spoiler(client: TestClient, bank) 
 def test_reading_document_is_not_a_spoiler(client: TestClient, bank) -> None:
     res = client.get("/api/drill/next", params={"skill": "reading"}, headers=as_anon())
     assert res.json()["document_is_spoiler"] is False
+
+
+def test_a_listening_picture_is_served(client: TestClient, bank) -> None:
+    """For those items the picture is the question, so it has to reach the client."""
+    res = client.get("/api/drill/next", params={"skill": "listening"}, headers=as_anon())
+    assert res.json()["image_url"]
+
+
+def test_a_reading_image_is_not_served(client: TestClient, bank) -> None:
+    """It is the vendor's typeset render of text this endpoint already sends, watermark
+    and all — no information, and a Storage round trip to sign something discarded."""
+    res = client.get("/api/drill/next", params={"skill": "reading"}, headers=as_anon())
+    assert res.json()["image_url"] is None
+
+
+# --------------------------------------------------------------- spoken options
+
+
+def test_spoken_options_arrive_blank(client: TestClient, bank) -> None:
+    """Their wording is not in the payload at all. Printing it would turn "understand four
+    spoken statements" into "match four written ones", which is a much easier task — and
+    hiding it client-side would leave it readable to anyone who looked."""
+    res = client.get(
+        "/api/drill/next", params={"skill": "listening", "level": "A2"}, headers=as_anon()
+    )
+    body = res.json()
+    assert body["options_are_spoken"] is True
+    assert [o["label"] for o in body["options"]] == ["A", "B", "C", "D"]
+    assert all(o["text"] == "" for o in body["options"])
+    assert "Option A" not in res.text
+
+
+def test_spoken_options_are_revealed_by_the_attempt(client: TestClient, bank) -> None:
+    res = client.post(
+        "/api/drill/attempts",
+        json={"question_id": bank["spoken"].id, "selected": "B"},
+        headers=as_anon(),
+    )
+    body = res.json()
+    assert [o["text"] for o in body["options"]] == [
+        "Option A", "Option B", "Option C", "Option D"
+    ]
+
+
+def test_written_options_are_not_marked_spoken(client: TestClient, bank) -> None:
+    res = client.get("/api/drill/next", params={"skill": "reading"}, headers=as_anon())
+    body = res.json()
+    assert body["options_are_spoken"] is False
+    assert all(o["text"] for o in body["options"])

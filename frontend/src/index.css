@@ -2461,7 +2461,6 @@ header .modeswitch button.on .native { color: var(--accent); }
   font-size: 13px; color: var(--text-dim);
 }
 
-.drill-original { margin: 0 0 12px; }
 .drill-image {
   display: block; width: 100%; height: auto; margin-bottom: 16px;
   border: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -2531,3 +2530,17 @@ header .modeswitch button.on .native { color: var(--accent); }
   background: var(--bg-input); color: var(--text); resize: vertical; font-family: inherit;
 }
 .drill-count { font-size: 11.5px; color: var(--text-faint); }
+
+/* Spoken-options items: before the attempt there is only a letter to click, so the row
+   collapses to the badge rather than leaving a wide empty button. Four side by side also
+   makes them one glance, and reads as a deliberate layout instead of missing content. */
+.drill-options.is-spoken { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.drill-options.is-spoken .drill-option { justify-content: center; padding: 14px 10px; }
+.drill-options.is-spoken .drill-letter { width: 26px; height: 26px; font-size: 13px; }
+/* Once answered the wording is in, so the four go back to being readable rows. */
+.drill-options.is-spoken:has(.drill-option:disabled) {
+  grid-template-columns: 1fr;
+}
+.drill-options.is-spoken:has(.drill-option:disabled) .drill-option {
+  justify-content: flex-start; padding: 11px 14px;
+}

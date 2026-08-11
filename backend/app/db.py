@@ -23,6 +23,17 @@ engine = create_engine(
     echo=False,
     future=True,
     connect_args={"check_same_thread": False} if _is_sqlite else {},
+    # Checked out connections are validated before use, and retired after half an hour.
+    #
+    # This talks to Supabase through their connection pooler, which closes a connection
+    # that has been idle for a while. Without a pre-ping SQLAlchemy hands that dead
+    # connection to the next request, the query raises a DBAPIError, and
+    # database_unavailable_handler turns it into a 503 — so the first request after any
+    # quiet period fails for no reason the learner can see or act on. The ping costs one
+    # round trip on checkout, which is nothing beside a request that has to be retried.
+    #
+    # SQLite has no server to drop the connection, so neither setting applies there.
+    **({} if _is_sqlite else {"pool_pre_ping": True, "pool_recycle": 1800}),
 )
 
 if _is_sqlite:

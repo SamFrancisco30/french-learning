@@ -128,25 +128,31 @@ export default function App() {
           </nav>
 
           {/*
-            Study vs drill, shown only on a skill that has both.
+            Study vs drill, for the skills that have both.
 
             Two separate things sit under one skill: material to explore, and exam items to
             answer. They are not stages of each other — a learner picks one — so this is a
             switch and not a step. Writing and speaking have only the drill view, so they get
             no switch; showing a disabled half would advertise something that is not there.
+
+            It stays on screen on the vocabulary and account pages, where the skill tabs
+            already are. A control that disappears when you open My Words and returns when
+            you leave reads as a glitch, and it is also the way back to the skill you came
+            from. Neither half is marked current there, because you are in neither mode —
+            highlighting one would say you were.
           */}
-          {isSkillRoute && (skill.key === 'reading' || skill.key === 'listening') && (
+          {(skill.key === 'reading' || skill.key === 'listening') && (
             <nav className="modeswitch" aria-label="Mode">
               <button
-                className={isDrill ? undefined : 'on'}
-                aria-current={isDrill ? undefined : 'page'}
+                className={isSkillRoute && !isDrill ? 'on' : undefined}
+                aria-current={isSkillRoute && !isDrill ? 'page' : undefined}
                 onClick={() => navigate(`/${skill.key}`)}
               >
                 Study<span className="native">学习</span>
               </button>
               <button
-                className={isDrill ? 'on' : undefined}
-                aria-current={isDrill ? 'page' : undefined}
+                className={isSkillRoute && isDrill ? 'on' : undefined}
+                aria-current={isSkillRoute && isDrill ? 'page' : undefined}
                 onClick={() => navigate(`/${skill.key}/drill`)}
               >
                 Drill<span className="native">刷题</span>

@@ -581,11 +581,16 @@ export type DrillQuestion = {
   /** True for listening: the document is a transcript of what is played, so showing it
    *  up front hands over the answer. Reveal it only after the attempt. */
   document_is_spoiler: boolean
+  /** True for the 513 items whose choices are spoken and never written. `options` come
+   *  back with empty text on these — answer by letter; the wording is in the result. */
+  options_are_spoken: boolean
 }
 
 export type DrillResult = {
   attempt_id: number
   question_id: number
+  /** The choices in full — the first time they arrive at all for a spoken-options item. */
+  options: DrillOption[]
   /** null for production tasks, which have no key — not false. */
   correct: boolean | null
   answer: string | null

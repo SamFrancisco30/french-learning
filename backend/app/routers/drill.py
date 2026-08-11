@@ -82,7 +82,21 @@ def _document(question: DrillQuestion) -> str:
     return question.document_corrected or question.document or ""
 
 
+def _options_are_spoken(question: DrillQuestion) -> bool:
+    """Were this item's four choices read aloud rather than printed?
+
+    The bank answers that by leaving them blank: 513 listening items store four empty
+    options because the candidate hears the statements and never sees them. Their wording
+    was recovered from the explanation, and `provenance.options` records that it did not
+    come from the item's own fields — which is exactly the items whose text must stay
+    unread until the attempt is in. Printing it turns "understand four spoken statements"
+    into "match four written ones to a picture", which is a different and much easier task.
+    """
+    return (question.provenance or {}).get("options", "json") != "json"
+
+
 def _to_question_out(question: DrillQuestion) -> DrillQuestionOut:
+    spoken = _options_are_spoken(question)
     return DrillQuestionOut(
         id=question.id,
         skill=question.skill,
@@ -94,15 +108,25 @@ def _to_question_out(question: DrillQuestion) -> DrillQuestionOut:
         time_limit_s=question.time_limit_s,
         document=_document(question),
         question=question.question,
+        # Blanked, not merely flagged. Sending the wording and asking the client to
+        # hide it would leave it in the payload for anyone who looks, which is the
+        # same mistake as sending the answer.
         options=[
-            DrillOptionOut(label=o.label, text=o.text_corrected or o.text)
+            DrillOptionOut(label=o.label, text="" if spoken else (o.text_corrected or o.text))
             for o in sorted(question.options, key=lambda o: o.label)
         ],
-        image_url=_signed(question.image_key),
+        # Signed only where the image is the item's content. For the 154 listening
+        # items the picture IS the question. For all 2576 reading items it is the
+        # vendor's typeset render of a passage that is already served as text, with
+        # their watermark across it — nothing a learner can use, and signing it
+        # costs a Storage round trip on every request that would discard it. The
+        # key stays on the row either way, for provenance.
+        image_url=_signed(question.image_key) if question.skill == "listening" else None,
         audio_url=_signed(question.audio_key),
         # A listening item's document is the transcript of what is played, so
         # showing it up front answers the question for the learner.
         document_is_spoiler=question.skill == "listening",
+        options_are_spoken=spoken,
     )
 
 
@@ -258,6 +282,12 @@ def submit_attempt(
     return DrillResultOut(
         attempt_id=attempt.id,
         question_id=question.id,
+        # Now they can be read. For a spoken-options item this is the first time the
+        # wording reaches the client at all.
+        options=[
+            DrillOptionOut(label=o.label, text=o.text_corrected or o.text)
+            for o in sorted(question.options, key=lambda o: o.label)
+        ],
         correct=correct,
         answer=question.answer,
         selected=selected,

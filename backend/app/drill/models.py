@@ -105,8 +105,9 @@ class DrillQuestion(Base):
     seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
     level: Mapped[str | None] = mapped_column(String(4), nullable=True, index=True)
-    # TCF weights each item by the level it tests (3/9/15/21/26/33); `level` is
-    # derived from it, and the raw weight is kept because scoring uses it.
+    # The bank's own grading. `level` is derived from this and nothing in the scrape
+    # states a CEFR band, so this column is the fact and `level` is the interpretation
+    # of it — kept both ways round for exactly that reason.
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
     difficulty: Mapped[str | None] = mapped_column(String(16), nullable=True)
     time_limit_s: Mapped[int | None] = mapped_column(Integer, nullable=True)

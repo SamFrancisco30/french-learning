@@ -7,17 +7,25 @@ import type { DrillProgress, DrillQuestion, DrillResult } from '../types'
 /**
  * Drill mode: answer real TCF items, one at a time.
  *
- * Reading passages render as text, not as the image they were scraped from. The bank ships
- * every reading item as a PNG with the passage typeset into it — 2576 of them — and OCR
- * recovered the French. Serving the text is what makes the passage selectable, so the same
- * word-lookup and expression detection the reading page already has works here; an image
- * would be a dead rectangle. The image is still offered as "see the original", because the
- * layout carries meaning for the low-level items (a notice, a receipt, an SMS).
+ * Reading passages render as text, never as the image they were scraped from. The bank ships
+ * all 2576 of them as a PNG with the passage typeset into it and the vendor's watermark in
+ * the corner; OCR recovered the French. Text is what makes the passage selectable, so the
+ * word lookup and expression detection the reading page already has work here — an image
+ * would be a dead rectangle carrying nothing but the watermark.
+ *
+ * The 154 listening images are the opposite case and are shown inline: for those items the
+ * picture IS the question ("look at the image, hear four statements, pick the match"), their
+ * transcript is empty, and they carry no watermark.
  *
  * Listening hides the transcript until the attempt is submitted. The transcript IS the
  * recording's content, so showing it alongside the audio answers the question — the server
  * flags this per item with `document_is_spoiler` rather than the client inferring it from
  * the skill.
+ *
+ * The level filter is CEFR, which is a DERIVED label. The bank grades items by point value
+ * (3/9/15/21/26/33) and never mentions CEFR anywhere; the mapping onto A1..C2 is inferred
+ * from those six values being an ordered difficulty scale — which the vendor's own
+ * EASY/MEDIUM/HARD field corroborates — and is not something the data states.
  */
 
 const SKILLS = [
@@ -48,7 +56,6 @@ export function DrillPage({
   const [progress, setProgress] = useState<DrillProgress[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showOriginal, setShowOriginal] = useState(false)
   const [revealDocument, setRevealDocument] = useState(false)
 
   // Wall-clock on the item, sent with the attempt. A ref, not state: it is read once on
@@ -63,7 +70,6 @@ export function DrillPage({
     setResult(null)
     setSelected(null)
     setPhase('answering')
-    setShowOriginal(false)
     setRevealDocument(false)
     try {
       const next = await drill.next({ skill, level })
@@ -207,6 +213,29 @@ export function DrillPage({
               {question.seq !== null && <span className="drill-seq">#{question.seq}</span>}
             </p>
 
+            {/*
+              Above the player, not below it, because that is the order the item is done
+              in: look at the scene, then hear the four statements read against it. Under
+              the controls the picture reads as something the audio produced.
+
+              Shown for listening only, and inline rather than behind a reveal, because for
+              those 154 items the picture IS the question: "look at the image, hear four
+              statements, pick the one that matches". Their transcript is empty and they
+              have no question line — without the picture there is nothing to answer.
+
+              Reading images are not shown at all. Every reading passage arrives as a PNG
+              with the text typeset into it and the vendor's watermark across the corner;
+              the OCR'd text is served instead, so the image adds no information a learner
+              can use and the watermark is all that is new in it.
+            */}
+            {question.skill === 'listening' && question.image_url && (
+              <img
+                className="drill-image"
+                src={question.image_url}
+                alt="The scene this item describes. Choose the statement that matches it."
+              />
+            )}
+
             {question.audio_url && (
               // Native controls on purpose: a listening item is played, paused and
               // scrubbed, and the browser's own control does all three accessibly.
@@ -228,21 +257,6 @@ export function DrillPage({
               )
             )}
 
-            {question.image_url && (
-              <p className="drill-original">
-                <button className="linkbtn" onClick={() => setShowOriginal((v) => !v)}>
-                  {showOriginal ? 'Hide the original' : 'See the original'}
-                </button>
-              </p>
-            )}
-            {showOriginal && question.image_url && (
-              <img
-                className="drill-image"
-                src={question.image_url}
-                alt="The item as the question bank renders it"
-              />
-            )}
-
             {question.question && (
               <h2 className="drill-question" lang="fr">
                 {question.question}
@@ -256,7 +270,11 @@ export function DrillPage({
                 submitted={phase === 'answered'}
               />
             ) : (
-              <ol className="drill-options">
+              <ol
+                className={`drill-options ${
+                  question.options_are_spoken ? 'is-spoken' : ''
+                }`}
+              >
                 {question.options.map((o) => {
                   const isChosen = selected === o.label
                   const isKey = result?.answer === o.label
@@ -268,6 +286,12 @@ export function DrillPage({
                         : isChosen
                           ? 'is-wrong'
                           : ''
+                  // On a spoken-options item the wording arrives only with the result,
+                  // so before then there is a letter and nothing else to show.
+                  const text =
+                    o.text ||
+                    result?.options.find((r) => r.label === o.label)?.text ||
+                    ''
                   return (
                     <li key={o.label}>
                       <button
@@ -276,14 +300,16 @@ export function DrillPage({
                         // The letter and the text are separate spans so they can be
                         // styled apart. Named explicitly so the control announces as one
                         // choice — "B. Dʼune catastrophe climatique" — instead of leaving
-                        // the letter to be read as a stray character beside it.
-                        aria-label={`${o.label}. ${o.text}`}
+                        // the letter to be read as a stray character beside it. Before a
+                        // spoken item is answered there is no text, and the letter is the
+                        // whole name.
+                        aria-label={text ? `${o.label}. ${text}` : o.label}
                         onClick={() => void submit(o.label)}
                       >
-                        <span className="drill-letter" aria-hidden="true">
+                        <span className="drill-letter" aria-hidden={text ? 'true' : undefined}>
                           {o.label}
                         </span>
-                        <span lang="fr">{o.text}</span>
+                        <span lang="fr">{text}</span>
                       </button>
                     </li>
                   )
